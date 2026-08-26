@@ -1,0 +1,836 @@
+using Godot;
+using TowerOfArgentum.Simulacion;
+
+namespace TowerOfArgentum;
+
+/// <summary>
+/// El puente entre la simulación y Godot.
+/// </summary>
+/// <remarks>
+/// <para><b>Esta clase es la única que toca las dos cosas.</b> De un lado
+/// <see cref="Partida"/>, que no sabe que Godot existe; del otro el render, que
+/// no decide nada.</para>
+///
+/// <para>La prueba de que la separación está bien hecha: <b>bajarle los FPS al
+/// juego no cambia en cuántos ticks tarda una oleada.</b> Si cambia, hay lógica
+/// colgada del render y el determinismo ya se rompió.</para>
+/// </remarks>
+public partial class Juego : Node2D
+{
+    /// <summary>Milisegundos de un tick. 1000/30 = 33,33… y acá se trunca a 33.</summary>
+    private const long MsPorTick = 1000 / Enteros.TicksPorSegundo;
+
+    /// <summary>
+    /// Techo de ticks por frame.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto, un frame largo —cargar un recurso, el sistema operativo
+    /// robándose la CPU— deja un acumulador enorme y el juego intenta ponerse al
+    /// día de golpe. Eso alarga <i>más</i> ese frame, que deja un acumulador
+    /// todavía mayor: la espiral de la muerte. Con el techo el juego se atrasa
+    /// respecto del reloj de pared, que es lo correcto — la corrida se mide en
+    /// ticks, no en segundos.
+    /// </remarks>
+    private const int MaxTicksPorFrame = 8;
+
+    public Partida Partida { get; private set; } = null!;
+    private LogAcciones _log = null!;
+    private long _ultimoMs;
+    private long _acumulador;
+
+    /// <summary>Multiplicador de velocidad. Acelerar no toca el ranking: los ticks son los mismos.</summary>
+    private int _velocidad = 1;
+
+    private bool _pausado;
+
+    /// <summary>
+    /// Fija con qué corrida se arranca. Se llama <b>antes</b> de agregar el nodo
+    /// al árbol.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>La seed la manda el servidor</b>, en la respuesta de
+    /// <c>POST /run/start</c>. Que la generara el cliente sería regalarle al
+    /// tramposo la posibilidad de probar semillas hasta encontrar una fácil.
+    ///
+    /// <para><paramref name="runId"/> en 0 significa corrida local, sin servidor:
+    /// sirve para probar sin levantar la API, y no se reporta a ningún lado.</para>
+    /// </remarks>
+    public void Configurar(ulong seed, long runId)
+    {
+        Seed = seed;
+        RunId = runId;
+    }
+
+    public override void _Ready()
+    {
+        // Sin Configurar previo, corrida local con una seed fija: así el proyecto
+        // se puede abrir y probar sin tener la API arriba.
+        if (Seed == 0)
+            Seed = 20260825;
+
+        // La corrida anterior horneó su piso; el de esta se hornea al primer frame.
+        PisoHorneado.Olvidar();
+
+        // Con Retomar la partida ya viene armada y re-simulada; acá solo se crea
+        // la nueva.
+        if (Partida is null)
+        {
+            // ⚠ El layout lo elige la SEED, con su propio generador. No se usa el
+            // _rng de la partida porque ese ya arrancó a consumir números adentro
+            // de Partida: pedirle uno acá correría toda la secuencia posterior.
+            var mapaNuevo = Layouts.Elegir(Seed, CargadorDatos.Actual);
+            _log = new LogAcciones();
+            Partida = new Partida(Seed, mapaNuevo, _log, CargadorDatos.Actual);
+            Partida.Empezar();
+        }
+
+        var mapa = Partida.Mapa;
+
+        // El portal de entrada. Va de hijo y no dibujado a mano porque son
+        // partículas: tienen que vivir entre frames, no repintarse de cero.
+        var entrada = mapa.Ruta.Entrada;
+        var (px, py) = Escala.CentroDe(entrada.X, entrada.Y);
+
+        AddChild(new PortalEntrada(new Color(0.45f, 0.78f, 1f))
+        {
+            Position = new Vector2(px, py),
+        });
+
+        // Y el otro extremo: la Torre. Va un poco más arriba del centro de su
+        // celda porque flota, y la punta de abajo tiene que quedar apoyada.
+        var (tx, ty) = Escala.CentroDe(Partida.Torre.Celda.X, Partida.Torre.Celda.Y);
+
+        AddChild(new CristalTorre(this)
+        {
+            Position = new Vector2(tx, ty - 14),
+        });
+
+        _ultimoMs = RelojFino.Ms;
+
+        GD.Print($"Corrida iniciada · seed {Seed} · run {RunId} · " +
+                 $"ruta de {mapa.Ruta.Largo / Enteros.MilesimasPorCelda} celdas");
+    }
+
+    /// <summary>
+    /// Guarda la corrida en curso, para poder retomarla.
+    /// </summary>
+    /// <remarks>
+    /// Sale gratis del determinismo: guardar es escribir la seed y el log, y
+    /// cargar es re-simular desde el tick 0. Ver <see cref="Guardado"/>.
+    /// </remarks>
+    public void GuardarCorrida() => Guardado.Guardar(Seed, RunId, _log, Partida.Tick);
+
+    /// <summary>Abierto el menú de ESC. Congela el reloj, como <c>_pausado</c>.</summary>
+    public bool MenuAbierto { get; set; }
+
+    /// <summary>Si en el guardado ya quedó la preparación de esta oleada.</summary>
+    private int _oleadaGuardada = -1;
+
+    /// <summary>
+    /// Autoguardado: una vez por oleada, al abrirse la preparación.
+    /// </summary>
+    /// <remarks>
+    /// La preparación es el checkpoint natural —reloj congelado, recompensas
+    /// cobradas— y guardar ahí cuesta nada: la seed y un log de bytes. Con esto,
+    /// cerrar el juego de cualquier manera pierde como mucho la oleada en curso;
+    /// el cierre ordenado de la ventana guarda además el tick exacto.
+    /// </remarks>
+    private void GuardarAlAbrirPreparacion()
+    {
+        if (!Partida.EsperandoInicioDeOleada || Partida.Estado != EstadoPartida.EnCurso)
+            return;
+
+        if (_oleadaGuardada == Partida.Oleada)
+            return;
+
+        _oleadaGuardada = Partida.Oleada;
+        GuardarCorrida();
+    }
+
+    /// <summary>
+    /// Retoma una corrida guardada en lugar de empezar una nueva.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Llamar ANTES de agregar el nodo al árbol: <c>_Ready</c> ve la partida ya
+    /// puesta y no crea otra.
+    /// </remarks>
+    public void Retomar(Partida partida, LogAcciones log, ulong seed, long runId)
+    {
+        Partida = partida;
+        _log = log;
+        Seed = seed;
+        RunId = runId;
+
+        // La oleada retomada ya está guardada — es de donde venimos. Sin esto, el
+        // primer frame la volvería a guardar, inofensivo pero al pedo.
+        _oleadaGuardada = partida.Oleada;
+    }
+
+    /// <summary>La clase que se va a poner con el próximo click.</summary>
+    private Clase _claseElegida = Clase.Cazador;
+
+    /// <summary>Bajo qué celda está el mouse. Fuera de la grilla, <c>null</c>.</summary>
+    private Celda? _celdaMouse;
+
+    /// <summary>
+    /// Registra una acción del jugador y la encola para el tick <b>siguiente</b>.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Siguiente y no actual, a propósito.</b> El tick actual puede estar a
+    /// medio correr —el click llega en cualquier momento del frame— y meter una
+    /// acción en la mitad de las nueve fases haría que el resultado dependa de
+    /// cuándo cayó el evento dentro del frame. Con el tick siguiente, la acción
+    /// entra siempre en la fase 1, que es donde el orden dice que entra.
+    /// </remarks>
+    private void Encolar(System.Func<int, Accion> armar)
+    {
+        _log.Agregar(armar(Partida.TickDeAccion));
+    }
+
+    /// <summary>Elige una de las 3 opciones. Lo llama la pantalla de elección.</summary>
+    /// <remarks>
+    /// ⚠ Se guarda el <b>índice</b>, no qué era la opción. Qué había en cada una
+    /// lo regenera el servidor de la seed; si se guardara el contenido, un
+    /// cliente modificado podría reclamar que le ofrecieron algo mejor.
+    /// </remarks>
+    public void Elegir(int indice) => Encolar(t => Accion.Elegir(t, indice));
+
+    /// <summary>
+    /// Arranca la oleada que espera. Lo llama el botón y el fin de los 30 s.
+    /// </summary>
+    /// <remarks>
+    /// Es la misma acción que adelantar: con la oleada anterior limpia significa
+    /// «comenzar», y con bichos todavía vivos significa «metémelos encima». Un
+    /// solo botón para el jugador y una sola acción en el log.
+    /// </remarks>
+    public void ComenzarOleada()
+    {
+        if (!Partida.EsperandoInicioDeOleada)
+            return;
+
+        Encolar(t => new Accion(t, TipoAccion.AdelantarOleada, 0, 0, 0));
+    }
+
+    /// <summary>El id de la corrida del lado del servidor. 0 = corrida local.</summary>
+    public long RunId { get; set; }
+
+    /// <summary>El log, para poder reportarlo y guardarlo.</summary>
+    public LogAcciones Log => _log;
+
+    /// <summary>La seed con la que corre. La manda el servidor.</summary>
+    public ulong Seed { get; private set; }
+
+    /// <summary>El overlay de mochila, para poder abrirlo con Tab.</summary>
+    public PantallaMochila? Mochila { get; set; }
+
+    /// <summary>Equipa lo que está en ese lugar de la mochila.</summary>
+    public void EquiparDeMochila(int indice, Clase clase)
+    {
+        var cosa = Partida.Mochila.Cosas[indice];
+
+        // Perk y equipo son dos acciones distintas del log, aunque la UI las
+        // muestre en la misma grilla: el perk se destruye al sacarlo y el equipo
+        // vuelve. Confundirlas sería confundir las dos reglas.
+        var tipo = cosa.Tipo == TipoCosa.Perk ? TipoAccion.EquiparPerk : TipoAccion.Equipar;
+
+        _log.Agregar(new Accion(Partida.TickDeAccion, tipo, indice, (int)clase, 0));
+    }
+
+    /// <summary>
+    /// Saca un perk equipado. <b>Lo destruye.</b> La UI ya pidió confirmación.
+    /// </summary>
+    public void SacarPerk(Clase clase, int slot)
+        => _log.Agregar(new Accion(Partida.TickDeAccion, TipoAccion.SacarPerk, (int)clase, slot, 0));
+
+    /// <summary>La clase que se pone con el próximo click, para la UI.</summary>
+    public Clase ClaseElegida => _claseElegida;
+
+    /// <summary>Cicla entre las clases del roster.</summary>
+    private void CambiarClase(int delta)
+    {
+        var disponibles = Partida.Roster.Disponibles();
+        if (disponibles.Count == 0)
+            return;
+
+        int i = disponibles.IndexOf(_claseElegida);
+        i = i < 0 ? 0 : (i + delta + disponibles.Count) % disponibles.Count;
+
+        _claseElegida = disponibles[i];
+        QueueRedraw();
+    }
+
+    public override void _Process(double delta)
+    {
+        // ⚠ `delta` de Godot es un double y no se usa: el acumulador va en
+        // enteros de milisegundos. No es que un double acá rompa el
+        // determinismo —el acumulador solo decide CUÁNTOS ticks correr, no qué
+        // pasa adentro— pero mantener la frontera limpia evita la discusión.
+        long ahora = RelojFino.Ms;
+        long transcurrido = ahora - _ultimoMs;
+        _ultimoMs = ahora;
+
+        // ⚠ En pausa el acumulador NO se llena.
+        //
+        // Y ojo con CUÁL pausa es cada una. `Partida.EnPausa` es la de la
+        // simulación —preparación o elección—: ahí `Avanzar` no toca el reloj y
+        // llamarlo por frame solo drena las acciones pendientes. `_pausado` y el
+        // menú de ESC son pausas de PANTALLA con la simulación viva: ahí llamar
+        // `Avanzar` corría un tick entero por frame — la "pausa" aceleraba el
+        // juego al ritmo del render en vez de frenarlo. Por eso los dos casos se
+        // separan.
+        if (_pausado || MenuAbierto)
+        {
+            QueueRedraw();
+            return;
+        }
+
+        if (Partida.EnPausa)
+        {
+            Partida.Avanzar();
+            QueueRedraw();
+            GuardarAlAbrirPreparacion();
+            return;
+        }
+
+        _acumulador += transcurrido * _velocidad;
+
+        int corridos = 0;
+        while (_acumulador >= MsPorTick && corridos < MaxTicksPorFrame)
+        {
+            Partida.Avanzar();
+            _acumulador -= MsPorTick;
+            corridos++;
+        }
+
+        // Se descarta lo que sobró del acumulador por encima del techo: si no,
+        // la deuda se arrastra al frame siguiente y nunca se paga.
+        if (corridos == MaxTicksPorFrame && _acumulador > MsPorTick * MaxTicksPorFrame)
+            _acumulador = 0;
+
+        if (corridos > 0)
+            QueueRedraw();
+
+        AjustarClaseElegida();
+    }
+
+    /// <summary>
+    /// Mantiene la clase elegida dentro del roster.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Este método existe por un bug concreto: <c>_claseElegida</c> arrancaba
+    /// fija en Cazador, y si la primera elección del jugador era otra clase,
+    /// <see cref="Partida.PuedePoner"/> rechazaba todas las celdas en silencio —
+    /// el click no hacía nada y no decía por qué. El roster arranca vacío y se
+    /// llena eligiendo, así que la clase elegida solo puede fijarse DESPUÉS de
+    /// la primera elección, no en el campo.
+    /// </remarks>
+    private void AjustarClaseElegida()
+    {
+        if (Partida.Roster.Tiene(_claseElegida))
+            return;
+
+        var disponibles = Partida.Roster.Disponibles();
+
+        if (disponibles.Count > 0)
+        {
+            _claseElegida = disponibles[0];
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>Elige la clase a poner. La llama la barra de clases del HUD.</summary>
+    public void SeleccionarClase(Clase clase)
+    {
+        if (!Partida.Roster.Tiene(clase) || _claseElegida == clase)
+            return;
+
+        _claseElegida = clase;
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// Intenta poner la clase elegida en la celda bajo esta posición de pantalla.
+    /// </summary>
+    /// <remarks>
+    /// Es el destino del arrastre desde la barra de clases, y el mismo camino que
+    /// usa el click directo en el mapa: una sola puerta para las dos formas de
+    /// poner, así no pueden discrepar.
+    /// </remarks>
+    public bool PonerEn(Vector2 posicion)
+    {
+        if (!PuedeActuar)
+            return false;
+
+        var celda = ACelda(posicion);
+
+        if (celda is null || !Partida.PuedePoner(_claseElegida, celda.Value))
+            return false;
+
+        Encolar(t => Accion.Poner(t, _claseElegida, celda.Value));
+        return true;
+    }
+
+    public override void _UnhandledInput(InputEvent evento)
+    {
+        switch (evento)
+        {
+            case InputEventMouseMotion movimiento:
+                _celdaMouse = ACelda(movimiento.Position);
+                QueueRedraw();
+                return;
+
+            case InputEventMouseButton boton when boton.Pressed:
+                AtenderClick(boton);
+                return;
+
+            case InputEventKey tecla when tecla.Pressed && !tecla.Echo:
+                AtenderTecla(tecla);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Si el jugador puede tocar algo ahora.
+    /// </summary>
+    /// <remarks>
+    /// En pausa se mira pero no se actúa: pausar frena los ticks, y el ranking
+    /// desempata por ticks, así que actuar en pausa sería tiempo de pensar gratis
+    /// en una tabla de velocidad.
+    /// </remarks>
+    private bool PuedeActuar => !_pausado && Partida.Estado == EstadoPartida.EnCurso;
+
+    private void AtenderClick(InputEventMouseButton boton)
+    {
+        if (!PuedeActuar)
+            return;
+
+        var celda = ACelda(boton.Position);
+        if (celda is null)
+            return;
+
+        if (boton.ButtonIndex == MouseButton.Left)
+        {
+            PonerEn(boton.Position);
+        }
+        else if (boton.ButtonIndex == MouseButton.Right)
+        {
+            var defensor = Partida.DefensorEn(celda.Value);
+            if (defensor is not null)
+                Encolar(t => Accion.Vender(t, defensor.IdColocacion));
+        }
+    }
+
+    private void AtenderTecla(InputEventKey tecla)
+    {
+        switch (tecla.Keycode)
+        {
+            case Key.Space:
+                // ⚠ En pausa se puede MIRAR pero no ACTUAR.
+                //
+                // El problema: si los ticks no avanzan, pausar es tiempo de pensar
+                // gratis, y el ranking desempata por ticks. Las tres salidas eran
+                // pausa libre (amable, pero regala el desempate), pausa que igual
+                // cuenta ticks (coherente, pero castiga levantarse de la silla) y
+                // esta.
+                //
+                // Esta es la que conserva las dos cosas: el jugador puede irse sin
+                // perder la corrida, y no puede usar la pausa para reorganizar su
+                // defensa con calma mientras el cronómetro está frenado. Ver
+                // Poder Actuar más abajo.
+                _pausado = !_pausado;
+                break;
+
+            case Key.Key1: _velocidad = 1; break;
+            case Key.Key2: _velocidad = 2; break;
+            case Key.Key3: _velocidad = 4; break;
+
+            // Cicla el roster en vez de mapear tecla a clase fija: las clases
+            // tocan al azar, así que "W = mago" solo funciona si te tocó el mago.
+            case Key.Q: CambiarClase(-1); break;
+            case Key.E: CambiarClase(+1); break;
+
+            // Tab abre la mochila. Es un overlay y NO frena la corrida: pausar es
+            // tiempo de pensar gratis en una tabla de velocidad, y equipar tiene
+            // que costar algo (INTERFAZ.md §5).
+            case Key.Tab:
+                Mochila?.Alternar();
+                break;
+
+            case Key.Enter:
+                // Adelantar oleada: existe por el ranking. Sin esto, el desempate
+                // por ticks no mide nada porque todos los que ganan tardan igual.
+                if (PuedeActuar)
+                    Encolar(Accion.AdelantarOleada);
+
+                break;
+        }
+    }
+
+    /// <summary>Convierte una posición de pantalla en celda de la grilla.</summary>
+    private Celda? ACelda(Vector2 posicion)
+    {
+        int x = (int)(posicion.X / Escala.LadoCelda);
+        int y = (int)(posicion.Y / Escala.LadoCelda);
+        var celda = new Celda(x, y);
+
+        return Partida.Mapa.EnGrilla(celda) ? celda : null;
+    }
+
+    public override void _Draw()
+    {
+        const int celda = Escala.LadoCelda;
+        var ruta = Partida.Ruta;
+        var mapa = Partida.Mapa;
+
+        // El suelo del área, horneado. Va primero: todo lo demás se dibuja encima.
+        //
+        // Si falta el arte devuelve null y el mundo se dibuja como antes, sobre el
+        // fondo pelado. Ver PisoHorneado.
+        var piso = PisoHorneado.Para(
+            Areas.DeOleada(System.Math.Max(1, Partida.ProximaOleada)), Seed, Partida.Mapa);
+
+        if (piso is not null)
+            DrawTexture(piso, Vector2.Zero);
+
+        // Las zonas donde se puede poner. Tenues: son una ayuda, no el
+        // protagonista.
+        //
+        // Sobre el piso horneado el tinte se apoya en el borde y no en el
+        // relleno: una capa de color sobre pasto lo ensucia y tapa la textura,
+        // mientras que el contorno marca la celda sin pintarla.
+        bool hayPiso = piso is not null;
+
+        var relleno = hayPiso
+            ? new Color(0.20f, 0.45f, 0.28f, 0.10f)
+            : new Color(0.20f, 0.45f, 0.28f, 0.28f);
+
+        var borde = hayPiso
+            ? new Color(0.55f, 0.90f, 0.60f, 0.45f)
+            : new Color(0.35f, 0.70f, 0.45f, 0.25f);
+
+        for (int y = 0; y < mapa.Alto; y++)
+        {
+            for (int x = 0; x < mapa.Ancho; x++)
+            {
+                if (!mapa.EsColocable(new Celda(x, y)))
+                    continue;
+
+                DrawRect(new Rect2(x * celda, y * celda, celda, celda), relleno);
+                DrawRect(new Rect2(x * celda, y * celda, celda, celda),
+                    borde, filled: false, width: 1f);
+            }
+        }
+
+        // La ruta, solo si no hay piso: el camino ya viene horneado adentro de la
+        // textura, y esta línea marrón lo taparía con un color plano.
+        if (!hayPiso)
+        {
+            for (int i = 1; i < ruta.CantidadVertices; i++)
+            {
+                var a = ruta.Vertice(i - 1);
+                var b = ruta.Vertice(i);
+                DrawLine(
+                    new Vector2((a.X + 0.5f) * celda, (a.Y + 0.5f) * celda),
+                    new Vector2((b.X + 0.5f) * celda, (b.Y + 0.5f) * celda),
+                    new Color(0.35f, 0.30f, 0.22f),
+                    celda * 0.8f);
+            }
+        }
+
+        // La Torre no se dibuja acá: es el cristal, y va de hijo porque está
+        // animado. Ver CristalTorre.
+
+        // Los defensores.
+        foreach (var d in Partida.Defensores)
+        {
+            if (!DibujarDefensor(d, celda))
+            {
+                DrawRect(
+                    new Rect2(d.Celda.X * celda + 8, d.Celda.Y * celda + 8, celda - 16, celda - 16),
+                    new Color(0.2f, 0.8f, 0.4f));
+            }
+        }
+
+        // Los enemigos. La posición fina viene de la ruta y NO vuelve a la
+        // simulación: es solo para que el sprite no salte de celda en celda.
+        foreach (var e in Partida.Enemigos)
+        {
+            var (fx, fy) = ruta.PosicionFina(e.DistanciaRecorrida);
+
+            var centro = new Vector2(
+                (float)fx / Enteros.MilesimasPorCelda * celda + (celda / 2f),
+                (float)fy / Enteros.MilesimasPorCelda * celda + (celda / 2f));
+
+            // Los que llevan perk se ven distinto. Está escrito que "tiene que
+            // verse"; esto es el placeholder de eso (INTERFAZ.md §5).
+            bool conPerk = e.PerkVidaExtra > 0 || e.PerkVelocidadExtra > 0;
+
+            if (!DibujarBicho(e, centro, celda, conPerk))
+            {
+                // Sin sprite todavía: el arte entra por áreas y hoy está la 1. El
+                // círculo de siempre, para que el área 5 se pueda jugar igual.
+                DrawCircle(centro, celda * 0.3f,
+                    conPerk ? new Color(0.9f, 0.7f, 0.1f) : new Color(0.8f, 0.25f, 0.25f));
+            }
+
+            // Barra de vida.
+            float porcion = e.HpMaximo == 0 ? 0f : (float)e.Hp / e.HpMaximo;
+            DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40, 5), new Color(0, 0, 0, 0.6f));
+            DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40 * porcion, 5), new Color(0.2f, 0.9f, 0.2f));
+        }
+
+        DibujarCursor(celda);
+    }
+
+    /// <summary>Los cuatro sufijos de dirección, en el orden de <see cref="Ruta.Direccion"/>.</summary>
+    private static readonly string[] Direcciones = ["norte", "este", "oeste", "sur"];
+
+    /// <summary>
+    /// Dibuja un defensor: cuerpo, cabeza y arma, en el tier que le da su nivel.
+    /// </summary>
+    /// <remarks>
+    /// <para>Las tres piezas se apilan en el mismo punto y en este orden: cuerpo,
+    /// cabeza —corrida por el offset que guarda <c>Personajes.ind</c>— y arma
+    /// encima. Es el mismo armado que usa Austral, y es el motivo de que exista
+    /// <c>cuerpo.*</c> y no un sprite entero por clase.</para>
+    ///
+    /// <para>El tier sale del <b>nivel de la clase</b>. Es lo único que hace
+    /// visible subir de nivel: antes solo abría un slot de perk, que no se ve en
+    /// el mapa.</para>
+    /// </remarks>
+    /// <returns><c>false</c> si falta el arte y hay que dibujar la primitiva.</returns>
+    private bool DibujarDefensor(Defensor d, int celda)
+    {
+        var enRoster = Partida.Roster.Buscar(d.Clase);
+
+        if (enRoster is null)
+            return false;
+
+        var apariencia = CargadorApariencia.De(d.Clase, enRoster.TierVisual);
+
+        if (apariencia is null || apariencia.Cuerpo.Length == 0)
+            return false;
+
+        string direccion = Direcciones[MirandoHacia(d)];
+
+        var centro = new Vector2(
+            (d.Celda.X + 0.5f) * celda,
+            (d.Celda.Y + 0.5f) * celda);
+
+        // El cuerpo es la pieza que ancla: la cabeza y el arma van a su mismo
+        // punto de apoyo. Si no está, no se dibuja nada, porque una cabeza sola
+        // flotando es peor que el cuadrado verde.
+        //
+        // ⚠ El cuerpo va QUIETO, cuadro 0. Sus cuadros son el ciclo de caminar de
+        // AO, y un defensor plantado que "camina" en el lugar marea — pedido del
+        // 2026-08-26. La única pieza que anima es el arma.
+        if (!DibujarPieza(apariencia.Cuerpo, direccion, centro, celda, Vector2.Zero, animar: false))
+            return false;
+
+        // ⚠ La cabeza va corrida, y el offset sale del cuerpo.
+        //
+        // Sin esto la cabeza queda a los pies del muñeco. El número está en
+        // píxeles x4 y el mundo se dibuja a la mitad, así que se escala igual que
+        // el sprite. Es lo que separa razas altas de bajas: -38 px contra -28.
+        var offsetCabeza = new Vector2(
+            apariencia.CabezaOffset.X * 0.5f,
+            apariencia.CabezaOffset.Y * 0.5f);
+
+        DibujarPieza(apariencia.Cabeza, direccion, centro, celda, offsetCabeza, animar: false);
+        DibujarPieza(apariencia.Arma, direccion, centro, celda, Vector2.Zero, animar: true);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Hacia dónde mira un defensor: al enemigo más cercano, o al sur si no hay.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No es el objetivo que eligió la simulación</b>, y no tiene por
+    /// qué serlo. La simulación le pega al <i>más adelantado en la ruta</i>; acá
+    /// se busca el más cercano, que es una cuenta de render y no vuelve al tick.
+    /// Repetir la regla de <c>ElegirObjetivo</c> en el dibujo sería tener dos
+    /// copias de la parte más delicada del combate para ganar que el muñeco mire
+    /// al bicho correcto una vez cada tanto.</para>
+    /// </remarks>
+    private int MirandoHacia(Defensor d)
+    {
+        float mejor = float.MaxValue;
+        int direccion = 3;
+
+        var ruta = Partida.Ruta;
+
+        foreach (var e in Partida.Enemigos)
+        {
+            if (!e.Vivo)
+                continue;
+
+            var (fx, fy) = ruta.PosicionFina(e.DistanciaRecorrida);
+
+            float ex = (float)fx / Enteros.MilesimasPorCelda;
+            float ey = (float)fy / Enteros.MilesimasPorCelda;
+
+            float dx = ex - d.Celda.X;
+            float dy = ey - d.Celda.Y;
+            float distancia = (dx * dx) + (dy * dy);
+
+            if (distancia >= mejor)
+                continue;
+
+            mejor = distancia;
+
+            // Gana el eje que más se recorre; empatados, el vertical, que es el
+            // que más se distingue en un top-down.
+            direccion = Mathf.Abs(dx) > Mathf.Abs(dy)
+                ? (dx > 0 ? 1 : 2)
+                : (dy > 0 ? 3 : 0);
+        }
+
+        return direccion;
+    }
+
+    /// <summary>
+    /// Dibuja una pieza de un muñeco, anclada abajo y centrada.
+    /// </summary>
+    /// <returns><c>false</c> si esa clave no tiene arte.</returns>
+    private bool DibujarPieza(
+        string clave, string direccion, Vector2 centro, int celda, Vector2 offset, bool animar)
+    {
+        if (clave.Length == 0)
+            return false;
+
+        string completa = $"{clave}.{direccion}";
+        var g = CargadorGraficos.Datos(completa);
+
+        if (g is null)
+            return false;
+
+        // La animación sale del tick, igual que la del bicho. Con animar en falso
+        // va siempre el cuadro 0: el de estar parado.
+        long ms = (long)Partida.Tick * MsPorTick;
+        var textura = CargadorGraficos.Textura(completa, animar ? (int)(ms / g.MsPorFrame) : 0);
+
+        if (textura is null)
+            return false;
+
+        // x4 dibujado a la mitad, como todo el mundo (INTERFAZ.md §2).
+        var tamano = textura.GetSize() * 0.5f;
+
+        var esquina = new Vector2(
+            centro.X - (tamano.X / 2f) + offset.X,
+            centro.Y + (celda / 2f) - tamano.Y + offset.Y);
+
+        DrawTextureRect(textura, new Rect2(esquina, tamano), tile: false);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Dibuja el sprite de un enemigo, si tiene.
+    /// </summary>
+    /// <remarks>
+    /// <para>El cuadro sale del <b>tick de la simulación</b> y no del reloj de
+    /// pantalla. Así el bicho se ve igual en dos corridas con la misma seed, y —lo
+    /// que importa más— en una repetición acelerada la animación acompaña la
+    /// velocidad en vez de quedarse fija mientras el mundo corre al triple.</para>
+    ///
+    /// <para>El sprite se ancla <b>abajo</b>, no al centro: los cuerpos de Austral
+    /// son altos y angostos, y centrarlos deja al bicho flotando media celda por
+    /// encima de la ruta.</para>
+    /// </remarks>
+    /// <returns><c>false</c> si ese bicho todavía no tiene arte.</returns>
+    private bool DibujarBicho(Enemigo e, Vector2 centro, int celda, bool conPerk)
+    {
+        var dato = CargadorDatos.Actual.Por(e.TipoId);
+
+        if (dato is null || dato.Grafico.Length == 0)
+            return false;
+
+        int direccion = Partida.Ruta.Direccion(e.DistanciaRecorrida);
+        string clave = $"{dato.Grafico}.{Direcciones[direccion]}";
+
+        var g = CargadorGraficos.Datos(clave);
+
+        if (g is null)
+            return false;
+
+        // ⚠ Se pasa el tick a milisegundos y recién ahí se divide.
+        //
+        // "Cada cuántos ticks cambia el cuadro" es una división entera que redondea
+        // para abajo: con los 55 ms/cuadro que trae el arte de Austral y un tick de
+        // 33 ms daba 1, o sea 33 ms, un 66 % más rápido de lo que dice el dato. La
+        // hormiga caminaba como si patinara.
+        long ms = (long)Partida.Tick * MsPorTick;
+        int cuadro = (int)(ms / g.MsPorFrame);
+
+        // Cada bicho arranca en un cuadro distinto. Sin esto los treinta enemigos
+        // de una oleada mueven la pata en el mismo tick y parecen un desfile.
+        // `IdSpawn` no se reusa nunca, así que sirve de desfasaje y no cambia
+        // dentro de la vida del enemigo.
+        cuadro += e.IdSpawn;
+
+        var textura = CargadorGraficos.Textura(clave, cuadro);
+
+        if (textura is null)
+            return false;
+
+        // El arte está en x4 y el mundo se dibuja a la mitad de eso: la celda mide
+        // 64 px porque el tile x4 de AO mide 128 (INTERFAZ.md §2). La escala
+        // visual del bicho se multiplica encima.
+        float escala = 0.5f * dato.EscalaVisual / 100f;
+
+        var tamano = textura.GetSize() * escala;
+
+        var esquina = new Vector2(
+            centro.X - (tamano.X / 2f),
+            centro.Y + (celda / 2f) - tamano.Y);
+
+        // Los que llevan perk van teñidos. Es el mismo placeholder que el círculo
+        // amarillo, pero encima del sprite.
+        var tinte = conPerk ? new Color(1f, 0.85f, 0.45f) : Colors.White;
+
+        DrawTextureRect(textura, new Rect2(esquina, tamano), tile: false, modulate: tinte);
+
+        return true;
+    }
+
+    /// <summary>
+    /// La celda bajo el mouse, y qué pasaría si el jugador hace click ahí.
+    /// </summary>
+    /// <remarks>
+    /// El alcance se dibuja <b>antes</b> de poner, no después: decidir dónde va
+    /// un defensor sin ver hasta dónde llega es adivinar. Y el verde/rojo sale de
+    /// <see cref="Partida.PuedePoner"/>, la misma función que decide de verdad —
+    /// si fueran dos, habría clicks que la UI promete y la simulación rechaza.
+    /// </remarks>
+    private void DibujarCursor(int celda)
+    {
+        if (_celdaMouse is not { } c)
+            return;
+
+        var stats = Simulacion.Balance.StatsDe(_claseElegida);
+        bool puede = Partida.PuedePoner(_claseElegida, c);
+        var ocupada = Partida.DefensorEn(c);
+
+        // El alcance de lo que se está por poner, o de lo que ya está ahí.
+        int alcance = ocupada is null
+            ? stats.AlcanceCeldas
+            : Simulacion.Balance.StatsDe(ocupada.Clase).AlcanceCeldas;
+
+        if (puede || ocupada is not null)
+        {
+            var centro = new Vector2((c.X + 0.5f) * celda, (c.Y + 0.5f) * celda);
+            DrawCircle(centro, alcance * celda, new Color(0.5f, 0.75f, 1f, 0.10f));
+            DrawArc(centro, alcance * celda, 0, Mathf.Tau, 64,
+                new Color(0.6f, 0.8f, 1f, 0.5f), 2f);
+        }
+
+        var color =
+            ocupada is not null ? new Color(0.95f, 0.75f, 0.2f, 0.85f) :
+            puede ? new Color(0.35f, 0.9f, 0.45f, 0.85f) :
+                    new Color(0.9f, 0.3f, 0.3f, 0.65f);
+
+        DrawRect(new Rect2(c.X * celda, c.Y * celda, celda, celda),
+            color, filled: false, width: 3f);
+    }
+}

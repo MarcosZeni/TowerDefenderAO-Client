@@ -427,3 +427,75 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+
+# =============================================================================
+#  Austral TD  —  reglas propias del proyecto
+#
+#  Lo de arriba es la plantilla VisualStudio.gitignore de GitHub. Cubre .NET y
+#  no sabe nada de Godot ni del arte, así que va esto.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+#  Cache del editor de Godot
+# -----------------------------------------------------------------------------
+# Assets importados, shaders compilados, cache de UIDs y los ensamblados de
+# Mono. Se regenera solo al abrir el proyecto, y pesa.
+
+.godot/
+.mono/
+data_*/
+
+
+# -----------------------------------------------------------------------------
+#  Lo que SÍ se versiona, y conviene decirlo porque es contraintuitivo
+# -----------------------------------------------------------------------------
+#   *.cs.uid      la identidad estable del script. Sin él se rompen las
+#                 referencias de las escenas. NO se borran ni se editan a mano.
+#   *.import      describen cómo importar cada asset. Sin ellos, cada clon
+#                 reimporta distinto.
+#   project.godot, *.tscn, *.tres
+#
+# No hay reglas acá porque no hay que ignorarlos: están anotados para que nadie
+# los agregue a esta lista "para limpiar el repo".
+
+
+# -----------------------------------------------------------------------------
+#  Exportaciones del juego
+# -----------------------------------------------------------------------------
+# El .pck y los ejecutables son artefactos de build.
+
+export/
+*.pck
+*.exe
+*.zip
+export_presets.cfg
+
+
+# -----------------------------------------------------------------------------
+#  Arte: nunca los originales 1x
+# -----------------------------------------------------------------------------
+# El arte vive en Resources\ (repo aparte), pero si alguno se cuela acá, que no
+# entre.
+
+*.orig
+*.PNG.orig
+*.png.orig
+
+
+# -----------------------------------------------------------------------------
+#  Configuración local
+# -----------------------------------------------------------------------------
+
+appsettings.Local.json
+.claude/settings.local.json
+
+# -----------------------------------------------------------------------------
+#  El paquete de la simulación
+# -----------------------------------------------------------------------------
+# Simulacion\ tiene su propio .csproj: empaqueta la simulación para que el
+# servidor pueda revalidar corridas (ver GameApi\nuget.config). Sus intermedios y
+# el .nupkg son artefactos generados.
+Simulacion/obj/
+Simulacion/bin/

@@ -1,0 +1,88 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ==========================================================================
+       La simulación, empaquetada.
+
+       ⚠ ESTE PROYECTO NO REFERENCIA GODOT, Y ESA ES SU RAZÓN DE SER.
+
+       El servidor tiene que poder re-simular una corrida para revalidarla, y el
+       servidor no tiene Godot instalado. Si la simulación dependiera del motor,
+       el anticheat sería imposible de escribir.
+
+       Cómo llega al servidor, siguiendo la regla del proyecto de que cada repo
+       es independiente:
+
+         1. Acá:            dotnet pack -c Release
+         2. Queda el .nupkg en ..\..\paquetes\
+         3. GameApi lo baja de ahí, declarado como PackageReference normal
+
+       Es la misma relación que con MySqlConnector: un paquete que se baja. Que
+       el .nupkg se genere en la máquina en vez de bajarse de nuget.org no cambia
+       nada del lado del consumidor.
+
+       Lo que NO se hace: copiar los .cs en los dos repos. Dos copias que
+       divergen es determinismo roto, que es el bug más caro que puede tener este
+       proyecto — y el más difícil de encontrar, porque el juego sigue andando y
+       lo único que falla es la revalidación, meses después.
+       ========================================================================== -->
+
+  <PropertyGroup>
+    <!-- net8.0 y no net10.0: así lo puede consumir cualquiera de las dos
+         mitades sin obligarlas a un target. El cliente compila net10.0 y lo
+         referencia sin problema; el servidor también. -->
+    <TargetFramework>net8.0</TargetFramework>
+
+    <RootNamespace>TowerOfArgentum.Simulacion</RootNamespace>
+    <AssemblyName>TowerOfArgentum.Simulacion</AssemblyName>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- El target es net8.0 para que lo consuman las dos mitades, y net8.0
+         implica C# 12 por defecto. Pero `params ReadOnlySpan<int>` de
+         Enteros.ConPorcentajes es C# 13, y es justo la firma que evita alocar un
+         array en cada cálculo de stats — que corre por defensor por tick.
+
+         El SDK instalado es 10.0.301 y compila C# 13 contra net8.0 sin problema:
+         params collections es una característica del compilador. -->
+    <LangVersion>13.0</LangVersion>
+
+    <!-- La aritmética es toda entera y no hay una sola comparación dependiente
+         de la cultura. Apagarlo evita que un contenedor sin ICU rompa al
+         arrancar. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Empaquetado -->
+    <IsPackable>true</IsPackable>
+    <PackageId>TowerOfArgentum.Simulacion</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Tower of Argentum</Authors>
+
+    <Description>
+      La simulación determinista de Tower of Argentum. Paso fijo a 30 Hz, todo en
+      enteros, PRNG propio. La comparten el cliente (que juega) y el servidor
+      (que revalida), y por eso no depende de Godot.
+    </Description>
+
+    <!-- El .nupkg va a una carpeta hermana de los tres repos, que NO está
+         adentro de ninguno: es un artefacto generado, y los artefactos no se
+         versionan. -->
+    <PackageOutputPath>$(MSBuildProjectDirectory)\..\..\paquetes</PackageOutputPath>
+
+    <!-- ⚠ La versión del paquete es parte del contrato del ranking.
+         Un cambio en la simulación cambia el resultado de corridas ya guardadas,
+         así que subir la minor acá implica una temporada nueva
+         (runs.datos_version). No es solo un número de build. -->
+  </PropertyGroup>
+
+  <!-- No hay ItemGroup de Compile: el SDK ya incluye los .cs de la carpeta solo,
+       y listarlos otra vez da NETSDK1022 por duplicados.
+
+       El proyecto de Godot compila estos MISMOS archivos por su cuenta, porque su
+       csproj barre todo Client\. O sea que los .cs se compilan dos veces —una en
+       cada proyecto— y eso está bien: son dos ensamblados distintos para dos
+       consumidores distintos, y el código fuente es uno solo. Que la fuente sea
+       única es lo que importa; el binario duplicado no cuesta nada. -->
+
+</Project>

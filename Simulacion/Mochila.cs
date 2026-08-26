@@ -1,0 +1,130 @@
+namespace TowerOfArgentum.Simulacion;
+
+/// <summary>Qué es una cosa guardada.</summary>
+/// <remarks>
+/// Solo dos. ⚠ <b>Armadura, casco y escudo no son ítems</b>: no dan stats y no
+/// ocupan lugar. Son el frame que cambia cuando la clase sube de nivel.
+/// </remarks>
+public enum TipoCosa
+{
+    Perk = 0,
+
+    /// <summary>Un arma. El único ítem con stats del juego.</summary>
+    Arma = 1,
+}
+
+/// <summary>Una cosa en la mochila: o un perk, o un arma.</summary>
+public readonly record struct CosaGuardada(TipoCosa Tipo, int Id);
+
+/// <summary>
+/// La mochila. <b>15 lugares, compartidos entre perks y equipo.</b>
+/// </summary>
+/// <remarks>
+/// <para>Sirve para dos cosas concretas: guardar un perk de una clase que
+/// todavía no contrataste, y aguantar uno bueno hasta que se abra un slot al
+/// levelear. Sin mochila, todo perk que cae en mal momento se pierde, y eso
+/// castiga sin enseñar nada.</para>
+///
+/// <para><b>El límite es lo que la hace jugable.</b> Sin tope se convierte en el
+/// banco de un MMO: juntás todo, ordenás después, y "qué perk me sirve" deja de
+/// ser una decisión para volverse una planilla. Con un tope chico, tener la
+/// mochila llena <b>es</b> una decisión.</para>
+///
+/// <para><b>Una cosa, un lugar. Una sola mochila para las dos.</b> Sin tamaños
+/// distintos, sin pesos, sin dos bolsos: eso es Tetris de inventario, que es un
+/// juego distinto. Austral lo tiene porque es un MMO; un TD no lo necesita.</para>
+/// </remarks>
+public sealed class Mochila
+{
+    private readonly List<CosaGuardada> _cosas = [];
+    private readonly Dictionary<int, Arma> _armas = [];
+    private int _proximoIdArma;
+
+    public IReadOnlyList<CosaGuardada> Cosas => _cosas;
+
+    public int Ocupados => _cosas.Count;
+
+    public bool Llena => _cosas.Count >= Balance.LugaresMochila;
+
+    public Arma? ArmaPorId(int id) => _armas.GetValueOrDefault(id);
+
+    /// <summary>
+    /// Mete algo. Devuelve <c>false</c> si no había lugar.
+    /// </summary>
+    /// <remarks>
+    /// Cuando devuelve <c>false</c>, la UI muestra los 15 de la mochila
+    /// <b>más el que acaba de caer</b> y el jugador destruye uno. Que el entrante
+    /// esté en la lista importa: si no, un drop malo obliga a romper algo bueno, y
+    /// perder algo por un ítem que ni se quería es de las cosas que más molestan.
+    /// Es una decisión, así que va al log como <c>Descartar</c>.
+    /// </remarks>
+    public bool Guardar(CosaGuardada cosa)
+    {
+        if (Llena)
+            return false;
+
+        _cosas.Add(cosa);
+        return true;
+    }
+
+    public bool GuardarPerk(int idPerk) => Guardar(new CosaGuardada(TipoCosa.Perk, idPerk));
+
+    /// <summary>
+    /// Registra un arma generada y devuelve su id.
+    /// </summary>
+    /// <remarks>
+    /// El id lo asigna la mochila y no el generador, porque tiene que ser único
+    /// dentro de la corrida: el log guarda "equipé el arma 7", y si dos armas
+    /// compartieran número, re-simular equiparía la otra.
+    /// </remarks>
+    public int RegistrarArma(Arma plantilla)
+    {
+        int id = _proximoIdArma++;
+
+        _armas[id] = new Arma
+        {
+            Id = id,
+            Nombre = plantilla.Nombre,
+            Rareza = plantilla.Rareza,
+            GraficoId = plantilla.GraficoId,
+            Dano = plantilla.Dano,
+            Cadencia = plantilla.Cadencia,
+            Alcance = plantilla.Alcance,
+            Habilidad = plantilla.Habilidad,
+            Magnitud = plantilla.Magnitud,
+            Clases = plantilla.Clases,
+            Valor = plantilla.Valor,
+        };
+
+        return id;
+    }
+
+    /// <summary>Cuántas armas se registraron. Es el próximo id que va a salir.</summary>
+    public int ProximoIdArma => _proximoIdArma;
+
+    /// <summary>Saca una cosa de la mochila. El objeto en sí sigue existiendo.</summary>
+    public bool Sacar(CosaGuardada cosa)
+    {
+        int i = _cosas.IndexOf(cosa);
+        if (i < 0)
+            return false;
+
+        // RemoveAt y no swap-back: el orden de la mochila es lo que el jugador
+        // ve, y además cualquier reordenamiento silencioso cambia qué elige un
+        // índice del log al re-simular.
+        _cosas.RemoveAt(i);
+        return true;
+    }
+
+    /// <summary>Saca por posición, que es como la nombra el log.</summary>
+    public CosaGuardada? SacarEn(int indice)
+    {
+        if (indice < 0 || indice >= _cosas.Count)
+            return null;
+
+        var cosa = _cosas[indice];
+        _cosas.RemoveAt(indice);
+        return cosa;
+    }
+}
+

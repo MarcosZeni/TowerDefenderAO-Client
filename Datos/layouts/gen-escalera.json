@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "leyenda": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+  "aviso": "Se dibuja con Escenas/EditorLayouts.tscn o lo genera --generar-layouts. Se puede corregir a mano, pero después hay que pasarlo por --validar-layouts.",
+  "ancho": 20,
+  "alto": 11,
+  "largoRuta": 28,
+  "valido": true,
+  "filas": [
+    "XXXXXXXXXXXXXXXXXXXX",
+    "XXX.....XXXXXXXXXXXX",
+    "X.E####.XXXXXXXXXXXX",
+    "X.....#.....XXXXXXXX",
+    "XXXXX.#####.XXXXXXXX",
+    "XXXXX.....#.....XXXX",
+    "XXXXXXXXX.#####.XXXX",
+    "XXXX..........#.XXXX",
+    "XXXX.T#########.XXXX",
+    "XXXX............XXXX",
+    "XXXXXXXXXXXXXXXXXXXX"
+  ]
+}

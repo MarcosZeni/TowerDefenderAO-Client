@@ -1,0 +1,60 @@
+# =============================================================================
+#  Normalización de fin de línea y marcado de binarios
+#
+#  Sin esto, un archivo escrito en Windows entra al repo con CRLF y el mismo
+#  archivo tocado en otra máquina aparece como "cambió entero". Peor con los
+#  .tscn y los .import de Godot: el editor los reescribe solo, y un diff de
+#  1.400 líneas por un cambio de nada hace que nadie los mire.
+# =============================================================================
+
+# LF adentro del repo, siempre. Git decide qué hay en el disco de cada uno.
+* text=auto eol=lf
+
+# -----------------------------------------------------------------------------
+#  Código y datos
+# -----------------------------------------------------------------------------
+*.cs        text diff=csharp
+*.csproj    text
+*.props     text
+*.targets   text
+*.json      text
+*.md        text
+*.sql       text
+*.yml       text
+*.editorconfig text
+
+# La solución la escribe Visual Studio y la quiere con CRLF. Es el único caso.
+*.sln       text eol=crlf
+
+# -----------------------------------------------------------------------------
+#  Godot
+#
+#  Son texto, y se versionan los tres. El .cs.uid es la identidad estable del
+#  script: sin él las escenas pierden la referencia (CLAUDE.md).
+# -----------------------------------------------------------------------------
+*.tscn      text
+*.tres      text
+*.godot     text
+*.import    text
+*.cs.uid    text
+*.gd        text
+*.gdshader  text
+
+# -----------------------------------------------------------------------------
+#  Binarios — que git no intente normalizarlos ni diffearlos
+# -----------------------------------------------------------------------------
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.webp      binary
+*.svg       text
+*.ogg       binary
+*.wav       binary
+*.mp3       binary
+*.ttf       binary
+*.otf       binary
+*.pck       binary
+*.dll       binary
+*.exe       binary
+*.zip       binary
+*.mmdb      binary

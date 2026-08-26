@@ -1,0 +1,79 @@
+<Project Sdk="Godot.NET.Sdk/4.8.0-dev.3">
+
+  <PropertyGroup>
+    <!-- ⚠ El cliente de Austral apunta a net8.0. Acá se apunta a net10.0 a
+         propósito: en esta máquina hay un solo SDK (10.0.301) y un solo runtime
+         (10.0.9), y .NET 8 no está instalado (CLAUDE.md).
+
+         GodotSharp está compilado contra net8.0. Un proyecto net10.0 lo
+         referencia sin problema porque el runtime carga hacia adelante, pero
+         era un supuesto sin verificar hasta la primera compilación de este
+         archivo. Si algún día falla, el síntoma va a ser un error de resolución
+         de GodotSharp al compilar, no en runtime. -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <RootNamespace>TowerOfArgentum</RootNamespace>
+    <AssemblyName>TowerOfArgentum</AssemblyName>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Lo pide Godot para poder descargar y recargar el assembly sin cerrar el
+         editor. Sin esto, cada compilación desde el editor pide reiniciarlo. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+
+    <!-- La simulación es determinista y todo en enteros (JUGABILIDAD.md §4).
+         Nada acá depende de la cultura del sistema, y una comparación de
+         strings sensible a la cultura adentro del bucle sería exactamente el
+         tipo de cosa que hace que dos máquinas den resultados distintos. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ⚠ Los intermedios de TowerOfArgentum.Simulacion.csproj quedan afuera.
+
+         Ese proyecto vive en Simulacion\ y empaqueta la simulación para que la
+         consuma el servidor. Su obj\ contiene un AssemblyInfo.cs generado, y como
+         este csproj barre TODO Client\, lo compilaba también: ocho errores
+         CS0579 por atributos de ensamblado duplicados.
+
+         Los .cs de la simulación SÍ se siguen compilando acá, que es lo que
+         corresponde — el cliente los usa directo, sin pasar por el paquete. -->
+    <Compile Remove="Simulacion\obj\**" />
+    <Compile Remove="Simulacion\bin\**" />
+    <None Remove="Simulacion\obj\**" />
+    <None Remove="Simulacion\bin\**" />
+  </ItemGroup>
+
+  <!-- ==========================================================================
+       Guarda de determinismo
+
+       La simulación tiene que poder correr en el servidor, que no tiene Godot, y
+       tiene que dar el mismo resultado en cualquier máquina. Las dos reglas que
+       lo garantizan son fáciles de romper sin darse cuenta —autocompletar mete
+       un `using Godot`, alguien escribe `float velocidad`— y el síntoma no
+       aparece al compilar: aparece meses después, como una revalidación que
+       acusa de trampa a un jugador honesto.
+
+       Por eso se chequea acá y el build FALLA. Es más barato que descubrirlo
+       tarde, y es la única forma de que la regla se sostenga sola.
+
+       Lo que está prohibido adentro de Simulacion\ y por qué:
+
+         · using Godot   — la simulación no puede depender del motor
+         · float/double  — la aritmética de punto flotante acumula deriva a lo
+                           largo de 216.000 ticks
+         · System.Random — cambió de algoritmo en .NET 6 y no promete
+                           estabilidad entre versiones
+         · Math.Sin/Cos/Atan2/Pow/Log/Sqrt — los resuelve la libm de cada
+                           sistema, y ahí no hay garantía entre plataformas
+       ========================================================================== -->
+  <Target Name="VerificarSimulacionPura" BeforeTargets="CoreCompile">
+
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;Herramientas\verificar-simulacion.ps1&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          ContinueOnError="false" />
+
+  </Target>
+
+</Project>
