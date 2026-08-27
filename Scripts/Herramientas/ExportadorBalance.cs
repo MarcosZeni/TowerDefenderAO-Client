@@ -24,7 +24,21 @@ namespace TowerOfArgentum.Herramientas;
 /// </remarks>
 public static class ExportadorBalance
 {
-    public static void Correr(string destino)
+    /// <summary>
+    /// Escribe el XLSX. Con <paramref name="corridas"/> mayor que cero agrega las
+    /// dos hojas de MEDICIÓN, que salen de jugar de verdad.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Las diez primeras hojas son los datos de entrada; las dos últimas
+    /// son lo que esos datos PRODUCEN al jugarlos. Una segunda pasada de balance
+    /// sin las de medición vuelve a razonar sobre la tabla estática, que es
+    /// exactamente como se llegó a cambiar la curva por un plan de colocación
+    /// que se quedaba sin casilleros.</para>
+    ///
+    /// <para>Cuestan tiempo: son tres políticas por <c>corridas</c> seeds más doce
+    /// layouts, así que van bajo pedido y no por defecto.</para>
+    /// </remarks>
+    public static void Correr(string destino, int corridas = 0)
     {
         if (string.IsNullOrWhiteSpace(destino))
             destino = ProjectSettings.GlobalizePath("res://../BALANCE.xlsx");
@@ -44,6 +58,14 @@ public static class ExportadorBalance
             ("Constantes", Constantes()),
             ("Matchups", Matchups(datos)),
         };
+
+        if (corridas > 0)
+        {
+            GD.Print($"  · midiendo: 3 políticas × {corridas} corridas + 12 layouts…");
+
+            hojas.Add(("Mediciones", Mediciones(corridas)));
+            hojas.Add(("Layouts", GeneradorLayouts.FilasDeLayouts(corridas)));
+        }
 
         try
         {
@@ -578,6 +600,89 @@ public static class ExportadorBalance
         ];
     }
 
+
+    // -------------------------------------------------------------------------
+    //  Hoja 11 — Mediciones: qué pasa al JUGAR estos datos, por política
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Una fila por corrida y por política, más las tres filas de resumen contra
+    /// los objetivos de <c>Resumen_Balance</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es la hoja que las otras diez no pueden dar.</b> Las diez de
+    /// arriba dicen qué números tiene el juego; esta dice qué pasa cuando se los
+    /// juega, que es lo único que contesta si el balance sirve.</para>
+    ///
+    /// <para>Las tres políticas están para que se lea <b>la distancia entre las
+    /// cotas</b>, no una sola. Con una sola, un bug de la política se lee como una
+    /// propiedad del juego —ya pasó: un plan de colocación que se quedaba sin
+    /// casilleros se leyó como «el piso está en la oleada 22» y casi mueve la
+    /// curva de dificultad—.</para>
+    ///
+    /// <para>Las seeds son las mismas que usa <c>--balance</c>, así que las dos
+    /// herramientas se pueden comparar fila a fila.</para>
+    /// </remarks>
+    private static List<object[]> Mediciones(int corridas)
+    {
+        List<object[]> filas =
+        [
+            [
+                "Politica", "Seed", "Wave", "Ticks", "Defenders", "Classes",
+                "Backpack", "GoldLeft", "State",
+            ],
+        ];
+
+        Politica[] politicas = [Politica.Piso, Politica.Normal, Politica.Techo];
+        string[] nombres = ["piso", "normal", "techo"];
+        int[,] resumen = new int[politicas.Length, 3];
+
+        for (int p = 0; p < politicas.Length; p++)
+        {
+            int peor = int.MaxValue, mejor = 0, suma = 0;
+
+            for (int i = 0; i < corridas; i++)
+            {
+                // Las mismas seeds que --balance, para poder comparar fila a fila.
+                ulong seed = (ulong)(i + 1) * 2_654_435_761UL;
+                var r = CorredorHeadless.Correr(seed, new ActionLog(), null, null, politicas[p]);
+
+                filas.Add(
+                [
+                    nombres[p], seed.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    r.Wave, r.Ticks, r.Defenders, r.ClasesRoster, r.Backpack, r.Gold,
+                    r.State.ToString(),
+                ]);
+
+                suma += r.Wave;
+                peor = System.Math.Min(peor, r.Wave);
+                mejor = System.Math.Max(mejor, r.Wave);
+            }
+
+            resumen[p, 0] = peor;
+            resumen[p, 1] = corridas > 0 ? suma / corridas : 0;
+            resumen[p, 2] = mejor;
+        }
+
+        filas.Add([]);
+        filas.Add(["Resumen", "Peor", "Media", "Mejor", "ObjetivoMin", "ObjetivoMax", "Cumple"]);
+
+        int[] minObjetivo = [30, 60, 90];
+        int[] maxObjetivo = [40, 75, 100];
+
+        for (int p = 0; p < politicas.Length; p++)
+        {
+            bool cumple = resumen[p, 1] >= minObjetivo[p] && resumen[p, 1] <= maxObjetivo[p];
+
+            filas.Add(
+            [
+                nombres[p], resumen[p, 0], resumen[p, 1], resumen[p, 2],
+                minObjetivo[p], maxObjetivo[p], cumple ? "si" : "NO",
+            ]);
+        }
+
+        return filas;
+    }
     private static string Recta(LinearCurve c) => $"{c.Base} + {c.PorOleada}*n";
 
     // -------------------------------------------------------------------------

@@ -395,6 +395,74 @@ public static class GeneradorLayouts
     /// Si uno llega a la 40 y otro a la 20, la seed decide la corrida antes de que
     /// el jugador juegue, y eso rompe el ranking.</para>
     /// </remarks>
+    /// <summary>
+    /// Los doce layouts jugados, para la hoja <c>Layouts</c> del XLSX.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>El layout lo sortea la seed del servidor, no lo elige el
+    /// jugador</b>, así que la diferencia entre el más fácil y el más difícil es
+    /// ventaja repartida a dedo en un ranking que ordena por <c>ticks</c>. Esta
+    /// hoja existe para que esa diferencia sea un número y no una impresión.</para>
+    ///
+    /// <para>La columna que importa es <c>Adjacent</c> —celdas colocables que tocan
+    /// el camino—, no <c>RouteLength</c>: medido, el largo casi no predice el
+    /// resultado y las pegadas sí, porque son cuántos defensores entran.</para>
+    /// </remarks>
+    internal static List<object[]> FilasDeLayouts(int corridas)
+    {
+        List<object[]> filas =
+        [
+            ["Layout", "RouteLength", "Adjacent", "WaveAvg", "WaveWorst", "WaveBest", "Defenders"],
+        ];
+
+        string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");
+
+        if (!Directory.Exists(carpeta))
+            return filas;
+
+        var archivos = new List<string>(Directory.GetFiles(carpeta, "*.json"));
+        archivos.Sort(System.StringComparer.Ordinal);
+
+        foreach (string archivo in archivos)
+        {
+            string nombre = Path.GetFileNameWithoutExtension(archivo);
+            var layout = LayoutMapa.DeArchivo(archivo);
+
+            if (layout is null || !layout.Valido)
+                continue;
+
+            var mapa = AMapa(layout, out _);
+
+            if (mapa is null)
+                continue;
+
+            int suma = 0, defensores = 0, peor = int.MaxValue, mejor = 0;
+
+            for (int i = 0; i < corridas; i++)
+            {
+                // Las mismas seeds fijas que --probar-layouts, para que las dos
+                // salidas se puedan comparar.
+                ulong seed = 1000UL + ((ulong)i * 7919UL);
+
+                var r = CorredorHeadless.Correr(seed, new ActionLog(), mapa, null);
+
+                suma += r.Wave;
+                defensores += r.Defenders;
+                peor = System.Math.Min(peor, r.Wave);
+                mejor = System.Math.Max(mejor, r.Wave);
+            }
+
+            filas.Add(
+            [
+                nombre, layout.LargoRuta, layout.ContarPegadas(),
+                corridas > 0 ? suma / corridas : 0, peor, mejor,
+                corridas > 0 ? defensores / corridas : 0,
+            ]);
+        }
+
+        return filas;
+    }
+
     public static void Probar(int corridas)
     {
         string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");

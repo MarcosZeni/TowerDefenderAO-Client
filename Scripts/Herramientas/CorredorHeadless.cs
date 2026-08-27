@@ -156,7 +156,11 @@ public static class CorredorHeadless
                     return true;
 
                 case "--exportar-balance":
-                    ExportadorBalance.Correr(i + 1 < args.Length ? args[i + 1] : "");
+                    // El segundo argumento son las corridas de medición. Sin él
+                    // salen solo las diez hojas de datos, que es lo barato.
+                    ExportadorBalance.Correr(
+                        i + 1 < args.Length ? args[i + 1] : "",
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int med)) ? med : 0);
                     return true;
 
                 case "--muestrear-piso":
