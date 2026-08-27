@@ -169,6 +169,118 @@ public static class GeneradorLayouts
     /// Un layout se puede corregir a mano abriendo el JSON, y ahí es donde se
     /// rompe sin que nadie mire. Esto es la red.
     /// </remarks>
+    /// <summary>
+    /// Bloquea celdas colocables pegadas al camino hasta que ningún layout pase
+    /// de <paramref name="tope"/>, y reescribe los que cambien.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es una corrección de EQUIDAD DEL RANKING, no de estética.</b> El
+    /// layout lo sortea la seed del servidor, no lo elige el jugador, y
+    /// <c>--probar-layouts</c> mide que el de más celdas pegadas llega doce oleadas
+    /// más lejos que el de menos: gen-gancho, con 56, llega a la 74; gen-zigzag,
+    /// con 36, llega a la 62. Doce oleadas que decide el sorteo antes de que nadie
+    /// ponga un defensor.</para>
+    ///
+    /// <para>Solo se BAJA, nunca se sube, y por geometría: las celdas que tocan el
+    /// camino existen porque el camino pasa por ahí, así que a un layout de ruta
+    /// corta no se le pueden agregar. Bajar siempre se puede.</para>
+    ///
+    /// <para>Se bloquean las <b>últimas en orden de barrido</b>, que es abajo a la
+    /// derecha. Es una regla arbitraria y por eso mismo sirve: es reproducible, y
+    /// una elección "inteligente" de cuál sacar sería una decisión de diseño
+    /// escondida en una herramienta.</para>
+    ///
+    /// <para>⚠ Los layouts entran al hash de <c>/run/start</c>. Correr esto es
+    /// TEMPORADA NUEVA.</para>
+    /// </remarks>
+    public static void Emparejar(int tope)
+    {
+        string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");
+
+        GD.Print($"── Emparejar layouts a {tope} celdas pegadas ──────────");
+
+        if (!Directory.Exists(carpeta))
+        {
+            GD.PrintErr("  ✗ no hay carpeta Datos/layouts");
+            return;
+        }
+
+        var archivos = new List<string>(Directory.GetFiles(carpeta, "*.json"));
+        archivos.Sort(System.StringComparer.Ordinal);
+
+        int tocados = 0;
+
+        foreach (string archivo in archivos)
+        {
+            string nombre = Path.GetFileNameWithoutExtension(archivo);
+            var mapa = LayoutMapa.DeArchivo(archivo);
+
+            if (mapa is null)
+            {
+                GD.PrintErr($"  ✗ {nombre,-18} no se pudo leer");
+                continue;
+            }
+
+            int antes = mapa.ContarPegadas();
+
+            if (antes <= tope)
+            {
+                GD.Print($"  · {nombre,-18} {antes,3} pegadas · queda igual");
+                continue;
+            }
+
+            int sacadas = 0;
+
+            for (int y = LayoutMapa.Height - 1; y >= 0 && mapa.ContarPegadas() > tope; y--)
+            {
+                for (int x = LayoutMapa.Width - 1; x >= 0 && mapa.ContarPegadas() > tope; x--)
+                {
+                    if (mapa[x, y] != CeldaLayout.Colocable || !Pegada(mapa, x, y))
+                        continue;
+
+                    mapa[x, y] = CeldaLayout.Bloqueado;
+                    sacadas++;
+                }
+            }
+
+            mapa.Validar();
+
+            // ⚠ Bloquear una colocable no puede cortar el camino —el camino son
+            // otras celdas— pero sí puede dejar el layout por debajo del mínimo de
+            // pegadas o romper otra regla. Si pasa, no se escribe: mejor un layout
+            // desparejo que uno inválido.
+            if (!mapa.Valido)
+            {
+                GD.PrintErr($"  ✗ {nombre,-18} quedaría inválido: " +
+                            string.Join(" · ", mapa.Problemas));
+                continue;
+            }
+
+            mapa.Store(archivo);
+            tocados++;
+
+            GD.Print($"  ✓ {nombre,-18} {antes,3} → {mapa.ContarPegadas(),3} pegadas " +
+                     $"· {sacadas} bloqueadas");
+        }
+
+        GD.Print($"\n  {tocados} layout(s) reescritos");
+
+        if (tocados > 0)
+            GD.Print("  ⚠ TEMPORADA NUEVA: los layouts entran al hash de /run/start");
+    }
+
+    /// <summary>¿Esta celda toca el camino, la entrada o la Torre?</summary>
+    private static bool Pegada(LayoutMapa mapa, int x, int y)
+    {
+        foreach (var v in LayoutMapa.Neighbours(new Cell(x, y)))
+        {
+            if (mapa[v.X, v.Y] is CeldaLayout.Route or CeldaLayout.Entrada or CeldaLayout.Tower)
+                return true;
+        }
+
+        return false;
+    }
+
     public static void Validar()
     {
         string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");
@@ -194,6 +306,8 @@ public static class GeneradorLayouts
         int malos = 0;
         int minimo = int.MaxValue;
         int maximo = 0;
+        int minPegadas = int.MaxValue;
+        int maxPegadas = 0;
 
         foreach (string archivo in archivos)
         {
@@ -213,8 +327,12 @@ public static class GeneradorLayouts
                 minimo = System.Math.Min(minimo, mapa.LargoRuta);
                 maximo = System.Math.Max(maximo, mapa.LargoRuta);
 
+                int pegadas = mapa.ContarPegadas();
+                minPegadas = System.Math.Min(minPegadas, pegadas);
+                maxPegadas = System.Math.Max(maxPegadas, pegadas);
+
                 GD.Print($"  ✓ {nombre,-18} ruta {mapa.LargoRuta,3} · " +
-                         $"{mapa.ContarPegadas(),3} pegadas");
+                         $"{pegadas,3} pegadas");
             }
             else
             {
@@ -227,19 +345,33 @@ public static class GeneradorLayouts
 
         if (buenos > 0)
         {
-            // ⚠ El spread es lo que decide si el ranking mide al jugador.
-            //
-            // Ruta más larga = más tiempo de tiro = más fácil, y más ticks = peor
-            // puesto. Si un layout mide 28 y otro 50, la seed decide el resultado
-            // antes de que el jugador ponga el primer defensor.
             int spread = maximo == 0 ? 0 : (maximo - minimo) * 100 / maximo;
+            int spreadPegadas = maxPegadas == 0 ? 0 : (maxPegadas - minPegadas) * 100 / maxPegadas;
 
-            GD.Print($"  largo de ruta: {minimo} a {maximo} · spread {spread}%");
+            GD.Print($"  largo de ruta:  {minimo} a {maximo} · spread {spread}%");
+            GD.Print($"  celdas pegadas: {minPegadas} a {maxPegadas} · spread {spreadPegadas}%");
+
+            // ⚠ LAS CELDAS PEGADAS SON LA MEDIDA QUE IMPORTA, no el largo de ruta.
+            //
+            // Antes el aviso miraba el largo, y --probar-layouts dice que el largo
+            // casi no predice nada: gen-uve tiene la segunda ruta más corta (26) y
+            // llega a la oleada 68, gen-serpiente tiene la más larga (33) y llega a
+            // la misma 68. Lo que sí predice es cuántas celdas colocables tocan el
+            // camino, porque eso es cuántos defensores entran: gen-gancho tiene 56
+            // y llega a 74; gen-zigzag tiene 36 y llega a 62.
+            //
+            // Y eso contamina el ranking dos veces: el layout con más lugares es
+            // más fácil, y el jugador no lo elige —lo sortea la seed del servidor—.
+            if (spreadPegadas > 20)
+            {
+                GD.PrintErr($"  ⚠ {spreadPegadas}% de diferencia en celdas pegadas: el layout con " +
+                            "más lugares es más fácil, y lo sortea la seed, no el jugador");
+            }
 
             if (spread > 20)
             {
-                GD.PrintErr("  ⚠ más de 20% de diferencia: el layout más largo es " +
-                            "más fácil Y da peor puesto en el ranking");
+                GD.Print("  · el largo de ruta también difiere más de 20%, pero " +
+                         "--probar-layouts dice que casi no predice el resultado");
             }
         }
     }
@@ -311,7 +443,7 @@ public static class GeneradorLayouts
                 // que dar lo mismo, o comparar layouts no significa nada.
                 ulong seed = 1000UL + ((ulong)i * 7919UL);
 
-                var r = CorredorHeadless.Correr(seed, new ActionLog(), mapa, plan);
+                var r = CorredorHeadless.Correr(seed, new ActionLog(), mapa, null);
 
                 suma += r.Wave;
                 defensores += r.Defenders;
@@ -406,6 +538,11 @@ public static class GeneradorLayouts
         var mapa = new Map(
             LayoutMapa.Width, LayoutMapa.Height, new Route(vertices), colocables);
 
+        // ⚠ El plan queda para compatibilidad, pero PROBAR YA NO LO USA: pasa
+        // null y deja que el corredor arme el suyo con la política normal, que
+        // llena el tablero. Con este plan ralo cada layout se jugaba con siete
+        // defensores y lo que se comparaba era el plan, no el layout.
+        //
         // Un lugar cada tres celdas de camino, siempre pegado: cubre el recorrido
         // parejo en vez de amontonar todo en el arranque.
         var usadas = new HashSet<Cell>();

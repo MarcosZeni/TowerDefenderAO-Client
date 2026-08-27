@@ -247,6 +247,11 @@ public static class CorredorHeadless
                     GeneradorLayouts.Validar();
                     return true;
 
+                case "--emparejar-layouts":
+                    GeneradorLayouts.Emparejar(
+                        (i + 1 < args.Length && int.TryParse(args[i + 1], out int tope)) ? tope : 44);
+                    return true;
+
                 case "--prueba-guardado":
                     ProbarGuardadoEnPreparacion();
                     return true;

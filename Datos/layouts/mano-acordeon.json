@@ -1,7 +1,7 @@
 {
   "version": 1,
   "legend": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
-  "note": "Lo escribe el editor de layouts (Escenas/EditorLayouts.tscn). Se puede corregir a mano, pero conviene volver a pasarlo por el editor para que revalide.",
+  "note": "Se dibuja con Escenas/EditorLayouts.tscn o lo genera --generar-layouts. Se puede corregir a mano, pero después hay que pasarlo por --validar-layouts.",
   "width": 20,
   "height": 11,
   "routeLength": 31,
@@ -15,8 +15,8 @@
     "XE####..#.#..####TXX",
     "XX......#.#.......XX",
     "XXXXXXX.#.#.XXXXXXXX",
-    "XXXXXXX.###.XXXXXXXX",
-    "XXXXXXX.....XXXXXXXX",
+    "XXXXXXXX###XXXXXXXXX",
+    "XXXXXXX.XXX.XXXXXXXX",
     "XXXXXXXXXXXXXXXXXXXX"
   ]
 }
