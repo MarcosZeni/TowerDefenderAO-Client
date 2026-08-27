@@ -1,7 +1,7 @@
 namespace TowerOfArgentum.Simulacion;
 
 /// <summary>Algo que se vende en la tienda de la corrida.</summary>
-public readonly record struct OfertaTienda(TipoCosa Tipo, int Id, int Precio, bool Vendida);
+public readonly record struct ShopOffer(ItemType Kind, int Id, int Price, bool Sold);
 
 /// <summary>
 /// La tienda que aparece dentro de la corrida.
@@ -15,11 +15,11 @@ public readonly record struct OfertaTienda(TipoCosa Tipo, int Id, int Precio, bo
 /// presupuesto de ítem, stock de tienda— y no es casualidad: un presupuesto es la
 /// única forma de que el contenido generado tenga un techo conocido.</para>
 /// </remarks>
-public sealed class Tienda
+public sealed class Shop
 {
-    private readonly List<OfertaTienda> _stock = [];
+    private readonly List<ShopOffer> _stock = [];
 
-    public IReadOnlyList<OfertaTienda> Stock => _stock;
+    public IReadOnlyList<ShopOffer> Stock => _stock;
 
     /// <summary>En qué oleada se renovó el stock por última vez.</summary>
     public int OleadaDelStock { get; private set; }
@@ -37,44 +37,44 @@ public sealed class Tienda
     /// eso, la tienda se vuelve una lista creciente que hay que revisar entera
     /// cada vez, y elegir deja de ser una decisión para volverse una tarea.</para>
     /// </remarks>
-    public void Renovar(int oleada, Roster roster, Mochila mochila, Aleatorio rng, DatosBalance datos)
+    public void Refresh(int oleada, Roster roster, Backpack mochila, Rng rng, BalanceData datos)
     {
         _stock.Clear();
         OleadaDelStock = oleada;
 
-        var clases = roster.Disponibles();
+        var clases = roster.Available();
 
         if (clases.Count == 0)
             return;
 
-        var cfg = datos.Curvas.Tienda;
+        var cfg = datos.Curves.Shop;
 
         // Cuántos entran en pantalla sin scroll y se pueden comparar de un
         // vistazo. Sale de curvas.json («tienda»).
-        for (int i = 0; i < cfg.PerksEnStock; i++)
+        for (int i = 0; i < cfg.PerksInStock; i++)
         {
             // ⚠ La tienda NO vende Oro: el jefe es la única fuente. Si lo
             // vendiera, matar al jefe dejaría de ser especial y el jugador con oro
             // podría saltear la parte difícil del juego.
-            var tier = rng.Ocurre(cfg.ChanceBronce) ? TierPerk.Bronce : TierPerk.Plata;
-            var perk = datos.Perks.Tirar(tier, clases, rng);
+            var tier = rng.Happens(cfg.BronzeChance) ? PerkTier.Bronze : PerkTier.Silver;
+            var perk = datos.Perks.Roll(tier, clases, rng);
 
             if (perk is not null)
-                _stock.Add(new OfertaTienda(TipoCosa.Perk, perk.Id, cfg.PrecioDePerk(tier, oleada), false));
+                _stock.Add(new ShopOffer(ItemType.Perk, perk.Id, cfg.PerkPrice(tier, oleada), false));
         }
 
-        for (int i = 0; i < cfg.ArmasEnStock; i++)
+        for (int i = 0; i < cfg.WeaponsInStock; i++)
         {
-            var arma = GeneradorArmas.Generar(
-                datos.Curvas.PorOleada.PresupuestoItemTienda.En(oleada),
-                clases, rng, mochila.ProximoIdArma, datos.Armas);
+            var arma = WeaponGenerator.Generate(
+                datos.Curves.PorOleada.ShopItemBudget.En(oleada),
+                clases, rng, mochila.NextWeaponId, datos.Weapons);
 
-            int id = mochila.RegistrarArma(arma);
+            int id = mochila.RegisterWeapon(arma);
 
             // El precio sale del valor del arma, que sale de su presupuesto y de
             // su rareza: una legendaria cuesta lo que vale sin que haya que
             // decidirlo aparte.
-            _stock.Add(new OfertaTienda(TipoCosa.Arma, id, arma.Valor * datos.Armas.MultiplicadorPrecioTienda, false));
+            _stock.Add(new ShopOffer(ItemType.Weapon, id, arma.Value * datos.Weapons.ShopPriceMultiplier, false));
         }
     }
 
@@ -86,12 +86,12 @@ public sealed class Tienda
     /// el log guarda "compré la oferta 2", y si la lista se achicara al comprar,
     /// re-simular ese log compraría otra cosa.
     /// </remarks>
-    public bool Vender(int indice)
+    public bool Sell(int indice)
     {
-        if (indice < 0 || indice >= _stock.Count || _stock[indice].Vendida)
+        if (indice < 0 || indice >= _stock.Count || _stock[indice].Sold)
             return false;
 
-        _stock[indice] = _stock[indice] with { Vendida = true };
+        _stock[indice] = _stock[indice] with { Sold = true };
         return true;
     }
 

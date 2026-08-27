@@ -123,7 +123,7 @@ public static class LectorIndices
     /// </remarks>
     public static Dictionary<int, CuatroDirecciones> LeerArmas(string? ruta = null)
     {
-        ruta ??= Path.Combine(CarpetaDatos, "Armas.dat");
+        ruta ??= Path.Combine(CarpetaDatos, "Weapons.dat");
         return LeerDatDeDirecciones(ruta, "ARMA");
     }
 

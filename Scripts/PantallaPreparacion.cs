@@ -61,10 +61,10 @@ public partial class PantallaPreparacion : Control
 
     public override void _Process(double delta)
     {
-        var partida = _juego.Partida;
+        var partida = _juego.Run;
 
-        bool deberia = partida is { Estado: EstadoPartida.EnCurso, EsperandoInicioDeOleada: true }
-                       && !partida.EsperandoEleccion;
+        bool deberia = partida is { State: RunState.InProgress, WaitingForWaveStart: true }
+                       && !partida.WaitingForChoice;
 
         if (deberia != _visible)
         {
@@ -134,26 +134,27 @@ public partial class PantallaPreparacion : Control
         if (!_visible)
             return;
 
-        var partida = _juego.Partida;
+        var partida = _juego.Run;
         var fuente = ThemeDB.FallbackFont;
 
-        const int Alto = 210;
-        int y0 = Escala.LienzoAlto - Alto;
+        const int Height = 210;
+        int y0 = Escala.LienzoAlto - Height;
 
         // ⚠ Panel abajo y sobre el mundo, no una ventana modal que lo tape.
         //
         // Lo que el jugador tiene que mirar en esta fase es EL MAPA: dónde queda
         // libre, por dónde pasa la ruta, qué cubre lo que ya puso. Un modal
         // centrado le taparía justo eso y lo obligaría a cerrarlo para decidir.
-        DrawRect(new Rect2(0, y0, Escala.LienzoAncho, Alto), new Color(0.05f, 0.06f, 0.09f, 0.90f));
+        DrawRect(new Rect2(0, y0, Escala.LienzoAncho, Height), new Color(0.05f, 0.06f, 0.09f, 0.90f));
         DrawRect(new Rect2(0, y0, Escala.LienzoAncho, 3), new Color(0.85f, 0.72f, 0.30f));
 
         DrawString(fuente, new Vector2(28, y0 + 40),
-            $"Oleada {partida.ProximaOleada} de {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida}",
+            $"{Loc.Get("ui.preparacion.wave")} {partida.ProximaOleada} " +
+            $"{Loc.Get("ui.preparacion.de")} {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun}",
             HorizontalAlignment.Left, -1, 30, new Color(0.92f, 0.90f, 0.84f));
 
         DrawString(fuente, new Vector2(28, y0 + 72),
-            $"oro {partida.Oro}    ·    poné defensores, equipá y comprá — el reloj está detenido",
+            $"{Loc.Get("ui.preparacion.oro")} {partida.Gold}    ·    {Loc.Get("ui.preparacion.instrucciones")}",
             HorizontalAlignment.Left, -1, 18, new Color(0.58f, 0.63f, 0.70f));
 
         DibujarAvance(fuente, y0);
@@ -170,14 +171,14 @@ public partial class PantallaPreparacion : Control
     /// </remarks>
     private void DibujarAvance(Font fuente, int y0)
     {
-        var avance = _juego.Partida.AvanceProximaOleada();
+        var avance = _juego.Run.AvanceProximaOleada();
 
         float x = 28;
         float y = y0 + 118;
 
         foreach (var fila in avance)
         {
-            var textura = CargadorGraficos.Textura($"{fila.Grafico}.sur");
+            var textura = CargadorGraficos.Textura($"{fila.Graphic}.sur");
 
             if (textura is not null)
             {
@@ -186,11 +187,12 @@ public partial class PantallaPreparacion : Control
                 x += tamano.X + 6;
             }
 
-            var color = fila.EsJefe
+            var color = fila.IsBoss
                 ? new Color(0.98f, 0.62f, 0.25f)
                 : new Color(0.86f, 0.88f, 0.92f);
 
-            string etiqueta = $"{fila.Cuantos}× {fila.Nombre}" + (fila.EsJefe ? "  (JEFE)" : "");
+            string etiqueta = $"{fila.Cuantos}× {fila.Name}"
+                + (fila.IsBoss ? $"  {Loc.Get("ui.preparacion.jefe")}" : "");
 
             DrawString(fuente, new Vector2(x, y + 26), etiqueta,
                 HorizontalAlignment.Left, -1, 20, color);
@@ -202,11 +204,13 @@ public partial class PantallaPreparacion : Control
             // entender por qué».
             if (fila.ConPerk > 0)
             {
-                DrawString(fuente, new Vector2(x, y + 48), $"{fila.ConPerk} con perk",
+                string buffeados = $"{fila.ConPerk} {Loc.Get("ui.preparacion.con_perk")}";
+
+                DrawString(fuente, new Vector2(x, y + 48), buffeados,
                     HorizontalAlignment.Left, -1, 16, new Color(0.98f, 0.80f, 0.30f));
 
                 ancho = System.Math.Max(ancho,
-                    fuente.GetStringSize($"{fila.ConPerk} con perk", HorizontalAlignment.Left, -1, 16).X);
+                    fuente.GetStringSize(buffeados, HorizontalAlignment.Left, -1, 16).X);
             }
 
             x += ancho + 34;
@@ -227,7 +231,7 @@ public partial class PantallaPreparacion : Control
             DrawRect(caja, new Color(0.95f, 0.75f, 0.35f), filled: false, width: 2f);
 
             DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 46),
-                $"AHÍ VIENEN...  {cuenta}", HorizontalAlignment.Left, -1, 30,
+                $"{Loc.Get("ui.preparacion.ahi_vienen")}  {cuenta}", HorizontalAlignment.Left, -1, 30,
                 new Color(0.99f, 0.88f, 0.60f));
 
             return;
@@ -237,11 +241,11 @@ public partial class PantallaPreparacion : Control
         DrawRect(caja, new Color(0.45f, 0.85f, 0.55f), filled: false, width: 2f);
 
         DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 32),
-            "COMENZAR OLEADA", HorizontalAlignment.Left, -1, 24,
+            Loc.Get("ui.preparacion.comenzar_oleada"), HorizontalAlignment.Left, -1, 24,
             new Color(0.90f, 0.98f, 0.92f));
 
         DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 58),
-            "espacio · sin apuro, el reloj está detenido", HorizontalAlignment.Left, -1, 15,
+            Loc.Get("ui.preparacion.espacio_sin_apuro"), HorizontalAlignment.Left, -1, 15,
             new Color(0.62f, 0.78f, 0.68f));
     }
 }

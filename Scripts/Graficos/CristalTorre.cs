@@ -48,13 +48,13 @@ public partial class CristalTorre : Node2D
 
     public override void _Draw()
     {
-        var torre = _juego.Partida.Torre;
+        var torre = _juego.Run.Tower;
 
-        float vida = torre.HpMaximo <= 0
+        float vida = torre.MaxHp <= 0
             ? 0f
-            : Mathf.Clamp((float)torre.Hp / torre.HpMaximo, 0f, 1f);
+            : Mathf.Clamp((float)torre.Hp / torre.MaxHp, 0f, 1f);
 
-        if (!torre.EnPie)
+        if (!torre.Standing)
         {
             // Caído: no flota, no late, no gira. Queda gris y hundido, que es lo
             // que hay que ver de un vistazo cuando la corrida terminó.

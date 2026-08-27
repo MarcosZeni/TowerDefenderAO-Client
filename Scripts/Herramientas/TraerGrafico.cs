@@ -60,7 +60,7 @@ public static class TraerGrafico
 
         if (region is null)
         {
-            GD.PrintErr($"  ✗ el grh {o.GrhIndex} de «{o.Nombre}» no resuelve a ninguna hoja");
+            GD.PrintErr($"  ✗ el grh {o.GrhIndex} de «{o.Name}» no resuelve a ninguna hoja");
             return;
         }
 
@@ -80,7 +80,7 @@ public static class TraerGrafico
         if (Copiar(region.FileNum, numeroNuevo, region, nombre, o, graficos))
         {
             GuardarIndice(json);
-            GD.Print($"  ✓ {o.Nombre} → {numeroNuevo}.PNG   («{nombre}»)");
+            GD.Print($"  ✓ {o.Name} → {numeroNuevo}.PNG   («{nombre}»)");
         }
     }
 
@@ -143,13 +143,13 @@ public static class TraerGrafico
 
         foreach (var (_, e) in indice)
         {
-            if (e.EsAnimacion || e.FileNum != hojaOrigen || e.Ancho != 32 || e.Alto != 32)
+            if (e.EsAnimacion || e.FileNum != hojaOrigen || e.Width != 32 || e.Height != 32)
                 continue;
 
             minX = System.Math.Min(minX, e.X);
             minY = System.Math.Min(minY, e.Y);
-            maxX = System.Math.Max(maxX, e.X + e.Ancho);
-            maxY = System.Math.Max(maxY, e.Y + e.Alto);
+            maxX = System.Math.Max(maxX, e.X + e.Width);
+            maxY = System.Math.Max(maxY, e.Y + e.Height);
             cuantos++;
         }
 
@@ -251,7 +251,7 @@ public static class TraerGrafico
 
         foreach (var (grh, e) in indice)
         {
-            if (!e.EsAnimacion && e.FileNum == hojaOrigen && e.Ancho == 32 && e.Alto == 32)
+            if (!e.EsAnimacion && e.FileNum == hojaOrigen && e.Width == 32 && e.Height == 32)
                 grhs.Add(grh);
         }
 
@@ -319,7 +319,7 @@ public static class TraerGrafico
             ["columnas"] = xs.Count,
             ["filas"] = ys.Count,
             ["cantidad"] = posiciones.Count,
-            ["lado"] = primero.Ancho * k,
+            ["lado"] = primero.Width * k,
         };
 
         // ⚠ Hay hojas con la mitad sin dibujar.
@@ -332,7 +332,7 @@ public static class TraerGrafico
         // Se listan los que sirven, y solo cuando falta alguno: una hoja entera no
         // necesita cargar 64 números.
         var usables = TilesConContenido(
-            numero, primero.X * k, primero.Y * k, xs.Count, ys.Count, primero.Ancho * k);
+            numero, primero.X * k, primero.Y * k, xs.Count, ys.Count, primero.Width * k);
 
         if (usables.Count > 0 && usables.Count < posiciones.Count)
         {
@@ -349,8 +349,8 @@ public static class TraerGrafico
             ["fileNum"] = numero,
             ["x"] = primero.X * k,
             ["y"] = primero.Y * k,
-            ["w"] = primero.Ancho * k,
-            ["h"] = primero.Alto * k,
+            ["w"] = primero.Width * k,
+            ["h"] = primero.Height * k,
             ["frames"] = 1,
             ["grilla"] = grilla,
 
@@ -484,7 +484,7 @@ public static class TraerGrafico
 
         foreach (var t in tiers)
         {
-            foreach (int id in t.Arma)
+            foreach (int id in t.Weapon)
                 if (id > 0) ids.Add(id);
 
             foreach (int id in t.Armadura)
@@ -517,7 +517,7 @@ public static class TraerGrafico
 
             if (region is null)
             {
-                GD.PrintErr($"  ✗ obj {id} «{o.Nombre}»: el grh {o.GrhIndex} no resuelve");
+                GD.PrintErr($"  ✗ obj {id} «{o.Name}»: el grh {o.GrhIndex} no resuelve");
                 fallados++;
                 continue;
             }
@@ -538,7 +538,7 @@ public static class TraerGrafico
                 Anotar(graficos, nombre, yaTraida, region, o, region.FileNum);
 
                 GD.Print($"  ↺ {yaTraida,3}.PNG  ← hoja {region.FileNum,5}  " +
-                         $"obj {id,3}  {o.Nombre}   (comparte gráfico)");
+                         $"obj {id,3}  {o.Name}   (comparte gráfico)");
 
                 reusados++;
                 continue;
@@ -549,7 +549,7 @@ public static class TraerGrafico
             if (Copiar(region.FileNum, numeroNuevo, region, nombre, o, graficos))
             {
                 GD.Print($"  ✓ {numeroNuevo,3}.PNG  ← hoja {region.FileNum,5}  " +
-                         $"obj {id,3}  {o.Nombre}");
+                         $"obj {id,3}  {o.Name}");
                 traidos++;
             }
             else
@@ -606,7 +606,7 @@ public static class TraerGrafico
         // --- Armas: ícono + las 4 direcciones animadas ---
         foreach (var t in tiers)
         {
-            foreach (int id in t.Arma)
+            foreach (int id in t.Weapon)
             {
                 if (id == 0 || (soloEsteObjeto > 0 && id != soloEsteObjeto))
                     continue;
@@ -619,16 +619,16 @@ public static class TraerGrafico
 
                 if (!armas.TryGetValue(o.Anim, out var dirs))
                 {
-                    GD.PrintErr($"  ✗ obj {id} «{o.Nombre}»: no está la [ARMA{o.Anim}] en Armas.dat");
+                    GD.PrintErr($"  ✗ obj {id} «{o.Name}»: no está la [ARMA{o.Anim}] en Weapons.dat");
                     continue;
                 }
 
                 int n = TraerCuatroDirecciones(
                     graficos, $"arma.{NombreCorto(o)}", dirs.Direcciones, indice,
-                    $"AO obj={id} «{o.Nombre}» anim={o.Anim}");
+                    $"AO obj={id} «{o.Name}» anim={o.Anim}");
 
                 if (n > 0)
-                    GD.Print($"  ✓ arma.{NombreCorto(o),-24} {n} direcciones   ({o.Nombre})");
+                    GD.Print($"  ✓ arma.{NombreCorto(o),-24} {n} direcciones   ({o.Name})");
 
                 entradas += n;
             }
@@ -650,13 +650,13 @@ public static class TraerGrafico
 
                 if (!cuerpos.TryGetValue(o.NumRopaje, out var cuerpo))
                 {
-                    GD.PrintErr($"  ✗ obj {id} «{o.Nombre}»: no está el ropaje {o.NumRopaje}");
+                    GD.PrintErr($"  ✗ obj {id} «{o.Name}»: no está el ropaje {o.NumRopaje}");
                     continue;
                 }
 
                 int n = TraerCuatroDirecciones(
                     graficos, $"cuerpo.{NombreCorto(o)}", cuerpo.Direcciones, indice,
-                    $"AO obj={id} «{o.Nombre}» ropaje={o.NumRopaje} " +
+                    $"AO obj={id} «{o.Name}» ropaje={o.NumRopaje} " +
                     $"cabeza=({cuerpo.OffsetCabezaX},{cuerpo.OffsetCabezaY})");
 
                 if (n > 0)
@@ -726,7 +726,7 @@ public static class TraerGrafico
     /// oscuro; <c>-28</c> para enano y gnomo. Un enano con el offset de humano
     /// tiene la cabeza flotando.</para>
     /// </remarks>
-    private static readonly (string Nombre, int Cuerpo, int Cabeza, bool Baja)[] _razas =
+    private static readonly (string Name, int Cuerpo, int Cabeza, bool Baja)[] _razas =
     [
         ("humano",      1,   1, false),
         ("elfo",        2, 102, false),
@@ -841,7 +841,7 @@ public static class TraerGrafico
         (359, 616, ""),                     // Cota de mallas
         (195, 243, ""),                     // Armadura de placas completa
         (237, 524, ""),                     // Túnica Roja
-        (519, 615, ""),                     // Túnica Legendaria
+        (519, 615, ""),                     // Túnica Legendary
         (360, 612, ""),                     // Armadura de cazador
         (238, 620, "equivalente: no hay Túnica Azul de raza baja, va la gris"),
         (688, 500, "equivalente: no hay Klox de raza baja, va la Bruñida"),
@@ -870,7 +870,7 @@ public static class TraerGrafico
 
             if (baja.NumRopaje <= 0 || !cuerpos.TryGetValue(baja.NumRopaje, out var cuerpo))
             {
-                GD.PrintErr($"  ✗ obj {idBaja} «{baja.Nombre}»: sin ropaje {baja.NumRopaje}");
+                GD.PrintErr($"  ✗ obj {idBaja} «{baja.Name}»: sin ropaje {baja.NumRopaje}");
                 continue;
             }
 
@@ -883,13 +883,13 @@ public static class TraerGrafico
             // obvio cuál es el par de cuál.
             int n = TraerCuatroDirecciones(
                 graficos, $"cuerpoBajo.{nombreAlta}", cuerpo.Direcciones, indice,
-                $"AO obj={idBaja} «{baja.Nombre}» ropaje={baja.NumRopaje} " +
+                $"AO obj={idBaja} «{baja.Name}» ropaje={baja.NumRopaje} " +
                 $"parDe={idAlta}" + (nota.Length > 0 ? $" [{nota}]" : ""));
 
             if (n > 0)
             {
                 GD.Print($"  ✓ cuerpoBajo.{nombreAlta,-24} {n} dirs · obj {idBaja} " +
-                         $"«{baja.Nombre}»" + (nota.Length > 0 ? "  ⚠ equivalente" : ""));
+                         $"«{baja.Name}»" + (nota.Length > 0 ? "  ⚠ equivalente" : ""));
             }
 
             entradas += n;
@@ -967,7 +967,7 @@ public static class TraerGrafico
 
             if (!cuerpos.TryGetValue(e.Body, out var cuerpo))
             {
-                GD.PrintErr($"  ✗ {e.Nombre}: no existe el cuerpo {e.Body}");
+                GD.PrintErr($"  ✗ {e.Name}: no existe el cuerpo {e.Body}");
                 continue;
             }
 
@@ -977,11 +977,11 @@ public static class TraerGrafico
             // lo que dejó el índice con `bicho.rataGigante` después de que el
             // importador renombrara ese bicho a "Rata": dos derivaciones de la
             // misma cosa que se separaron sin que nadie se enterara.
-            string clave = e.Grafico;
+            string clave = e.Graphic;
 
             if (clave.Length == 0)
             {
-                GD.PrintErr($"  ✗ {e.Nombre}: sin campo «grafico», corré --importar-npcs");
+                GD.PrintErr($"  ✗ {e.Name}: sin campo «grafico», corré --importar-npcs");
                 continue;
             }
 
@@ -1001,7 +1001,7 @@ public static class TraerGrafico
 
             int n = TraerCuatroDirecciones(
                 graficos, clave, cuerpo.Direcciones, indice,
-                $"AO npc={e.Id} «{e.Nombre}» área={e.Area} body={e.Body}");
+                $"AO npc={e.Id} «{e.Name}» área={e.Area} body={e.Body}");
 
             if (n > 0)
                 GD.Print($"  ✓ {clave}{Relleno(clave)}{n} dirs · body {e.Body}");
@@ -1281,7 +1281,7 @@ public static class TraerGrafico
 
             AnotarCuadros(
                 graficos, nombre, numero, conContenido,
-                (int)entradaOriginal.Velocidad,
+                (int)entradaOriginal.Speed,
                 $"{origenBase} dir={nombresDireccion[d]} grh={grh}{nota} hoja={hojaOrigen}");
 
             traidos++;
@@ -1324,7 +1324,7 @@ public static class TraerGrafico
 
         foreach (var c in cuadros)
         {
-            if (TieneContenido(imagen, c.X * k, c.Y * k, c.Ancho * k, c.Alto * k))
+            if (TieneContenido(imagen, c.X * k, c.Y * k, c.Width * k, c.Height * k))
                 salida.Add(c);
             else
                 descartados++;
@@ -1386,10 +1386,10 @@ public static class TraerGrafico
         // y es justo el que un error de escala saca de la hoja.
         foreach (var c in cuadros)
         {
-            if ((c.X * k) + (c.Ancho * k) > anchoHoja || (c.Y * k) + (c.Alto * k) > altoHoja)
+            if ((c.X * k) + (c.Width * k) > anchoHoja || (c.Y * k) + (c.Height * k) > altoHoja)
             {
                 error = $"hoja {fileNumOrigen}: el cuadro grh {c.Grh} x4 " +
-                        $"({c.X * k},{c.Y * k}) {c.Ancho * k}x{c.Alto * k} " +
+                        $"({c.X * k},{c.Y * k}) {c.Width * k}x{c.Height * k} " +
                         $"no cabe en {anchoHoja}x{altoHoja}";
 
                 return false;
@@ -1440,8 +1440,8 @@ public static class TraerGrafico
 
         int x = region.X * k;
         int y = region.Y * k;
-        int ancho = region.Ancho * k;
-        int alto = region.Alto * k;
+        int ancho = region.Width * k;
+        int alto = region.Height * k;
 
         // --- Chequeo 2: la región cabe adentro de la hoja ---
         //
@@ -1530,7 +1530,7 @@ public static class TraerGrafico
     /// <b>big-endian</b> — al revés que todo lo demás en x86, así que hay que dar
     /// vuelta los bytes.
     /// </remarks>
-    private static (int Ancho, int Alto) DimensionesPng(string ruta)
+    private static (int Width, int Height) DimensionesPng(string ruta)
     {
         try
         {
@@ -1592,7 +1592,7 @@ public static class TraerGrafico
     {
         AnotarCuadros(
             graficos, nombre, numero, [region], 0,
-            $"AO obj={objeto.Id} «{objeto.Nombre}» grh={region.Grh} hoja={fileNumOrigen}");
+            $"AO obj={objeto.Id} «{objeto.Name}» grh={region.Grh} hoja={fileNumOrigen}");
     }
 
     /// <summary>
@@ -1624,8 +1624,8 @@ public static class TraerGrafico
             ["fileNum"] = numero,
             ["x"] = primero.X * k,
             ["y"] = primero.Y * k,
-            ["w"] = primero.Ancho * k,
-            ["h"] = primero.Alto * k,
+            ["w"] = primero.Width * k,
+            ["h"] = primero.Height * k,
             ["frames"] = cuadros.Count,
         };
 
@@ -1635,7 +1635,7 @@ public static class TraerGrafico
 
             foreach (var c in cuadros)
             {
-                regiones.Add(new JsonArray(c.X * k, c.Y * k, c.Ancho * k, c.Alto * k));
+                regiones.Add(new JsonArray(c.X * k, c.Y * k, c.Width * k, c.Height * k));
             }
 
             entrada["regiones"] = regiones;
@@ -1673,7 +1673,7 @@ public static class TraerGrafico
     /// —la Daga+2 la usan el asesino y el ladrón— y con un nombre por clase la
     /// misma hoja entraría dos veces.
     /// </remarks>
-    private static string NombreDe(ObjetoAo o) => ClaveDe("item.", o.Nombre);
+    private static string NombreDe(ObjetoAo o) => ClaveDe("item.", o.Name);
 
     /// <summary>
     /// Arma una clave del índice a partir de un nombre de Austral.

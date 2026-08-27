@@ -10,12 +10,12 @@ namespace TowerOfArgentum.Simulacion;
 /// existan unidades "viejas" que se quedan atrás, y también la que hace la
 /// revalidación trivial: cero estado duplicado.
 /// </remarks>
-public sealed class ClaseEnRoster
+public sealed class RosterClass
 {
-    public required Clase Clase { get; init; }
+    public required DefenderClass DefenderClass { get; init; }
 
     /// <summary>Arranca en 1 al contratarla.</summary>
-    public int Nivel { get; set; } = 1;
+    public int Level { get; set; } = 1;
 
     /// <summary>
     /// Los perks equipados. La cantidad de slots <b>abiertos</b> la da el nivel.
@@ -42,7 +42,7 @@ public sealed class ClaseEnRoster
     /// desbalancear: con cuatro piezas con habilidades habría que pensar cada
     /// combinación de cuatro.</para>
     /// </remarks>
-    public int Arma { get; set; } = -1;
+    public int Weapon { get; set; } = -1;
 
     /// <summary>
     /// Qué juego de armadura, casco y escudo se le dibuja, de 1 a 3.
@@ -58,7 +58,7 @@ public sealed class ClaseEnRoster
     /// <para>Que subir de nivel <b>se vea</b> es la mitad del punto de subir de
     /// nivel. La otra mitad —el slot de perk que se abre— no se ve en el mapa.</para>
     /// </remarks>
-    public int TierVisual => Nivel <= 2 ? 1 : Nivel <= 4 ? 2 : 3;
+    public int VisualTier => Level <= 2 ? 1 : Level <= 4 ? 2 : 3;
 
     /// <summary>
     /// Slots abiertos, de 1 a 6. Se abre uno por nivel.
@@ -77,59 +77,59 @@ public sealed class ClaseEnRoster
     /// <para>Del nivel 7 en adelante ya no abre nada: para meter otro perk hay
     /// que reemplazar, y el reemplazado se destruye.</para>
     /// </remarks>
-    public int SlotsAbiertos => Enteros.Limitar(Nivel, 1, MaxNivel);
+    public int OpenSlots => Ints.Clamp(Level, 1, MaxLevel);
 
-    public bool TieneSlotLibre => Perks.Count < SlotsAbiertos;
+    public bool HasFreeSlot => Perks.Count < OpenSlots;
 
     /// <summary>
     /// Nivel máximo, que es también la cantidad de slots. Sale de
     /// <c>clases.json</c> y lo pone <see cref="Roster.Contratar"/>.
     /// </summary>
-    public required int MaxNivel { get; init; }
+    public required int MaxLevel { get; init; }
 }
 
 /// <summary>
 /// El roster del jugador: qué clases tiene y cómo están.
 /// </summary>
-public sealed class Roster(DatosBalance datos)
+public sealed class Roster(BalanceData datos)
 {
-    private readonly DatosBalance _datos = datos;
-    private readonly List<ClaseEnRoster> _clases = [];
+    private readonly BalanceData _datos = datos;
+    private readonly List<RosterClass> _clases = [];
 
-    public IReadOnlyList<ClaseEnRoster> Clases => _clases;
+    public IReadOnlyList<RosterClass> Classes => _clases;
 
-    public bool Tiene(Clase clase) => Buscar(clase) is not null;
+    public bool Has(DefenderClass clase) => Find(clase) is not null;
 
-    public ClaseEnRoster? Buscar(Clase clase)
+    public RosterClass? Find(DefenderClass clase)
     {
         foreach (var c in _clases)
-            if (c.Clase == clase)
+            if (c.DefenderClass == clase)
                 return c;
 
         return null;
     }
 
-    public void Contratar(Clase clase)
+    public void Hire(DefenderClass clase)
     {
-        if (Tiene(clase))
+        if (Has(clase))
             return;
 
-        _clases.Add(new ClaseEnRoster { Clase = clase, MaxNivel = _datos.Clases.SlotsPerkPorClase });
+        _clases.Add(new RosterClass { DefenderClass = clase, MaxLevel = _datos.Classes.PerkSlotsPerClass });
     }
 
-    public void Levelear(Clase clase)
+    public void LevelUp(DefenderClass clase)
     {
-        var c = Buscar(clase);
+        var c = Find(clase);
         if (c is not null)
-            c.Nivel++;
+            c.Level++;
     }
 
     /// <summary>Las clases que el jugador puede poner en el mapa, para la UI.</summary>
-    public List<Clase> Disponibles()
+    public List<DefenderClass> Available()
     {
-        var lista = new List<Clase>(_clases.Count);
+        var lista = new List<DefenderClass>(_clases.Count);
         foreach (var c in _clases)
-            lista.Add(c.Clase);
+            lista.Add(c.DefenderClass);
 
         return lista;
     }
@@ -149,18 +149,18 @@ public sealed class Roster(DatosBalance datos)
     /// fracción en cada división, y dos defensores con los mismos perks en
     /// distinto orden pegarían distinto.</para>
     /// </remarks>
-    public StatsEfectivos StatsDe(Clase clase, Mochila mochila)
+    public EffectiveStats StatsOf(DefenderClass clase, Backpack mochila)
     {
-        var b = _datos.StatsDe(clase);
-        var ficha = Buscar(clase);
+        var b = _datos.StatsOf(clase);
+        var ficha = Find(clase);
 
         if (ficha is null)
-            return new StatsEfectivos(
-                b.Dano, b.AlcanceCeldas, b.CadenciaTicks,
-                EfectoPerk.Ninguno, 0, HabilidadArma.Ninguna, 0);
+            return new EffectiveStats(
+                b.Damage, b.RangeCells, b.CadenceTicks,
+                PerkEffect.None, 0, WeaponAbility.None, 0);
 
         // Cada nivel sube los stats base, aparte de abrir un slot.
-        int porNivel = (ficha.Nivel - 1) * _datos.Clases.ExtraDanoPorNivel;
+        int porNivel = (ficha.Level - 1) * _datos.Classes.ExtraDamagePerLevel;
 
         int extraDano = porNivel;
         int extraCadencia = 0;
@@ -169,26 +169,26 @@ public sealed class Roster(DatosBalance datos)
         // El comportamiento que gana es el del perk de tier más alto equipado.
         // Único le gana a Oro; entre dos del mismo tier, el primero equipado —que
         // es una regla arbitraria pero fija, y fija es lo que hace falta.
-        var comportamiento = EfectoPerk.Ninguno;
-        var tierComportamiento = TierPerk.Bronce;
+        var comportamiento = PerkEffect.None;
+        var tierComportamiento = PerkTier.Bronze;
         int magnitudComportamiento = 0;
 
         foreach (int idPerk in ficha.Perks)
         {
-            var p = _datos.Perks.Por(idPerk);
+            var p = _datos.Perks.Get(idPerk);
 
-            switch (p.Efecto)
+            switch (p.Effect)
             {
-                case EfectoPerk.Dano: extraDano += p.Magnitud; break;
-                case EfectoPerk.Cadencia: extraCadencia += p.Magnitud; break;
-                case EfectoPerk.Alcance: extraAlcance += p.Magnitud; break;
+                case PerkEffect.Damage: extraDano += p.Magnitude; break;
+                case PerkEffect.Cadence: extraCadencia += p.Magnitude; break;
+                case PerkEffect.Range: extraAlcance += p.Magnitude; break;
 
                 default:
-                    if (comportamiento == EfectoPerk.Ninguno || p.Tier > tierComportamiento)
+                    if (comportamiento == PerkEffect.None || p.Tier > tierComportamiento)
                     {
-                        comportamiento = p.Efecto;
+                        comportamiento = p.Effect;
                         tierComportamiento = p.Tier;
-                        magnitudComportamiento = p.Magnitud;
+                        magnitudComportamiento = p.Magnitude;
                     }
                     break;
             }
@@ -196,13 +196,13 @@ public sealed class Roster(DatosBalance datos)
 
         // El arma es el ÚNICO ítem que aporta números. Armadura, casco y escudo
         // son el frame que cambia con el nivel y no suman nada.
-        var arma = ficha.Arma >= 0 ? mochila.ArmaPorId(ficha.Arma) : null;
+        var arma = ficha.Weapon >= 0 ? mochila.WeaponById(ficha.Weapon) : null;
 
         if (arma is not null)
         {
-            extraDano += arma.Dano;
-            extraCadencia += arma.Cadencia;
-            extraAlcance += arma.Alcance;
+            extraDano += arma.Damage;
+            extraCadencia += arma.Cadence;
+            extraAlcance += arma.Range;
         }
 
         // ⚠ El comportamiento del ARMA le gana al del perk.
@@ -216,32 +216,32 @@ public sealed class Roster(DatosBalance datos)
         // haría que un defensor con perk Y arma tuviera dos efectos encima, que
         // es exactamente lo que la regla "los comportamientos no se apilan"
         // existe para evitar.
-        if (arma is not null && arma.Habilidad != HabilidadArma.Ninguna)
+        if (arma is not null && arma.Ability != WeaponAbility.None)
         {
-            comportamiento = EfectoPerk.Ninguno;
+            comportamiento = PerkEffect.None;
             magnitudComportamiento = 0;
         }
 
-        return new StatsEfectivos(
-            Dano: Enteros.ConPorcentajes(b.Dano, extraDano),
+        return new EffectiveStats(
+            Damage: Ints.WithPercents(b.Damage, extraDano),
 
             // El alcance se redondea a celdas enteras: la grilla no tiene medias
             // celdas, así que un +15% que no llega a sumar una celda no hace nada
             // hasta que se apila con otro. Es intencional y hay que verlo en la UI.
-            AlcanceCeldas: System.Math.Max(1, Enteros.ConPorcentajes(b.AlcanceCeldas, extraAlcance)),
+            RangeCells: System.Math.Max(1, Ints.WithPercents(b.RangeCells, extraAlcance)),
 
             // ⚠ La cadencia va al REVÉS: menos ticks es más rápido. Un +25% de
             // cadencia tiene que DIVIDIR el intervalo, no multiplicarlo. Es el
             // error de signo más fácil de cometer en todo el balance, y el
             // síntoma sería un perk que dice "más rápido" y hace más lento.
-            CadenciaTicks: System.Math.Max(
-                1, b.CadenciaTicks * 100 / System.Math.Max(1, 100 + extraCadencia)),
+            CadenceTicks: System.Math.Max(
+                1, b.CadenceTicks * 100 / System.Math.Max(1, 100 + extraCadencia)),
 
-            Comportamiento: comportamiento,
-            MagnitudComportamiento: magnitudComportamiento,
+            Behavior: comportamiento,
+            BehaviorMagnitude: magnitudComportamiento,
 
-            Habilidad: arma?.Habilidad ?? HabilidadArma.Ninguna,
-            MagnitudHabilidad: arma?.Magnitud ?? 0);
+            Ability: arma?.Ability ?? WeaponAbility.None,
+            AbilityMagnitude: arma?.Magnitude ?? 0);
     }
 }
 
@@ -251,11 +251,11 @@ public sealed class Roster(DatosBalance datos)
 /// primero viene de un perk equipado, la segunda del arma, y el arma gana. Se
 /// devuelven por separado igual porque la UI muestra de dónde salió cada efecto.
 /// </remarks>
-public readonly record struct StatsEfectivos(
-    int Dano,
-    int AlcanceCeldas,
-    int CadenciaTicks,
-    EfectoPerk Comportamiento,
-    int MagnitudComportamiento,
-    HabilidadArma Habilidad,
-    int MagnitudHabilidad);
+public readonly record struct EffectiveStats(
+    int Damage,
+    int RangeCells,
+    int CadenceTicks,
+    PerkEffect Behavior,
+    int BehaviorMagnitude,
+    WeaponAbility Ability,
+    int AbilityMagnitude);

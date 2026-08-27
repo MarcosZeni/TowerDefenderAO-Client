@@ -25,7 +25,7 @@ public static class VerificarTilesets
 
         var nombres = new List<string>();
 
-        foreach (var (clave, _) in CargadorGraficos.Indice)
+        foreach (var (clave, _) in CargadorGraficos.Index)
         {
             if (clave.StartsWith("tileset.", System.StringComparison.Ordinal))
                 nombres.Add(clave);
@@ -63,7 +63,7 @@ public static class VerificarTilesets
 
             // Repartidos a lo largo del tileset, no los 8 primeros: así se ve si
             // la última fila de la grilla también cae donde tiene que caer.
-            int paso = System.Math.Max(1, grilla.Cantidad / PorFila);
+            int paso = System.Math.Max(1, grilla.Count / PorFila);
 
             for (int col = 0; col < PorFila; col++)
             {
@@ -111,7 +111,7 @@ public static class VerificarTilesets
             int vacios = ContarVacios(nombre, grilla);
 
             GD.Print($"  fila {fila}: {nombre,-24} {grilla.Columnas}×{grilla.Filas} " +
-                     $"= {grilla.Cantidad} tiles de {grilla.Lado} px" +
+                     $"= {grilla.Count} tiles de {grilla.Lado} px" +
                      (vacios > 0 ? $"   ⚠ {vacios} vacíos" : ""));
         }
 
@@ -140,7 +140,7 @@ public static class VerificarTilesets
     {
         int vacios = 0;
 
-        for (int i = 0; i < grilla.Cantidad; i++)
+        for (int i = 0; i < grilla.Count; i++)
         {
             if (CargadorGraficos.Tile(nombre, i) is not AtlasTexture atlas
                 || atlas.Atlas is null)

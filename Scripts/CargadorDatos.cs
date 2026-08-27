@@ -42,18 +42,18 @@ public static class CargadorDatos
         RutaEnemigos, RutaClases, RutaPerks, RutaPlanos, RutaArmas, RutaCurvas, RutaCombate,
     ];
 
-    private static DatosBalance? _cache;
+    private static BalanceData? _cache;
 
     /// <summary>El último error de carga, para que la UI lo pueda mostrar.</summary>
     public static string Problema { get; private set; } = "";
 
     /// <summary>Los datos de la temporada actual.</summary>
-    public static DatosBalance Actual => _cache ??= Cargar();
+    public static BalanceData Actual => _cache ??= Cargar();
 
     /// <summary>Vuelve a leer todo del disco. La usan las herramientas offline.</summary>
     public static void Olvidar() => _cache = null;
 
-    private static DatosBalance Cargar()
+    private static BalanceData Cargar()
     {
         Problema = "";
 
@@ -61,7 +61,7 @@ public static class CargadorDatos
         {
             return CargarOTirar();
         }
-        catch (DatosInvalidosException e)
+        catch (InvalidBalanceDataException e)
         {
             // ⚠ No se cae a valores por defecto. Un número de balance que se cae
             // a un default es una corrida que mide otra cosa que las demás, y el
@@ -75,7 +75,7 @@ public static class CargadorDatos
         }
     }
 
-    private static DatosBalance CargarOTirar()
+    private static BalanceData CargarOTirar()
     {
         var textos = new Dictionary<string, string>(System.StringComparer.Ordinal);
         var crudo = new StringBuilder();
@@ -86,7 +86,7 @@ public static class CargadorDatos
 
             if (string.IsNullOrEmpty(texto))
             {
-                throw new DatosInvalidosException(
+                throw new InvalidBalanceDataException(
                     $"no se pudo leer {ruta}. Si falta enemigos.json, corré el importador:\n" +
                     "  Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --importar-npcs");
             }
@@ -95,10 +95,10 @@ public static class CargadorDatos
             crudo.Append(texto);
         }
 
-        var perks = LectorTablas.Perks(textos[RutaPerks]);
+        var perks = TableReader.Perks(textos[RutaPerks]);
         var (layouts, textoLayouts) = CargarLayouts();
 
-        var datos = new DatosBalance
+        var datos = new BalanceData
         {
             Version = VersionDe(textos[RutaEnemigos]),
 
@@ -117,23 +117,23 @@ public static class CargadorDatos
             // de un falso negativo es un ranking que no mide lo mismo.
             Hash = HashDe(crudo.ToString() + textoLayouts),
 
-            Enemigos = EnemigosDe(textos[RutaEnemigos]),
+            Enemies = EnemigosDe(textos[RutaEnemigos]),
             Layouts = layouts,
 
-            Clases = LectorTablas.Clases(textos[RutaClases]),
+            Classes = TableReader.Classes(textos[RutaClases]),
             Perks = perks,
-            Planos = LectorTablas.Planos(textos[RutaPlanos], perks),
-            Armas = LectorTablas.Armas(textos[RutaArmas]),
-            Curvas = LectorTablas.Curvas(textos[RutaCurvas]),
-            Combate = LectorTablas.Combate(textos[RutaCombate]),
+            Blueprints = TableReader.Blueprints(textos[RutaPlanos], perks),
+            Weapons = TableReader.Weapons(textos[RutaArmas]),
+            Curves = TableReader.Curves(textos[RutaCurvas]),
+            Combat = TableReader.Combat(textos[RutaCombate]),
         };
 
-        datos.Indexar();
+        datos.BuildIndexes();
 
         GD.Print(
-            $"Datos v{datos.Version} · {datos.Enemigos.Count} enemigos · " +
-            $"{datos.Clases.Todas.Count} clases · {datos.Perks.Todos.Count} perks · " +
-            $"{datos.Planos.Todos.Count} planos · hash {datos.Hash[..12]}…");
+            $"Datos v{datos.Version} · {datos.Enemies.Count} enemigos · " +
+            $"{datos.Classes.All.Count} clases · {datos.Perks.All.Count} perks · " +
+            $"{datos.Blueprints.All.Count} planos · hash {datos.Hash[..12]}…");
 
         return datos;
     }
@@ -147,7 +147,7 @@ public static class CargadorDatos
     /// comentarios ni hace falta el control fino de errores que sí necesitan los
     /// archivos que edita una persona.
     /// </remarks>
-    private static List<DatoEnemigo> EnemigosDe(string json)
+    private static List<EnemyData> EnemigosDe(string json)
     {
         var opciones = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         ArchivoEnemigos? archivo;
@@ -158,30 +158,30 @@ public static class CargadorDatos
         }
         catch (JsonException e)
         {
-            throw new DatosInvalidosException($"{RutaEnemigos} no es JSON válido: {e.Message}");
+            throw new InvalidBalanceDataException($"{RutaEnemigos} no es JSON válido: {e.Message}");
         }
 
-        if (archivo?.Enemigos is null || archivo.Enemigos.Count == 0)
-            throw new DatosInvalidosException($"{RutaEnemigos} no trae enemigos.");
+        if (archivo?.Enemies is null || archivo.Enemies.Count == 0)
+            throw new InvalidBalanceDataException($"{RutaEnemigos} no trae enemigos.");
 
-        var enemigos = new List<DatoEnemigo>(archivo.Enemigos.Count);
+        var enemigos = new List<EnemyData>(archivo.Enemies.Count);
 
-        foreach (var e in archivo.Enemigos)
+        foreach (var e in archivo.Enemies)
         {
-            enemigos.Add(new DatoEnemigo
+            enemigos.Add(new EnemyData
             {
                 Id = e.Id,
-                Nombre = e.Nombre ?? "?",
+                Name = e.Name ?? "?",
                 Area = e.Area,
-                Hp = e.HpEscalado,
-                DanoMin = e.DanoMin,
-                DanoMax = e.DanoMax,
-                Velocidad = e.Velocidad,
-                CadenciaTicks = e.CadenciaTicks,
-                Oro = e.Oro,
+                Hp = e.ScaledHp,
+                MinDamage = e.MinDamage,
+                MaxDamage = e.MaxDamage,
+                Speed = e.Speed,
+                CadenceTicks = e.CadenceTicks,
+                Gold = e.Gold,
                 Body = e.Body,
-                EscalaVisual = e.EscalaVisual,
-                Grafico = e.Grafico ?? "",
+                VisualScale = e.VisualScale,
+                Graphic = e.Graphic ?? "",
             });
         }
 
@@ -243,11 +243,11 @@ public static class CargadorDatos
     /// roto es un problema de datos, y quedarse sin juego por eso es peor que
     /// jugar con once mapas.</para>
     /// </remarks>
-    private static (List<Mapa> Mapas, string Texto) CargarLayouts()
+    private static (List<Map> Mapas, string Text) CargarLayouts()
     {
         const string carpeta = "res://Datos/layouts";
 
-        var mapas = new List<Mapa>();
+        var mapas = new List<Map>();
         var texto = new StringBuilder();
 
         using var dir = DirAccess.Open(carpeta);
@@ -283,7 +283,7 @@ public static class CargadorDatos
                 continue;
             }
 
-            var mapa = LayoutAscii.Construir(filas);
+            var mapa = AsciiLayout.Construir(filas);
 
             if (mapa is null)
             {
@@ -341,7 +341,7 @@ public static class CargadorDatos
 
         try
         {
-            filas = json?["filas"]?.AsArray();
+            filas = json?["rows"]?.AsArray();
         }
         catch (System.InvalidOperationException)
         {
@@ -393,54 +393,54 @@ public static class CargadorDatos
     /// servidor: la corrida se rechaza <b>al abrirse</b> en vez de jugarse con
     /// datos inventados y reportar un resultado sin sentido.</para>
     /// </remarks>
-    private static DatosBalance Vacio()
+    private static BalanceData Vacio()
     {
-        var perks = new TablaPerks([]);
+        var perks = new PerkTable([]);
 
-        var datos = new DatosBalance
+        var datos = new BalanceData
         {
             Version = 0,
             Hash = "sin-datos",
-            Enemigos = [],
+            Enemies = [],
             Layouts = [],
 
-            Clases = new TablaClases(
-                [new DatoClase(Clase.Guerrero, 1, 1, 2, 30, false)],
+            Classes = new ClassTable(
+                [new ClassData(DefenderClass.Warrior, 1, 1, 2, 30, false)],
                 extraDanoPorNivel: 0,
                 slotsPerkPorClase: 1),
 
             Perks = perks,
-            Planos = new TablaPlanos([]),
+            Blueprints = new BlueprintTable([]),
 
-            Armas = new TablaArmas(
+            Weapons = new WeaponTable(
                 paso: 5, costoDano: 1, costoCadencia: 1, costoAlcance: 1,
-                new RangoChance(0, 0, 0), new RangoChance(0, 0, 0), new RangoChance(0, 0, 0),
+                new ChanceRange(0, 0, 0), new ChanceRange(0, 0, 0), new ChanceRange(0, 0, 0),
                 porcLegendaria: 0, porcEpica: 0, porcRara: 0, porcComun: 0,
                 divisorValor: 1, multiplicadorPrecioTienda: 1,
-                [HabilidadArma.Ninguna], [HabilidadArma.Ninguna], [HabilidadArma.Ninguna],
-                [], "", "", "", "", "", ""),
+                [WeaponAbility.None], [WeaponAbility.None], [WeaponAbility.None],
+                []),
 
-            Curvas = new DatoCurvas(
-                new DatoTorre(1, 1, 30),
-                new DatoCorrida(1, 1, [1], 1, 30),
-                new DatoDefensores(1, 1, 50, 100),
-                new DatoEconomia(1, 0, 0),
-                new DatoPresupuesto(0, 0, 1, 1),
-                new DatoCurvasPorOleada(
-                    new CurvaLineal(0, 0), new CurvaLineal(0, 0), new CurvaLineal(0, 0),
+            Curves = new CurveData(
+                new TowerData(1, 1, 30),
+                new RunData(1, 1, [1], 1, 30),
+                new DefenderData(1, 1, 50, 100),
+                new EconomyData(1, 0, 0),
+                new BudgetData(0, 0, 1, 1),
+                new PerWaveCurves(
+                    new LinearCurve(0, 0), new LinearCurve(0, 0), new LinearCurve(0, 0),
                     30, 1, 30, 30, 1, 0, 0),
-                new DatoTienda(0, 0, 0, new CurvaLineal(0, 0), new CurvaLineal(0, 0)),
-                new DatoDrops(0, 0),
-                new DatoOleada(1, 1, 1, 1, 1, 1, 30),
-                new DatoPerksNpc(1, 1, 0, 0, 0, 0, 0, 0),
-                new DatoJefe(1, 0, "")),
+                new ShopData(0, 0, 0, new LinearCurve(0, 0), new LinearCurve(0, 0)),
+                new DropData(0, 0),
+                new WaveData(1, 1, 1, 1, 1, 1, 30),
+                new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0),
+                new BossData(1, 0, "")),
 
-            Combate = new DatoCombate(
+            Combat = new CombatData(
                 2, 1, 60, 90, 2, 2, 1, 2, 3, 4, 6, 6, 25, 4, 7,
                 4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60),
         };
 
-        datos.Indexar();
+        datos.BuildIndexes();
         return datos;
     }
 
@@ -448,22 +448,22 @@ public static class CargadorDatos
     private sealed class ArchivoEnemigos
     {
         public int Version { get; set; }
-        public List<EnemigoJson>? Enemigos { get; set; }
+        public List<EnemigoJson>? Enemies { get; set; }
     }
 
     private sealed class EnemigoJson
     {
         public int Id { get; set; }
-        public string? Nombre { get; set; }
+        public string? Name { get; set; }
         public int Area { get; set; }
-        public int HpEscalado { get; set; }
-        public int DanoMin { get; set; }
-        public int DanoMax { get; set; }
-        public int Velocidad { get; set; }
-        public int CadenciaTicks { get; set; }
-        public int Oro { get; set; }
+        public int ScaledHp { get; set; }
+        public int MinDamage { get; set; }
+        public int MaxDamage { get; set; }
+        public int Speed { get; set; }
+        public int CadenceTicks { get; set; }
+        public int Gold { get; set; }
         public int Body { get; set; }
-        public int EscalaVisual { get; set; } = 100;
-        public string? Grafico { get; set; }
+        public int VisualScale { get; set; } = 100;
+        public string? Graphic { get; set; }
     }
 }

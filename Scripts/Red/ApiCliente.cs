@@ -2,21 +2,62 @@ using System;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Godot;
 
 namespace TowerOfArgentum.Red;
 
-public sealed record Sesion(string Token, string Nick, long Oro, int ExpiraEnSegundos);
+// -----------------------------------------------------------------------------
+//  Las respuestas del GameApi.
+// -----------------------------------------------------------------------------
+//
+//  ⚠ EL NOMBRE DE C# Y EL NOMBRE DE LA RED SON DOS COSAS DISTINTAS, y acá se
+//  ven las dos: la propiedad está en inglés como todo el cliente, y el
+//  [JsonPropertyName] fija el nombre que viaja por el cable, que sigue en
+//  español porque así lo emite el servidor.
+//
+//  Sin el atributo esto funcionaría igual —el cliente deserializa con
+//  PropertyNameCaseInsensitive— pero solo por casualidad: al renombrar la
+//  propiedad, el campo dejaría de matchear y llegaría en CERO, sin error y sin
+//  aviso. Un ranking que muestra oleada 0 para todos es mucho peor que uno que
+//  no carga.
+//
+//  ⚠ CAMBIAR UN NOMBRE DE ACÁ NO ES UN RENOMBRE: es tocar el contrato de la API,
+//  y hay que hacerlo del lado del servidor primero. Los tres repos se despliegan
+//  por separado.
 
-public sealed record InicioCorrida(long RunId, ulong Seed, int DatosVersion, long? Abandonada);
+public sealed record Session(
+    [property: JsonPropertyName("token")] string Token,
+    [property: JsonPropertyName("nick")] string Nick,
+    [property: JsonPropertyName("oro")] long Gold,
+    [property: JsonPropertyName("expiraEnSegundos")] int ExpiresInSeconds);
 
-public sealed record FinCorrida(long OroGanado, long OroTotal, int Oleada, bool Gano);
+public sealed record RunStarted(
+    [property: JsonPropertyName("runId")] long RunId,
+    [property: JsonPropertyName("seed")] ulong Seed,
+    [property: JsonPropertyName("datosVersion")] int DataVersion,
+    [property: JsonPropertyName("abandonada")] long? Abandoned);
 
-public sealed record Perfil(string Nick, long Oro, string[] Planos);
+public sealed record RunFinished(
+    [property: JsonPropertyName("oroGanado")] long GoldEarned,
+    [property: JsonPropertyName("oroTotal")] long GoldTotal,
+    [property: JsonPropertyName("oleada")] int Wave,
+    [property: JsonPropertyName("gano")] bool Won);
 
-public sealed record FilaRanking(
-    int Puesto, string Nick, bool Gano, int Oleada, int Area, int Ticks, bool Validado);
+public sealed record Profile(
+    [property: JsonPropertyName("nick")] string Nick,
+    [property: JsonPropertyName("oro")] long Gold,
+    [property: JsonPropertyName("planos")] string[] Blueprints);
+
+public sealed record RankingRow(
+    [property: JsonPropertyName("puesto")] int Position,
+    [property: JsonPropertyName("nick")] string Nick,
+    [property: JsonPropertyName("gano")] bool Won,
+    [property: JsonPropertyName("oleada")] int Wave,
+    [property: JsonPropertyName("area")] int Area,
+    [property: JsonPropertyName("ticks")] int Ticks,
+    [property: JsonPropertyName("validado")] bool Validated);
 
 /// <summary>
 /// Cliente del GameApi. <b>HTTP y JSON, nada más.</b>
@@ -68,10 +109,10 @@ public static class ApiCliente
 
     public static void CerrarSesionLocal() => Token = null;
 
-    public static async Task<(Sesion? Sesion, string? Error)> RegistrarAsync(
+    public static async Task<(Session? Session, string? Error)> RegistrarAsync(
         string nick, string password, string? email)
     {
-        var (ok, sesion, error) = await PostAsync<Sesion>(
+        var (ok, sesion, error) = await PostAsync<Session>(
             "/auth/registro", new { nick, password, email });
 
         if (ok && sesion is not null)
@@ -80,9 +121,9 @@ public static class ApiCliente
         return (sesion, error);
     }
 
-    public static async Task<(Sesion? Sesion, string? Error)> LoginAsync(string nick, string password)
+    public static async Task<(Session? Session, string? Error)> LoginAsync(string nick, string password)
     {
-        var (ok, sesion, error) = await PostAsync<Sesion>("/auth/login", new { nick, password });
+        var (ok, sesion, error) = await PostAsync<Session>("/auth/login", new { nick, password });
 
         if (ok && sesion is not null)
             Token = sesion.Token;
@@ -106,8 +147,8 @@ public static class ApiCliente
     ///
     /// <para><b>Sin mapa.</b> El área no se elige: se llega o no se llega.</para>
     /// </remarks>
-    public static Task<(bool Ok, InicioCorrida? Datos, string? Error)> IniciarCorridaAsync(string hashDatos)
-        => PostAsync<InicioCorrida>("/run/start", new { hashDatos });
+    public static Task<(bool Ok, RunStarted? Datos, string? Error)> IniciarCorridaAsync(string hashDatos)
+        => PostAsync<RunStarted>("/run/start", new { hashDatos });
 
     /// <summary>
     /// Cierra la corrida con el reclamo del cliente.
@@ -118,9 +159,9 @@ public static class ApiCliente
     /// <b>decisiones, no resultados</b>: lo que el RNG sembrado determina, el
     /// servidor lo regenera de la seed.
     /// </remarks>
-    public static Task<(bool Ok, FinCorrida? Datos, string? Error)> TerminarCorridaAsync(
+    public static Task<(bool Ok, RunFinished? Datos, string? Error)> TerminarCorridaAsync(
         long runId, bool gano, int oleada, int area, int ticks, byte[] log)
-        => PostAsync<FinCorrida>("/run/finish", new
+        => PostAsync<RunFinished>("/run/finish", new
         {
             runId,
             gano,
@@ -130,8 +171,8 @@ public static class ApiCliente
             log = Convert.ToBase64String(log),
         });
 
-    public static Task<(bool Ok, Perfil? Datos, string? Error)> PerfilAsync()
-        => GetAsync<Perfil>("/perfil/me");
+    public static Task<(bool Ok, Profile? Datos, string? Error)> PerfilAsync()
+        => GetAsync<Profile>("/perfil/me");
 
     public static Task<(bool Ok, RespuestaRanking? Datos, string? Error)> RankingAsync(int limite = 100)
         => GetAsync<RespuestaRanking>($"/ranking?limite={limite}");
@@ -146,7 +187,7 @@ public static class ApiCliente
     public static Task<(bool Ok, object? Datos, string? Error)> ComprarPlanoAsync(string plano)
         => PostAsync<object>("/tienda/plano", new { plano });
 
-    public sealed record RespuestaRanking(int Version, FilaRanking[] Filas);
+    public sealed record RespuestaRanking(int Version, RankingRow[] Filas);
 
     // -------------------------------------------------------------------------
     //  Plomería

@@ -25,13 +25,13 @@ namespace TowerOfArgentum.Simulacion;
 /// escrita de nuevo: la de allá indexa en coordenadas de mundo con flotantes, y
 /// acá todo es entero y la posición sale de la ruta.</para>
 /// </remarks>
-public sealed class GrillaEspacial
+public sealed class SpatialGrid
 {
     private readonly int _ancho;
     private readonly int _alto;
     private readonly List<int>[] _celdas;
 
-    public GrillaEspacial(int ancho, int alto)
+    public SpatialGrid(int ancho, int alto)
     {
         _ancho = ancho;
         _alto = alto;
@@ -51,7 +51,7 @@ public sealed class GrillaEspacial
     /// deja un enemigo fantasma en una celda vieja, y el síntoma sería un
     /// defensor disparándole a la nada.
     /// </remarks>
-    public void Reconstruir(IReadOnlyList<Enemigo> enemigos, Ruta ruta)
+    public void Rebuild(IReadOnlyList<Enemy> enemigos, Route ruta)
     {
         foreach (var celda in _celdas)
             celda.Clear();
@@ -60,10 +60,10 @@ public sealed class GrillaEspacial
         {
             var e = enemigos[i];
 
-            if (!e.Vivo)
+            if (!e.Alive)
                 continue;
 
-            var c = ruta.CeldaEn(e.DistanciaRecorrida);
+            var c = ruta.CellAt(e.DistanceTravelled);
 
             if (c.X < 0 || c.X >= _ancho || c.Y < 0 || c.Y >= _alto)
                 continue;
@@ -81,7 +81,7 @@ public sealed class GrillaEspacial
     /// grande que el círculo de alcance, así que el que llama tiene que comparar
     /// la distancia igual. Lo que se ahorra es mirar a los que están lejos.
     /// </remarks>
-    public void Candidatos(Celda centro, int alcanceCeldas, List<int> salida)
+    public void Candidatos(Cell centro, int alcanceCeldas, List<int> salida)
     {
         salida.Clear();
 

@@ -17,8 +17,8 @@ namespace TowerOfArgentum;
 /// "correr la región de a Ancho píxeles" corta mal a partir del segundo. Por eso
 /// cada cuadro trae su propio rectángulo.</para>
 /// </remarks>
-public sealed record Grafico(
-    string Nombre, int FileNum, int X, int Y, int Ancho, int Alto, int Frames, int MsPorFrame,
+public sealed record Graphic(
+    string Name, int FileNum, int X, int Y, int Width, int Height, int Frames, int MsPorFrame,
     Rect2I[] Regiones, GrillaTiles? Grilla = null);
 
 /// <summary>Una hoja de tiles de piso: todos del mismo lado, en grilla regular.</summary>
@@ -29,7 +29,7 @@ public sealed record Grafico(
 /// entre 6 entradas y 400.
 /// </remarks>
 public sealed record GrillaTiles(
-    int Columnas, int Filas, int Cantidad, int Lado, int[]? Usables = null);
+    int Columnas, int Filas, int Count, int Lado, int[]? Usables = null);
 
 /// <summary>
 /// Lee <c>Resources\graficos.json</c> y resuelve nombre → textura recortada.
@@ -57,13 +57,13 @@ public static class CargadorGraficos
     /// </remarks>
     private const string Carpeta = "res://../Resources";
 
-    private static readonly Dictionary<string, Grafico> _indice = new(System.StringComparer.Ordinal);
+    private static readonly Dictionary<string, Graphic> _indice = new(System.StringComparer.Ordinal);
     private static readonly Dictionary<int, Texture2D> _hojas = [];
     private static readonly Dictionary<string, AtlasTexture> _recortes = new(System.StringComparer.Ordinal);
 
     private static bool _cargado;
 
-    public static IReadOnlyDictionary<string, Grafico> Indice
+    public static IReadOnlyDictionary<string, Graphic> Index
     {
         get
         {
@@ -130,7 +130,7 @@ public static class CargadorGraficos
     }
 
     /// <summary>Los datos de un gráfico, sin cargar su textura.</summary>
-    public static Grafico? Datos(string nombre)
+    public static Graphic? Datos(string nombre)
     {
         Cargar();
         return _indice.TryGetValue(nombre, out var g) ? g : null;
@@ -158,7 +158,7 @@ public static class CargadorGraficos
         if (!_indice.TryGetValue(tileset, out var g) || g.Grilla is not { } grilla)
             return null;
 
-        if (grilla.Cantidad <= 0 || grilla.Columnas <= 0)
+        if (grilla.Count <= 0 || grilla.Columnas <= 0)
             return null;
 
         int i;
@@ -170,7 +170,7 @@ public static class CargadorGraficos
         }
         else
         {
-            i = ((indice % grilla.Cantidad) + grilla.Cantidad) % grilla.Cantidad;
+            i = ((indice % grilla.Count) + grilla.Count) % grilla.Count;
         }
 
         string clave = $"{tileset}#t{i}";
@@ -309,7 +309,7 @@ public static class CargadorGraficos
                 regiones = [new Rect2I(g.X, g.Y, g.W, g.H)];
             }
 
-            _indice[nombre] = new Grafico(
+            _indice[nombre] = new Graphic(
                 nombre, g.FileNum, g.X, g.Y, g.W, g.H,
                 regiones.Length,
                 g.MsPorFrame > 0 ? g.MsPorFrame : 120,
@@ -317,7 +317,7 @@ public static class CargadorGraficos
                 g.Grilla is null
                     ? null
                     : new GrillaTiles(
-                        g.Grilla.Columnas, g.Grilla.Filas, g.Grilla.Cantidad, g.Grilla.Lado,
+                        g.Grilla.Columnas, g.Grilla.Filas, g.Grilla.Count, g.Grilla.Lado,
                         g.Grilla.Usables?.ToArray()));
         }
 
@@ -328,7 +328,7 @@ public static class CargadorGraficos
     {
         public int Columnas { get; set; }
         public int Filas { get; set; }
-        public int Cantidad { get; set; }
+        public int Count { get; set; }
         public int Lado { get; set; }
 
         /// <summary>Casillas con dibujo. Falta cuando la hoja está entera.</summary>

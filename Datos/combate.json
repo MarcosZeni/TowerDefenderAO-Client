@@ -20,9 +20,9 @@
   // El daño de un enemigo es el PROMEDIO de danoMin y danoMax, no una tirada.
   // Es determinismo barato: una tirada por golpe consumiría RNG en un punto que
   // depende de cuántos enemigos estén vivos, y eso corre toda la secuencia.
-  "enemigo": {
-    "divisorPromedioDano": 2,
-    "danoMinimo": 1
+  "enemy": {
+    "damageAverageDivisor": 2,
+    "minimumDamage": 1
   },
 
   // --- Ralentización ---------------------------------------------------------
@@ -34,9 +34,9 @@
   // Ahora: prevalece la potencia más fuerte, cada aplicación refresca la
   // duración, y la fase 3 del tick lo vence. El techo existe porque un enemigo
   // parado no es un enemigo lento: es un enemigo muerto en cámara lenta.
-  "ralentizar": {
-    "topePorciento": 60,
-    "duracionTicks": 90
+  "slow": {
+    "capPercent": 60,
+    "durationTicks": 90
   },
 
   // --- Comportamientos de perk (Oro y Único) --------------------------------
@@ -56,52 +56,52 @@
   //
   // ⚠ El radio del splash se mide SOBRE LA RUTA, en celdas de recorrido, no en
   // distancia euclídea. Un enemigo no tiene (x, y): tiene una DistanciaRecorrida.
-  "comportamientos": {
-    "ventanaSaltoRicochetCeldas": 2,
-    "radioSplashCeldas": 2,
+  "behaviors": {
+    "ricochetJumpWindowCells": 2,
+    "splashRadiusCells": 2,
 
-    "rebotesRicochet": 1,
-    "rebotesPerforacion": 2,
-    "rebotesApocalipsis": 3,
+    "ricochetBounces": 1,
+    "perforationBounces": 2,
+    "apocalypseBounces": 3,
 
-    "maxSecundariosSplashOro": 4,
-    "maxSecundariosOndaDeFrio": 6,
-    "maxSecundariosIraDeDiosYTormentaDivina": 6,
+    "maxGoldSplashSecondaries": 4,
+    "maxFrostWaveSecondaries": 6,
+    "maxDivineSecondaries": 6,
 
     // Terrible Hambre envenena y además ralentiza, con esta potencia fija.
-    "slowTerribleHambre": 25,
+    "terribleHungerSlow": 25,
 
     // ⚠ Penetrante se divide por esto MIENTRAS NO EXISTA LA DEFENSA. Hoy no hay
     // nada que penetrar, así que el perk es daño extra a cuarto de magnitud. La
     // propuesta V2 quiere reemplazarlo por Quebranto (vulnerabilidad) justamente
     // por esto.
-    "divisorPenetrante": 4,
+    "piercingDivisor": 4,
 
     // Cada cuántos golpes DE ESE DEFENSOR cae el crítico.
     //
     // ⚠ CONTADOR POR DEFENSOR, no Tick % 7 global (propuesta V2). Con el global
     // criticaban todos juntos en el mismo tick, y un defensor cuya cadencia
     // fuera múltiplo de 7 criticaba siempre o nunca según la fase.
-    "golpesPorCritico": 7
+    "hitsPerCritical": 7
   },
 
   // --- Habilidades de arma ---------------------------------------------------
   //
   // Los topes que no son la magnitud. La magnitud sale de generador-armas.json.
-  "habilidadesArma": {
-    "maxSecundariosSplash": 4,
-    "rebotesRebote": 1,
-    "maxSecundariosCadena": 5,
+  "weaponAbilities": {
+    "maxSplashSecondaries": 4,
+    "bounceBounces": 1,
+    "maxChainSecondaries": 5,
 
     // ⚠ Techo del bonus ACUMULADO por muertes de la oleada, no por muerte. Se
     // reinicia al lanzar cada oleada: el techo real tiene que ser cuánto se
     // puede matar de una vez, no cuánto se lleva matado en cien oleadas.
-    "topeBonusSed": 100,
+    "thirstBonusCap": 100,
 
     // Francotirador y Carnicero escalan con qué porción del alcance usó el
     // disparo. Son enteros en centésimas: 100 = el alcance entero.
-    "topePorcionAlcance": 100,
-    "escalaPorcionAlcance": 100,
+    "rangePortionCap": 100,
+    "rangePortionScale": 100,
 
     // ⚠ Ejecutar: umbral de vida por debajo del cual mata de un golpe.
     //
@@ -110,14 +110,14 @@
     // que muere por un umbral no es un jefe, y EL JEFE FINAL ES INMUNE: matarlo
     // es cómo se gana la corrida, y ganar por Ejecutar sería ganar por el drop y
     // no por la partida.
-    "umbralEjecutarTropa": 20,
-    "umbralEjecutarJefe": 5,
-    "jefeFinalInmuneAEjecutar": true,
+    "executeThresholdTroop": 20,
+    "executeThresholdBoss": 5,
+    "finalBossImmuneToExecute": true,
 
     // ⚠ Un proc por CLASE cada tantos ticks, no por defensor. Sin esto, diez
     // defensores de la misma clase con un arma de Vampirismo curaban la Torre
     // más rápido de lo que una oleada entera podía bajarla.
-    "cooldownVampirismoTicks": 30,
+    "vampirismCooldownTicks": 30,
 
     // Cuánto dura la marca de oro extra de Codicia. Se marca al golpear y se
     // cobra en la fase de muertes, cuando se sabe si el golpe mató —cobrarlo al
@@ -125,6 +125,6 @@
     //
     // ⚠ Antes la marca duraba PARA SIEMPRE: un solo golpe convertía a un tanque
     // en alcancía aunque lo terminara matando otro, minutos después.
-    "duracionMarcaCodiciaTicks": 60
+    "greedMarkDurationTicks": 60
   }
 }

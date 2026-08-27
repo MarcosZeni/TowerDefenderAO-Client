@@ -42,7 +42,7 @@ public partial class PantallaEleccion : Control
 
     public override void _Process(double delta)
     {
-        bool abierta = _juego.Partida?.EsperandoEleccion ?? false;
+        bool abierta = _juego.Run?.WaitingForChoice ?? false;
 
         Visible = abierta;
         MouseFilter = abierta ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
@@ -72,22 +72,22 @@ public partial class PantallaEleccion : Control
     /// </remarks>
     public override void _Input(InputEvent evento)
     {
-        var partida = _juego.Partida;
-        if (partida is null || !partida.EsperandoEleccion)
+        var partida = _juego.Run;
+        if (partida is null || !partida.WaitingForChoice)
             return;
 
         switch (evento)
         {
             case InputEventMouseMotion:
-                _bajoElCursor = TarjetaEn(GetGlobalMousePosition(), partida.OpcionesAbiertas.Length);
+                _bajoElCursor = TarjetaEn(GetGlobalMousePosition(), partida.OpenChoices.Length);
                 QueueRedraw();
                 break;
 
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
             {
-                int i = TarjetaEn(GetGlobalMousePosition(), partida.OpcionesAbiertas.Length);
+                int i = TarjetaEn(GetGlobalMousePosition(), partida.OpenChoices.Length);
                 if (i >= 0)
-                    _juego.Elegir(i);
+                    _juego.Choose(i);
 
                 GetViewport().SetInputAsHandled();
                 break;
@@ -106,9 +106,9 @@ public partial class PantallaEleccion : Control
                     _ => -1,
                 };
 
-                if (i >= 0 && i < partida.OpcionesAbiertas.Length)
+                if (i >= 0 && i < partida.OpenChoices.Length)
                 {
-                    _juego.Elegir(i);
+                    _juego.Choose(i);
                     GetViewport().SetInputAsHandled();
                 }
 
@@ -139,30 +139,31 @@ public partial class PantallaEleccion : Control
 
     public override void _Draw()
     {
-        var partida = _juego.Partida;
-        if (partida is null || !partida.EsperandoEleccion)
+        var partida = _juego.Run;
+        if (partida is null || !partida.WaitingForChoice)
             return;
 
-        var opciones = partida.OpcionesAbiertas;
+        var opciones = partida.OpenChoices;
 
         // El mundo se oscurece pero se sigue viendo: el jugador decide mirando su
         // defensa, no de memoria.
         DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.72f));
 
-        Texto("ELEGÍ UNA", Escala.LienzoAncho / 2 - 130, 210, 44, new Color(0.95f, 0.95f, 0.92f));
-        Texto("no se puede cerrar sin elegir",
+        Text(Loc.Get("ui.eleccion.elegi_una"),
+            Escala.LienzoAncho / 2 - 130, 210, 44, new Color(0.95f, 0.95f, 0.92f));
+        Text(Loc.Get("ui.eleccion.no_se_puede_cerrar"),
             Escala.LienzoAncho / 2 - 150, 250, 20, new Color(0.6f, 0.6f, 0.58f));
 
         for (int i = 0; i < opciones.Length; i++)
             DibujarTarjeta(i, opciones[i], opciones.Length, partida);
     }
 
-    private void DibujarTarjeta(int i, Opcion opcion, int cantidad, Partida partida)
+    private void DibujarTarjeta(int i, Choice opcion, int cantidad, Run partida)
     {
         var r = RectDe(i, cantidad);
         bool resaltada = i == _bajoElCursor;
 
-        bool contrata = opcion.Tipo == TipoOpcion.Contratar;
+        bool contrata = opcion.Kind == ChoiceType.Hire;
 
         var acento = contrata
             ? new Color(0.35f, 0.65f, 0.95f)
@@ -178,30 +179,32 @@ public partial class PantallaEleccion : Control
         float x = r.Position.X + 32;
         float y = r.Position.Y + 70;
 
-        Texto(contrata ? "CONTRATAR" : "SUBIR DE NIVEL", x, y, 22, acento);
+        Text(Loc.Get(contrata ? "ui.eleccion.contratar" : "ui.eleccion.subir_de_nivel"), x, y, 22, acento);
 
         y += 56;
-        Texto(NombreDe(opcion.Clase), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
+        Text(Loc.Class(opcion.DefenderClass), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
 
         y += 50;
-        var stats = CargadorDatos.Actual.StatsDe(opcion.Clase);
-        Texto($"{stats.Dano} de daño · alcance {stats.AlcanceCeldas} · {stats.Costo} de oro",
+        var stats = CargadorDatos.Actual.StatsOf(opcion.DefenderClass);
+        Text($"{stats.Damage} {Loc.Get("ui.eleccion.de_dano")} · " +
+             $"{Loc.Get("ui.eleccion.alcance")} {stats.RangeCells} · " +
+             $"{stats.Cost} {Loc.Get("ui.eleccion.de_oro")}",
             x, y, 19, new Color(0.7f, 0.7f, 0.68f));
 
         y += 54;
 
         if (contrata)
         {
-            Texto("Rol nuevo, nivel 1.", x, y, 21, new Color(0.82f, 0.82f, 0.8f));
+            Text(Loc.Get("ui.eleccion.rol_nuevo"), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
             y += 30;
-            Texto("Arranca con 1 slot de perk.", x, y, 21, new Color(0.82f, 0.82f, 0.8f));
+            Text(Loc.Get("ui.eleccion.arranca_con_slot"), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
         }
         else
         {
-            var ficha = partida.Roster.Buscar(opcion.Clase);
-            int slotsAntes = ficha?.SlotsAbiertos ?? 1;
+            var ficha = partida.Roster.Find(opcion.DefenderClass);
+            int slotsAntes = ficha?.OpenSlots ?? 1;
 
-            Texto($"Nivel {opcion.NivelResultante - 1} → {opcion.NivelResultante}",
+            Text($"{Loc.Get("ui.eleccion.level")} {opcion.ResultingLevel - 1} → {opcion.ResultingLevel}",
                 x, y, 21, new Color(0.82f, 0.82f, 0.8f));
 
             y += 30;
@@ -209,15 +212,16 @@ public partial class PantallaEleccion : Control
             // ⚠ Esta línea es la que hace que la elección sea una elección. Sin
             // ella, contratar parece siempre mejor porque trae algo visiblemente
             // nuevo, y levelear parece "solo números".
-            int slotsDespues = System.Math.Min(opcion.NivelResultante, CargadorDatos.Actual.Clases.SlotsPerkPorClase);
+            int slotsDespues = System.Math.Min(opcion.ResultingLevel, CargadorDatos.Actual.Classes.PerkSlotsPerClass);
 
-            Texto(slotsDespues > slotsAntes
-                    ? $"Abre el slot de perk {slotsDespues} de {CargadorDatos.Actual.Clases.SlotsPerkPorClase}."
-                    : "Ya tiene los 6 slots abiertos.",
+            Text(slotsDespues > slotsAntes
+                    ? $"{Loc.Get("ui.eleccion.abre_slot")} {slotsDespues} " +
+                      $"{Loc.Get("ui.eleccion.de")} {CargadorDatos.Actual.Classes.PerkSlotsPerClass}."
+                    : Loc.Get("ui.eleccion.slots_completos"),
                 x, y, 21, new Color(0.95f, 0.85f, 0.5f));
         }
 
-        Texto($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
+        Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
             new Color(0.5f, 0.5f, 0.5f));
     }
 
@@ -226,20 +230,7 @@ public partial class PantallaEleccion : Control
     /// este proyecto porque "arquero" es lo que uno esperaría de un tower defense,
     /// pero en Argentum Online esa clase no existe.
     /// </summary>
-    public static string NombreDe(Clase clase) => clase switch
-    {
-        Clase.Mago => "Mago",
-        Clase.Clerigo => "Clérigo",
-        Clase.Guerrero => "Guerrero",
-        Clase.Asesino => "Asesino",
-        Clase.Ladron => "Ladrón",
-        Clase.Bardo => "Bardo",
-        Clase.Druida => "Druida",
-        Clase.Paladin => "Paladín",
-        Clase.Cazador => "Cazador",
-        _ => "?",
-    };
 
-    private void Texto(string s, float x, float y, int tamano, Color color)
+    private void Text(string s, float x, float y, int tamano, Color color)
         => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }

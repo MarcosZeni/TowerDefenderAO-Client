@@ -87,7 +87,7 @@ public static class ImportadorApariencia
                     && oArmadura.NumRopaje > 0)
                 {
                     cuerpo = "cuerpo." + TraerGrafico.NombreCorto(oArmadura);
-                    nombreArmadura = oArmadura.Nombre;
+                    nombreArmadura = oArmadura.Name;
 
                     // ⚠ Dónde va la cabeza lo dice el CUERPO, y hay que sacarlo.
                     //
@@ -113,12 +113,12 @@ public static class ImportadorApariencia
                 //
                 // El GrhIndex es el ícono de la mochila. La animación sale de
                 // `Anim`, que es la clave de la sección [ARMA<n>] de Armas.dat.
-                if (i < t.Arma.Length && t.Arma[i] > 0
-                    && objetos.TryGetValue(t.Arma[i], out var oArma)
+                if (i < t.Weapon.Length && t.Weapon[i] > 0
+                    && objetos.TryGetValue(t.Weapon[i], out var oArma)
                     && oArma.Anim > 0)
                 {
                     arma = "arma." + TraerGrafico.NombreCorto(oArma);
-                    nombreArma = oArma.Nombre;
+                    nombreArma = oArma.Name;
                 }
                 else
                 {
@@ -127,10 +127,10 @@ public static class ImportadorApariencia
 
                 deTier.Add(new TierApariencia
                 {
-                    Cuerpo = cuerpo,
-                    Arma = arma,
-                    CabezaOffsetX = cabezaX,
-                    CabezaOffsetY = cabezaY,
+                    Body = cuerpo,
+                    Weapon = arma,
+                    HeadOffsetX = cabezaX,
+                    HeadOffsetY = cabezaY,
                     NombreArmadura = nombreArmadura,
                     NombreArma = nombreArma,
                 });
@@ -138,13 +138,13 @@ public static class ImportadorApariencia
 
             clases.Add(new ClaseApariencia
             {
-                Clase = t.Clase,
-                Cabeza = $"cabeza.{CabezaPorDefecto}",
+                DefenderClass = t.DefenderClass,
+                Head = $"cabeza.{CabezaPorDefecto}",
                 Tiers = deTier,
             });
 
-            GD.Print($"  ✓ {t.Clase,-10} " +
-                     $"{string.Join(" · ", deTier.ConvertAll(x => Corto(x.Cuerpo)))}");
+            GD.Print($"  ✓ {t.DefenderClass,-10} " +
+                     $"{string.Join(" · ", deTier.ConvertAll(x => Corto(x.Body)))}");
         }
 
         Escribir(clases, sinCuerpo, sinArma);
@@ -212,9 +212,9 @@ public static class ImportadorApariencia
     private sealed record ClaseApariencia
     {
         /// <summary>El nombre de la clase, tal como lo escribe <c>Bots.dat</c>.</summary>
-        public required string Clase { get; init; }
+        public required string DefenderClass { get; init; }
 
-        public required string Cabeza { get; init; }
+        public required string Head { get; init; }
 
         /// <summary>Tres entradas, en orden de tier.</summary>
         public required List<TierApariencia> Tiers { get; init; }
@@ -222,17 +222,17 @@ public static class ImportadorApariencia
 
     private sealed record TierApariencia
     {
-        public required string Cuerpo { get; init; }
+        public required string Body { get; init; }
 
-        public required string Arma { get; init; }
+        public required string Weapon { get; init; }
 
         /// <summary>
         /// Dónde va la cabeza respecto del punto de apoyo del cuerpo, en píxeles
         /// x4. Casi siempre negativo en Y: la cabeza va arriba.
         /// </summary>
-        public required int CabezaOffsetX { get; init; }
+        public required int HeadOffsetX { get; init; }
 
-        public required int CabezaOffsetY { get; init; }
+        public required int HeadOffsetY { get; init; }
 
         /// <summary>
         /// El nombre del objeto de AO, solo para poder leer el archivo.

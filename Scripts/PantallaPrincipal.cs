@@ -45,7 +45,7 @@ public partial class PantallaPrincipal : Control
         caja.AddThemeConstantOverride("separation", 16);
         AddChild(caja);
 
-        var titulo = new Label { Text = "Tower of Argentum" };
+        var titulo = new Label { Text = Loc.Get("ui.principal.titulo") };
         titulo.AddThemeFontSizeOverride("font_size", 46);
         caja.AddChild(titulo);
 
@@ -59,21 +59,21 @@ public partial class PantallaPrincipal : Control
         // Continuar arriba de Jugar: si hay una corrida a medias, retomarla es
         // lo que el jugador vino a hacer — son horas de partida. Y Jugar con un
         // guardado presente ABANDONA esa corrida, así que el orden también avisa.
-        _continuar = Boton("Continuar corrida", () => ContinuarCorrida?.Invoke());
+        _continuar = Boton(Loc.Get("ui.principal.continuar"), () => ContinuarCorrida?.Invoke());
         caja.AddChild(_continuar);
 
-        _jugar = Boton("Jugar", () => _ = JugarAsync());
+        _jugar = Boton(Loc.Get("ui.principal.jugar"), () => _ = JugarAsync());
         caja.AddChild(_jugar);
 
-        caja.AddChild(Boton("Tienda de planos", () => _ = MostrarTiendaAsync()));
-        caja.AddChild(Boton("Ranking", () => _ = MostrarRankingAsync()));
-        caja.AddChild(Boton("Opciones", () => _opciones.Abrir()));
-        caja.AddChild(Boton("Salir de la cuenta", () => _ = SalirAsync()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.tienda"), () => _ = MostrarTiendaAsync()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.ranking"), () => _ = MostrarRankingAsync()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.opciones"), () => _opciones.Abrir()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.salir_cuenta"), () => _ = SalirAsync()));
 
         // ⚠ Cerrar el juego desde el menú. Antes solo se salía con la X o con
         // Alt+F4; que un juego de pantalla completa no tenga salida propia es de
         // las cosas que más rápido se notan.
-        caja.AddChild(Boton("Salir del juego", () => GetTree().Quit()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.salir_juego"), () => GetTree().Quit()));
 
         _mensaje = new Label { Text = "" };
         _mensaje.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.68f));
@@ -121,22 +121,24 @@ public partial class PantallaPrincipal : Control
 
         if (!ok || perfil is null)
         {
-            _billetera.Text = "sin conexión con el servidor";
+            _billetera.Text = Loc.Get("ui.principal.sin_conexion");
             _mensaje.Text = error ?? "";
             return;
         }
 
-        _oro = perfil.Oro;
-        _planos = perfil.Planos;
+        _oro = perfil.Gold;
+        _planos = perfil.Blueprints;
 
-        _billetera.Text = $"{perfil.Nick} · {perfil.Oro} de oro · {perfil.Planos.Length} plano(s)";
+        _billetera.Text =
+            $"{perfil.Nick} · {perfil.Gold} {Loc.Get("ui.principal.de_oro")}" +
+            $" · {perfil.Blueprints.Length} {Loc.Get("ui.principal.planos")}";
         _mensaje.Text = "";
     }
 
     private async Task JugarAsync()
     {
         _jugar.Disabled = true;
-        _mensaje.Text = "abriendo la corrida…";
+        _mensaje.Text = Loc.Get("ui.principal.abriendo");
 
         // ⚠ El hash de los datos viaja acá. Si el cliente juega con otros números
         // que el servidor, la corrida no sería reproducible ni comparable, y es
@@ -147,15 +149,15 @@ public partial class PantallaPrincipal : Control
 
         if (!ok || datos is null)
         {
-            _mensaje.Text = error ?? "No se pudo abrir la corrida.";
+            _mensaje.Text = error ?? Loc.Get("ui.principal.error_abrir");
             return;
         }
 
-        if (datos.Abandonada is > 0)
+        if (datos.Abandoned is > 0)
         {
             // Una sola corrida abierta por cuenta: abrir esta cerró la anterior.
             // Se dice, porque pueden haber sido horas de partida.
-            _mensaje.Text = $"se abandonó la corrida {datos.Abandonada} que tenías abierta";
+            _mensaje.Text = Loc.Get("ui.principal.corrida_abandonada", (int)datos.Abandoned.Value);
         }
 
         EmpezarCorrida?.Invoke(datos.RunId, datos.Seed);
@@ -164,42 +166,42 @@ public partial class PantallaPrincipal : Control
     private async Task MostrarRankingAsync()
     {
         Limpiar();
-        _mensaje.Text = "cargando el ranking…";
+        _mensaje.Text = Loc.Get("ui.principal.cargando_ranking");
 
         var (ok, datos, error) = await Red.ApiCliente.RankingAsync(20);
 
         if (!ok || datos is null)
         {
-            _mensaje.Text = error ?? "No se pudo cargar el ranking.";
+            _mensaje.Text = error ?? Loc.Get("ui.principal.error_ranking");
             return;
         }
 
         _mensaje.Text = "";
-        _panel.AddChild(Titulo($"Ranking · temporada {datos.Version}"));
+        _panel.AddChild(Titulo(Loc.Get("ui.principal.ranking_temporada", datos.Version)));
 
         // El orden es gano DESC, oleada DESC, ticks ASC: arriba los que ganaron y
         // entre ellos el más rápido. Se muestran las dos columnas crudas, sin
         // fórmula compuesta que haya que explicar.
         foreach (var fila in datos.Filas)
         {
-            int segundos = fila.Ticks / Simulacion.Enteros.TicksPorSegundo;
+            int segundos = fila.Ticks / Simulacion.Ints.TicksPerSecond;
 
             var l = new Label
             {
-                Text = $"{fila.Puesto,3}. {fila.Nick,-20} " +
-                       $"{(fila.Gano ? "GANÓ" : $"ol {fila.Oleada}"),-8} " +
+                Text = $"{fila.Position,3}. {fila.Nick,-20} " +
+                       $"{(fila.Won ? Loc.Get("ui.principal.gano") : Loc.Get("ui.principal.oleada_corta", fila.Wave)),-8} " +
                        $"{segundos / 60:00}:{segundos % 60:00}" +
-                       (fila.Validado ? "  ✓" : ""),
+                       (fila.Validated ? "  ✓" : ""),
             };
 
-            if (fila.Gano)
+            if (fila.Won)
                 l.AddThemeColorOverride("font_color", new Color(0.5f, 0.95f, 0.6f));
 
             _panel.AddChild(l);
         }
 
         if (datos.Filas.Length == 0)
-            _panel.AddChild(new Label { Text = "todavía no hay ninguna corrida terminada" });
+            _panel.AddChild(new Label { Text = Loc.Get("ui.principal.sin_corridas") });
     }
 
     private async Task MostrarTiendaAsync()
@@ -207,41 +209,46 @@ public partial class PantallaPrincipal : Control
         Limpiar();
         await RefrescarAsync();
 
-        _panel.AddChild(Titulo("Tienda de planos"));
+        _panel.AddChild(Titulo(Loc.Get("ui.principal.tienda")));
 
         _panel.AddChild(new Label
         {
-            Text = "Los planos son la única progresión permanente, y la lista es finita.",
+            Text = Loc.Get("ui.principal.tienda_ayuda"),
         });
 
         _panel.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
 
-        foreach (var plano in CargadorDatos.Actual.Planos.Todos)
+        foreach (var plano in CargadorDatos.Actual.Blueprints.All)
         {
-            bool aprendido = System.Array.IndexOf(_planos, plano.Nombre) >= 0;
+            // ⚠ La identidad que viaja a la API es la KEY, no el nombre: el nombre
+            // ahora vive en los archivos de idioma y cambia con el idioma, así que
+            // un jugador en inglés compraría un plano que el servidor no conoce.
+            // El planos.json DEL SERVIDOR tiene que listar estas mismas keys.
+            bool aprendido = System.Array.IndexOf(_planos, plano.Key) >= 0;
+            string nombreVisible = Loc.Get($"perk.{plano.Key}.name");
 
             // El inicial se muestra igual, marcado: sirve para que el jugador
             // entienda que la fusión existe antes de gastar un peso.
-            if (plano.Inicial)
+            if (plano.Initial)
             {
-                _panel.AddChild(new Label { Text = $"  {plano.Nombre} — ya lo sabés (viene de arranque)" });
+                _panel.AddChild(new Label { Text = $"  {nombreVisible} {Loc.Get("ui.principal.plano_inicial")}" });
                 continue;
             }
 
             if (aprendido)
             {
-                _panel.AddChild(new Label { Text = $"  {plano.Nombre} — aprendido" });
+                _panel.AddChild(new Label { Text = $"  {nombreVisible} {Loc.Get("ui.principal.plano_aprendido")}" });
                 continue;
             }
 
             var fila = new HBoxContainer();
             fila.AddThemeConstantOverride("separation", 12);
 
-            fila.AddChild(new Label { Text = $"  {plano.Nombre}" });
+            fila.AddChild(new Label { Text = $"  {nombreVisible}" });
 
-            string nombre = plano.Nombre;
-            var comprar = new Button { Text = "comprar", CustomMinimumSize = new Vector2(140, 40) };
-            comprar.Pressed += () => _ = ComprarAsync(nombre);
+            string clave = plano.Key;
+            var comprar = new Button { Text = Loc.Get("ui.principal.comprar"), CustomMinimumSize = new Vector2(140, 40) };
+            comprar.Pressed += () => _ = ComprarAsync(clave);
             fila.AddChild(comprar);
 
             _panel.AddChild(fila);
@@ -250,13 +257,15 @@ public partial class PantallaPrincipal : Control
 
     private async Task ComprarAsync(string plano)
     {
-        _mensaje.Text = "comprando…";
+        _mensaje.Text = Loc.Get("ui.principal.comprando");
 
         // ⚠ Se manda SOLO el nombre. El precio sale de la lista del servidor: si
         // lo mandara el cliente, se compraría todo a un peso.
         var (ok, _, error) = await Red.ApiCliente.ComprarPlanoAsync(plano);
 
-        _mensaje.Text = ok ? $"aprendiste {plano}" : error ?? "No se pudo comprar.";
+        _mensaje.Text = ok
+            ? $"{Loc.Get("ui.principal.aprendiste")} {plano}"
+            : error ?? Loc.Get("ui.principal.error_comprar");
 
         await MostrarTiendaAsync();
     }

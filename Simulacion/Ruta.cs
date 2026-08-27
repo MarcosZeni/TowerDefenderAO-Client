@@ -1,7 +1,7 @@
 namespace TowerOfArgentum.Simulacion;
 
 /// <summary>Una celda de la grilla. Enteros, como todo acá.</summary>
-public readonly record struct Celda(int X, int Y);
+public readonly record struct Cell(int X, int Y);
 
 /// <summary>
 /// El camino que recorren los enemigos, de la entrada del mapa a la Torre.
@@ -14,9 +14,9 @@ public readonly record struct Celda(int X, int Y);
 /// entraría redondeo del render en el estado del juego y se acabó el
 /// determinismo.</para>
 /// </summary>
-public sealed class Ruta
+public sealed class Route
 {
-    private readonly Celda[] _vertices;
+    private readonly Cell[] _vertices;
 
     /// <summary>
     /// Distancia acumulada, en milésimas de celda, desde la entrada hasta cada
@@ -25,7 +25,7 @@ public sealed class Ruta
     /// </summary>
     private readonly long[] _acumulado;
 
-    public Ruta(IReadOnlyList<Celda> vertices)
+    public Route(IReadOnlyList<Cell> vertices)
     {
         if (vertices.Count < 2)
             throw new ArgumentException("Una ruta necesita al menos dos vértices.", nameof(vertices));
@@ -54,22 +54,22 @@ public sealed class Ruta
                     nameof(vertices));
             }
 
-            _acumulado[i] = _acumulado[i - 1] + ((long)(dx + dy) * Enteros.MilesimasPorCelda);
+            _acumulado[i] = _acumulado[i - 1] + ((long)(dx + dy) * Ints.ThousandthsPerCell);
         }
     }
 
     /// <summary>Largo total, en milésimas de celda.</summary>
-    public long Largo => _acumulado[^1];
+    public long Length => _acumulado[^1];
 
     /// <summary>Dónde entran los enemigos.</summary>
-    public Celda Entrada => _vertices[0];
+    public Cell Entrada => _vertices[0];
 
     /// <summary>Dónde está la Torre: el final del camino.</summary>
-    public Celda Final => _vertices[^1];
+    public Cell End => _vertices[^1];
 
     public int CantidadVertices => _vertices.Length;
 
-    public Celda Vertice(int i) => _vertices[i];
+    public Cell Vertice(int i) => _vertices[i];
 
     /// <summary>
     /// La celda donde cae un enemigo que recorrió <paramref name="distancia"/>.
@@ -79,9 +79,9 @@ public sealed class Ruta
     /// llega a qué enemigo— y también el render, pero el render pide además la
     /// fracción, con <see cref="PosicionFina"/>.</para>
     /// </summary>
-    public Celda CeldaEn(long distancia)
+    public Cell CellAt(long distancia)
     {
-        var (a, b, avance, largoTramo) = UbicarTramo(distancia);
+        var (a, b, avance, largoTramo) = LocateSegment(distancia);
 
         if (largoTramo == 0)
             return a;
@@ -91,7 +91,7 @@ public sealed class Ruta
         long x = a.X + ((long)(b.X - a.X) * avance + (largoTramo / 2)) / largoTramo;
         long y = a.Y + ((long)(b.Y - a.Y) * avance + (largoTramo / 2)) / largoTramo;
 
-        return new Celda((int)x, (int)y);
+        return new Cell((int)x, (int)y);
     }
 
     /// <summary>
@@ -103,16 +103,16 @@ public sealed class Ruta
     /// </summary>
     public (long X, long Y) PosicionFina(long distancia)
     {
-        var (a, b, avance, largoTramo) = UbicarTramo(distancia);
+        var (a, b, avance, largoTramo) = LocateSegment(distancia);
 
-        long ax = (long)a.X * Enteros.MilesimasPorCelda;
-        long ay = (long)a.Y * Enteros.MilesimasPorCelda;
+        long ax = (long)a.X * Ints.ThousandthsPerCell;
+        long ay = (long)a.Y * Ints.ThousandthsPerCell;
 
         if (largoTramo == 0)
             return (ax, ay);
 
-        long bx = (long)b.X * Enteros.MilesimasPorCelda;
-        long by = (long)b.Y * Enteros.MilesimasPorCelda;
+        long bx = (long)b.X * Ints.ThousandthsPerCell;
+        long by = (long)b.Y * Ints.ThousandthsPerCell;
 
         return (
             ax + ((bx - ax) * avance / largoTramo),
@@ -138,7 +138,7 @@ public sealed class Ruta
     /// </remarks>
     public int Direccion(long distancia)
     {
-        var (a, b, _, largoTramo) = UbicarTramo(distancia);
+        var (a, b, _, largoTramo) = LocateSegment(distancia);
 
         if (largoTramo == 0)
             return 3;
@@ -155,12 +155,12 @@ public sealed class Ruta
     /// <summary>
     /// Qué tramo contiene esa distancia, y cuánto se avanzó adentro de él.
     /// </summary>
-    private (Celda A, Celda B, long Avance, long LargoTramo) UbicarTramo(long distancia)
+    private (Cell A, Cell B, long Avance, long LargoTramo) LocateSegment(long distancia)
     {
         if (distancia <= 0)
             return (_vertices[0], _vertices[0], 0, 0);
 
-        if (distancia >= Largo)
+        if (distancia >= Length)
             return (_vertices[^1], _vertices[^1], 0, 0);
 
         // Búsqueda binaria: el primer vértice cuyo acumulado pasa la distancia.

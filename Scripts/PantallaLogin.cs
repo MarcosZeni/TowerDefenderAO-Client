@@ -45,13 +45,13 @@ public partial class PantallaLogin : Control
         caja.AddThemeConstantOverride("separation", 14);
         AddChild(caja);
 
-        var titulo = new Label { Text = "Tower of Argentum" };
+        var titulo = new Label { Text = Loc.Get("ui.login.titulo") };
         titulo.AddThemeFontSizeOverride("font_size", 42);
         caja.AddChild(titulo);
 
         caja.AddChild(new Control { CustomMinimumSize = new Vector2(0, 30) });
 
-        caja.AddChild(Etiqueta("Nombre"));
+        caja.AddChild(Etiqueta(Loc.Get("ui.login.nombre")));
 
         _nick = new LineEdit
         {
@@ -61,7 +61,7 @@ public partial class PantallaLogin : Control
 
         caja.AddChild(_nick);
 
-        caja.AddChild(Etiqueta("Contraseña"));
+        caja.AddChild(Etiqueta(Loc.Get("ui.login.contrasena")));
 
         _password = new LineEdit
         {
@@ -84,11 +84,11 @@ public partial class PantallaLogin : Control
         botones.AddThemeConstantOverride("separation", 12);
         caja.AddChild(botones);
 
-        _entrar = new Button { Text = "Entrar", CustomMinimumSize = new Vector2(214, 50) };
+        _entrar = new Button { Text = Loc.Get("ui.login.entrar"), CustomMinimumSize = new Vector2(214, 50) };
         _entrar.Pressed += () => _ = EntrarAsync();
         botones.AddChild(_entrar);
 
-        _registrar = new Button { Text = "Crear cuenta", CustomMinimumSize = new Vector2(214, 50) };
+        _registrar = new Button { Text = Loc.Get("ui.login.crear_cuenta"), CustomMinimumSize = new Vector2(214, 50) };
         _registrar.Pressed += () => _ = RegistrarAsync();
         botones.AddChild(_registrar);
 
@@ -111,7 +111,7 @@ public partial class PantallaLogin : Control
         if (!Validar())
             return;
 
-        Ocupado(true, "entrando…");
+        Ocupado(true, Loc.Get("ui.login.entrando"));
 
         var (sesion, error) = await Red.ApiCliente.LoginAsync(_nick.Text.Trim(), _password.Text);
 
@@ -123,7 +123,7 @@ public partial class PantallaLogin : Control
         if (!Validar())
             return;
 
-        Ocupado(true, "creando la cuenta…");
+        Ocupado(true, Loc.Get("ui.login.creando"));
 
         var (sesion, error) = await Red.ApiCliente.RegistrarAsync(_nick.Text.Trim(), _password.Text, null);
 
@@ -144,13 +144,13 @@ public partial class PantallaLogin : Control
 
         if (nick.Length is < 3 or > 20 || nick.Contains(' ', System.StringComparison.Ordinal))
         {
-            Mensaje("El nombre tiene que tener entre 3 y 20 caracteres, sin espacios.");
+            Mensaje(Loc.Get("ui.login.nombre_invalido"));
             return false;
         }
 
         if (_password.Text.Length < 8)
         {
-            Mensaje("La contraseña tiene que tener al menos 8 caracteres.");
+            Mensaje(Loc.Get("ui.login.pass_corta"));
             return false;
         }
 
@@ -178,7 +178,7 @@ public partial class PantallaLogin : Control
             return;
         }
 
-        Mensaje(error ?? "No se pudo entrar.");
+        Mensaje(error ?? Loc.Get("ui.login.error_entrar"));
     }
 
     private void Mensaje(string texto)

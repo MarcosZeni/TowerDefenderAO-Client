@@ -16,8 +16,8 @@ public enum Atajo
     Velocidad3,
     ClaseAnterior,
     ClaseSiguiente,
-    Mochila,
-    AdelantarOleada,
+    Backpack,
+    CallNextWave,
 }
 
 /// <summary>
@@ -35,7 +35,7 @@ public enum Atajo
 /// </remarks>
 public static class Configuracion
 {
-    private const string Ruta = "user://opciones.cfg";
+    private const string Route = "user://opciones.cfg";
 
     /// <summary>Volumen de la música, 0 a 100.</summary>
     public static int VolumenMusica { get; set; } = 70;
@@ -57,6 +57,13 @@ public static class Configuracion
     /// <summary>Si el portal y el cristal de la Torre laten y giran.</summary>
     public static bool AnimarEfectos { get; set; } = true;
 
+    /// <summary>Código del idioma: «es», «en»… Sale de Datosang.</summary>
+    /// <remarks>
+    /// ⚠ NO entra al hash de la corrida. Traducir no cambia la simulación: dos
+    /// jugadores en idiomas distintos, con la misma seed, juegan lo mismo.
+    /// </remarks>
+    public static string Idioma { get; set; } = Loc.Referencia;
+
     private static readonly Key[] _teclas = PorDefecto();
 
     private static Key[] PorDefecto() =>
@@ -67,8 +74,8 @@ public static class Configuracion
         Key.Key3,    // Velocidad3
         Key.Q,       // ClaseAnterior
         Key.E,       // ClaseSiguiente
-        Key.Tab,     // Mochila
-        Key.Enter,   // AdelantarOleada
+        Key.Tab,     // Backpack
+        Key.Enter,   // CallNextWave
     ];
 
     public static Key TeclaDe(Atajo atajo) => _teclas[(int)atajo];
@@ -107,7 +114,7 @@ public static class Configuracion
         }
 
         _teclas[(int)atajo] = tecla;
-        Guardar();
+        Store();
     }
 
     public static void RestaurarTeclas()
@@ -117,22 +124,17 @@ public static class Configuracion
         for (int i = 0; i < _teclas.Length; i++)
             _teclas[i] = fabrica[i];
 
-        Guardar();
+        Store();
     }
 
     /// <summary>El nombre legible de una acción, para el menú.</summary>
-    public static string NombreDe(Atajo atajo) => atajo switch
-    {
-        Atajo.Pausa => "Pausar",
-        Atajo.Velocidad1 => "Velocidad x1",
-        Atajo.Velocidad2 => "Velocidad x2",
-        Atajo.Velocidad3 => "Velocidad x4",
-        Atajo.ClaseAnterior => "Clase anterior",
-        Atajo.ClaseSiguiente => "Clase siguiente",
-        Atajo.Mochila => "Abrir la mochila",
-        Atajo.AdelantarOleada => "Adelantar la oleada",
-        _ => "?",
-    };
+    /// <remarks>
+    /// La clave sale del nombre del enum, igual que <c>class.&lt;Clase&gt;.name</c>:
+    /// un atajo nuevo se traduce agregando su renglón a los idiomas y nada más.
+    /// Un atajo sin traducir muestra la clave cruda, que es lo que hace
+    /// <see cref="Loc.Get(string)"/> a propósito.
+    /// </remarks>
+    public static string NombreDe(Atajo atajo) => Loc.Get($"ui.atajo.{atajo}");
 
     /// <summary>El nombre de una tecla como para mostrarlo.</summary>
     public static string NombreDeTecla(Key tecla)
@@ -142,7 +144,7 @@ public static class Configuracion
     {
         var config = new ConfigFile();
 
-        if (config.Load(Ruta) != Error.Ok)
+        if (config.Load(Route) != Error.Ok)
         {
             AplicarVolumenes();
             return;
@@ -153,6 +155,7 @@ public static class Configuracion
 
         AnimarArmas = (bool)config.GetValue("animaciones", "armas", true);
         AnimarEfectos = (bool)config.GetValue("animaciones", "efectos", true);
+        Idioma = (string)config.GetValue("idioma", "codigo", Loc.Referencia);
 
         for (int i = 0; i < _teclas.Length; i++)
         {
@@ -163,7 +166,7 @@ public static class Configuracion
         AplicarVolumenes();
     }
 
-    public static void Guardar()
+    public static void Store()
     {
         var config = new ConfigFile();
 
@@ -172,11 +175,12 @@ public static class Configuracion
 
         config.SetValue("animaciones", "armas", AnimarArmas);
         config.SetValue("animaciones", "efectos", AnimarEfectos);
+        config.SetValue("idioma", "codigo", Idioma);
 
         for (int i = 0; i < _teclas.Length; i++)
             config.SetValue("teclas", ((Atajo)i).ToString(), (int)_teclas[i]);
 
-        config.Save(Ruta);
+        config.Save(Route);
         AplicarVolumenes();
     }
 

@@ -17,10 +17,10 @@ public sealed record EntradaGrh(
     int FileNum,
     int X,
     int Y,
-    int Ancho,
-    int Alto,
+    int Width,
+    int Height,
     int[] Frames,
-    float Velocidad)
+    float Speed)
 {
     public bool EsAnimacion => NumFrames > 1;
 }

@@ -11,14 +11,14 @@ namespace TowerOfArgentum.Simulacion;
 /// jugador no se entera hasta que el ranking no le cierra. <b>Mejor no arrancar
 /// que arrancar midiendo mal.</b>
 /// </remarks>
-public sealed class DatosInvalidosException(string mensaje) : System.Exception(mensaje);
+public sealed class InvalidBalanceDataException(string mensaje) : System.Exception(mensaje);
 
 // =============================================================================
 //  Las formas de las curvas
 // =============================================================================
 
 /// <summary>Una recta <c>base + porOleada × n</c>.</summary>
-public readonly record struct CurvaLineal(int Base, int PorOleada)
+public readonly record struct LinearCurve(int Base, int PorOleada)
 {
     public int En(int oleada) => Base + (oleada * PorOleada);
 }
@@ -27,10 +27,10 @@ public readonly record struct CurvaLineal(int Base, int PorOleada)
 /// Una chance que sube con el presupuesto y está acotada:
 /// <c>limitar(presupuesto / divisor, min, max)</c>.
 /// </summary>
-public readonly record struct RangoChance(int Divisor, int Min, int Max)
+public readonly record struct ChanceRange(int Divisor, int Min, int Max)
 {
     public int En(int presupuesto)
-        => Enteros.Limitar(Divisor == 0 ? Min : presupuesto / Divisor, Min, Max);
+        => Ints.Clamp(Divisor == 0 ? Min : presupuesto / Divisor, Min, Max);
 }
 
 /// <summary>
@@ -40,114 +40,114 @@ public readonly record struct RangoChance(int Divisor, int Min, int Max)
 /// <c>divisor = 0</c> quiere decir valor fijo, no escala. Es el caso de Doble,
 /// que dispara dos veces y no hay medio disparo.
 /// </remarks>
-public readonly record struct FormulaMagnitud(int Base, int Divisor, int Min, int Max)
+public readonly record struct MagnitudeFormula(int Base, int Divisor, int Min, int Max)
 {
     public int En(int presupuesto)
-        => Enteros.Limitar(Divisor == 0 ? Base : Base + (presupuesto / Divisor), Min, Max);
+        => Ints.Clamp(Divisor == 0 ? Base : Base + (presupuesto / Divisor), Min, Max);
 }
 
 // =============================================================================
 //  curvas.json
 // =============================================================================
 
-public sealed record DatoTorre(int HpInicial, int Dano, int CadenciaTicks);
+public sealed record TowerData(int HpInicial, int Damage, int CadenceTicks);
 
-public sealed record DatoCorrida(
-    int OleadasPorCorrida,
-    int CantidadAreas,
-    int[] UltimaOleadaPorArea,
-    int OleadasEntreElecciones,
-    int SegundosDePreparacion);
+public sealed record RunData(
+    int WavesPerRun,
+    int AreaCount,
+    int[] LastWavePerArea,
+    int WavesBetweenChoices,
+    int PreparationSeconds);
 
-public sealed record DatoDefensores(
-    int LugaresMochila,
-    int SlotsEquipoPorClase,
-    int PorcentajeVentaDefensor,
-    int PorcentajeVentaArma);
+public sealed record DefenderData(
+    int BackpackSlots,
+    int GearSlotsPerClass,
+    int DefenderSellPercent,
+    int WeaponSellPercent);
 
-public sealed record DatoEconomia(
-    int FichasDeOroInicial,
-    int OroPorEnemigoAdelantado,
-    int TopeOroPorAdelantar);
+public sealed record EconomyData(
+    int StartingGoldTokens,
+    int GoldPerCalledEnemy,
+    int CallGoldCap);
 
-public sealed record DatoPresupuesto(
+public sealed record BudgetData(
     int Base,
     int Cuadratico,
-    int CapEquivalenteMin,
-    int CapEquivalenteMax)
+    int EquivalentCapMin,
+    int EquivalentCapMax)
 {
     /// <summary>La cuadrática, antes del tope por pool.</summary>
-    public int SinTope(int oleada) => Base + (Cuadratico * oleada * oleada);
+    public int Uncapped(int oleada) => Base + (Cuadratico * oleada * oleada);
 }
 
-public sealed record DatoCurvasPorOleada(
-    CurvaLineal BonusOroLimpiar,
-    CurvaLineal PresupuestoDropJefe,
-    CurvaLineal PresupuestoItemTienda,
-    int IntervaloBase,
-    int IntervaloDivisor,
-    int IntervaloMin,
-    int IntervaloMax,
-    int ChancePerkDivisor,
-    int ChancePerkMin,
-    int ChancePerkMax)
+public sealed record PerWaveCurves(
+    LinearCurve ClearGoldBonus,
+    LinearCurve BossDropBudget,
+    LinearCurve ShopItemBudget,
+    int IntervalBase,
+    int IntervalDivisor,
+    int IntervalMin,
+    int IntervalMax,
+    int PerkChanceDivisor,
+    int PerkChanceMin,
+    int PerkChanceMax)
 {
-    public int IntervaloSpawn(int oleada) => Enteros.Limitar(
-        IntervaloBase - (IntervaloDivisor == 0 ? 0 : oleada / IntervaloDivisor),
-        IntervaloMin, IntervaloMax);
+    public int IntervaloSpawn(int oleada) => Ints.Clamp(
+        IntervalBase - (IntervalDivisor == 0 ? 0 : oleada / IntervalDivisor),
+        IntervalMin, IntervalMax);
 
-    public int ChancePerkNpc(int oleada) => Enteros.Limitar(
-        ChancePerkDivisor == 0 ? 0 : oleada / ChancePerkDivisor,
-        ChancePerkMin, ChancePerkMax);
+    public int NpcPerkChance(int oleada) => Ints.Clamp(
+        PerkChanceDivisor == 0 ? 0 : oleada / PerkChanceDivisor,
+        PerkChanceMin, PerkChanceMax);
 }
 
-public sealed record DatoTienda(
-    int PerksEnStock,
-    int ArmasEnStock,
-    int ChanceBronce,
-    CurvaLineal PrecioPerkBronce,
-    CurvaLineal PrecioPerkPlata)
+public sealed record ShopData(
+    int PerksInStock,
+    int WeaponsInStock,
+    int BronzeChance,
+    LinearCurve BronzePerkPrice,
+    LinearCurve SilverPerkPrice)
 {
-    public int PrecioDePerk(TierPerk tier, int oleada)
-        => tier == TierPerk.Bronce ? PrecioPerkBronce.En(oleada) : PrecioPerkPlata.En(oleada);
+    public int PerkPrice(PerkTier tier, int oleada)
+        => tier == PerkTier.Bronze ? BronzePerkPrice.En(oleada) : SilverPerkPrice.En(oleada);
 }
 
-public sealed record DatoDrops(int ChanceComun, int ChanceBronce);
+public sealed record DropData(int CommonChance, int BronzeChance);
 
-public sealed record DatoOleada(
+public sealed record WaveData(
     int MaxNpcs,
-    int PesoAreaActual,
-    int PesoAreaAnterior,
-    int DivisorHp,
-    int DivisorDanoMax,
-    int DivisorVelocidad,
-    int IntervaloSpawnPorDefecto);
+    int CurrentAreaWeight,
+    int PreviousAreaWeight,
+    int HpDivisor,
+    int MaxDamageDivisor,
+    int SpeedDivisor,
+    int DefaultSpawnInterval);
 
-public sealed record DatoPerksNpc(
-    int CostoVida,
-    int CostoVelocidad,
-    int EscalonVida,
-    int EscalonVelocidad,
-    int MaxVida,
-    int MaxVelocidad,
-    int ChanceVidaEnLaTirada,
-    int ChanceVelocidadEnSobrante);
+public sealed record NpcPerkData(
+    int HealthCost,
+    int SpeedCost,
+    int HealthStep,
+    int SpeedStep,
+    int MaxHealth,
+    int MaxSpeed,
+    int HealthChanceInRoll,
+    int SpeedChanceInLeftover);
 
-public sealed record DatoJefe(int DivisorVidaExtra, int MaxVidaExtra, string NombreJefeFinal);
+public sealed record BossData(int ExtraHealthDivisor, int MaxExtraHealth, string FinalBossName);
 
 /// <summary>Todo lo de <c>curvas.json</c>.</summary>
-public sealed record DatoCurvas(
-    DatoTorre Torre,
-    DatoCorrida Corrida,
-    DatoDefensores Defensores,
-    DatoEconomia Economia,
-    DatoPresupuesto Presupuesto,
-    DatoCurvasPorOleada PorOleada,
-    DatoTienda Tienda,
-    DatoDrops Drops,
-    DatoOleada Oleada,
-    DatoPerksNpc PerksNpc,
-    DatoJefe Jefe);
+public sealed record CurveData(
+    TowerData Tower,
+    RunData RunCurve,
+    DefenderData Defenders,
+    EconomyData Economy,
+    BudgetData Budget,
+    PerWaveCurves PorOleada,
+    ShopData Shop,
+    DropData Drops,
+    WaveData Wave,
+    NpcPerkData PerksNpc,
+    BossData Boss);
 
 // =============================================================================
 //  combate.json
@@ -155,77 +155,77 @@ public sealed record DatoCurvas(
 
 /// <summary>
 /// Los números del tick, los que antes eran literales dentro de
-/// <see cref="Partida"/>.
+/// <see cref="Run"/>.
 /// </summary>
-public sealed record DatoCombate(
-    int DivisorPromedioDanoEnemigo,
-    int DanoMinimoEnemigo,
-    int TopeSlowPorciento,
-    int DuracionSlowTicks,
-    int VentanaSaltoRicochetCeldas,
-    int RadioSplashCeldas,
-    int RebotesRicochet,
-    int RebotesPerforacion,
-    int RebotesApocalipsis,
-    int MaxSecundariosSplashOro,
-    int MaxSecundariosOndaDeFrio,
-    int MaxSecundariosDivino,
-    int SlowTerribleHambre,
-    int DivisorPenetrante,
-    int GolpesPorCritico,
-    int MaxSecundariosSplashArma,
-    int RebotesReboteArma,
-    int MaxSecundariosCadena,
-    int TopeBonusSed,
-    int TopePorcionAlcance,
-    int EscalaPorcionAlcance,
-    int UmbralEjecutarTropa,
-    int UmbralEjecutarJefe,
-    bool JefeFinalInmuneAEjecutar,
-    int CooldownVampirismoTicks,
-    int DuracionMarcaCodiciaTicks);
+public sealed record CombatData(
+    int EnemyDamageAverageDivisor,
+    int EnemyMinimumDamage,
+    int SlowCapPercent,
+    int SlowDurationTicks,
+    int RicochetJumpWindowCells,
+    int SplashRadiusCells,
+    int RicochetBounces,
+    int PerforationBounces,
+    int ApocalypseBounces,
+    int MaxGoldSplashSecondaries,
+    int MaxFrostWaveSecondaries,
+    int MaxDivineSecondaries,
+    int TerribleHungerSlow,
+    int PiercingDivisor,
+    int HitsPerCritical,
+    int MaxWeaponSplashSecondaries,
+    int WeaponBounceBounces,
+    int MaxChainSecondaries,
+    int ThirstBonusCap,
+    int RangePortionCap,
+    int RangePortionScale,
+    int ExecuteThresholdTroop,
+    int ExecuteThresholdBoss,
+    bool FinalBossImmuneToExecute,
+    int VampirismCooldownTicks,
+    int GreedMarkDurationTicks);
 
 // =============================================================================
 //  clases.json
 // =============================================================================
 
 /// <summary>Los stats base de una clase, a nivel 1 y sin nada equipado.</summary>
-public sealed record DatoClase(
-    Clase Clase,
-    int Costo,
-    int Dano,
-    int AlcanceCeldas,
-    int CadenciaTicks,
-    bool Soporte);
+public sealed record ClassData(
+    DefenderClass DefenderClass,
+    int Cost,
+    int Damage,
+    int RangeCells,
+    int CadenceTicks,
+    bool Support);
 
 /// <summary>El roster completo: las nueve clases y la curva de nivel.</summary>
-public sealed class TablaClases
+public sealed class ClassTable
 {
-    private readonly DatoClase[] _todas;
-    private readonly DatoClase?[] _porClase = new DatoClase?[9];
+    private readonly ClassData[] _todas;
+    private readonly ClassData?[] _porClase = new ClassData?[9];
 
-    public TablaClases(DatoClase[] todas, int extraDanoPorNivel, int slotsPerkPorClase)
+    public ClassTable(ClassData[] todas, int extraDanoPorNivel, int slotsPerkPorClase)
     {
         _todas = todas;
-        ExtraDanoPorNivel = extraDanoPorNivel;
-        SlotsPerkPorClase = slotsPerkPorClase;
+        ExtraDamagePerLevel = extraDanoPorNivel;
+        PerkSlotsPerClass = slotsPerkPorClase;
 
         foreach (var c in todas)
         {
-            int i = (int)c.Clase;
+            int i = (int)c.DefenderClass;
 
             if (i >= 0 && i < _porClase.Length)
                 _porClase[i] = c;
         }
     }
 
-    public IReadOnlyList<DatoClase> Todas => _todas;
+    public IReadOnlyList<ClassData> All => _todas;
 
     /// <summary>Puntos porcentuales de daño por cada nivel arriba del 1.</summary>
-    public int ExtraDanoPorNivel { get; }
+    public int ExtraDamagePerLevel { get; }
 
     /// <summary>Slots de perk por clase, que es también el nivel máximo.</summary>
-    public int SlotsPerkPorClase { get; }
+    public int PerkSlotsPerClass { get; }
 
     /// <summary>
     /// Los stats de una clase.
@@ -235,9 +235,9 @@ public sealed class TablaClases
     /// clase sin stats es una clase que pega lo que se le ocurra al fallback, y
     /// eso no se nota hasta que el ranking no cierra.
     /// </remarks>
-    public DatoClase De(Clase clase)
+    public ClassData De(DefenderClass clase)
         => _porClase[(int)clase]
-           ?? throw new DatosInvalidosException($"clases.json no define la clase «{clase}»");
+           ?? throw new InvalidBalanceDataException($"clases.json no define la clase «{clase}»");
 
     /// <summary>Las que pegan lo suficiente para sostener solas una defensa.</summary>
     /// <remarks>
@@ -247,14 +247,14 @@ public sealed class TablaClases
     /// mal. Perder por una decisión propia es el juego; perder por el sorteo de
     /// la pantalla inicial, antes de tocar nada, es un bug de diseño.
     /// </remarks>
-    public Clase[] Ofensivas()
+    public DefenderClass[] Offensive()
     {
-        var lista = new List<Clase>();
+        var lista = new List<DefenderClass>();
 
         foreach (var c in _todas)
         {
-            if (!c.Soporte)
-                lista.Add(c.Clase);
+            if (!c.Support)
+                lista.Add(c.DefenderClass);
         }
 
         return [.. lista];
@@ -276,16 +276,16 @@ public sealed class TablaClases
 ///
 /// <para>Antes era una clase estática con el array escrito en código. Ahora sale
 /// de <c>curvas.json</c>, así que es una instancia y cuelga de
-/// <see cref="DatosBalance"/> como todo lo demás que es entrada de la
+/// <see cref="BalanceData"/> como todo lo demás que es entrada de la
 /// simulación.</para>
 /// </remarks>
-public sealed class TablaAreas(int[] ultimaOleada)
+public sealed class AreaTable(int[] ultimaOleada)
 {
     private readonly int[] _ultimaOleada = ultimaOleada;
 
-    public int Cantidad => _ultimaOleada.Length;
+    public int Count => _ultimaOleada.Length;
 
-    public int DeOleada(int oleada)
+    public int OfWave(int oleada)
     {
         for (int i = 0; i < _ultimaOleada.Length; i++)
         {
@@ -306,11 +306,11 @@ public sealed class TablaAreas(int[] ultimaOleada)
     /// Oro puede juntar un jugador — que a su vez es lo que hace que la fusión
     /// sea una decisión y no un trámite.
     /// </remarks>
-    public bool TieneJefe(int oleada) => System.Array.IndexOf(_ultimaOleada, oleada) >= 0;
+    public bool HasBoss(int oleada) => System.Array.IndexOf(_ultimaOleada, oleada) >= 0;
 
-    public int UltimaOleadaDe(int area) => _ultimaOleada[area - 1];
+    public int LastWaveOf(int area) => _ultimaOleada[area - 1];
 
-    public int PrimeraOleadaDe(int area) => area <= 1 ? 1 : _ultimaOleada[area - 2] + 1;
+    public int FirstWaveOf(int area) => area <= 1 ? 1 : _ultimaOleada[area - 2] + 1;
 }
 
 // =============================================================================
@@ -326,12 +326,12 @@ public sealed class TablaAreas(int[] ultimaOleada)
 /// generado al azar sería un número sin nombre, y el Oro y el Único son
 /// comportamientos — no hay forma de generar un comportamiento.</para>
 /// </remarks>
-public sealed class TablaPerks
+public sealed class PerkTable
 {
-    private readonly DefinicionPerk[] _todos;
-    private readonly Dictionary<int, DefinicionPerk> _porId = [];
+    private readonly PerkDefinition[] _todos;
+    private readonly Dictionary<int, PerkDefinition> _porId = [];
 
-    public TablaPerks(DefinicionPerk[] todos)
+    public PerkTable(PerkDefinition[] todos)
     {
         _todos = todos;
 
@@ -339,7 +339,7 @@ public sealed class TablaPerks
             _porId[p.Id] = p;
     }
 
-    public IReadOnlyList<DefinicionPerk> Todos => _todos;
+    public IReadOnlyList<PerkDefinition> All => _todos;
 
     /// <summary>
     /// El perk de ese id.
@@ -349,16 +349,16 @@ public sealed class TablaPerks
     /// <c>perks.json</c> justamente para que insertar uno en el medio no corra a
     /// todos los de abajo: la mochila y el log guardan ids.
     /// </remarks>
-    public DefinicionPerk Por(int id)
+    public PerkDefinition Get(int id)
         => _porId.TryGetValue(id, out var p)
             ? p
-            : throw new DatosInvalidosException($"no existe el perk con id {id}");
+            : throw new InvalidBalanceDataException($"no existe el perk con id {id}");
 
-    public DefinicionPerk? PorNombre(string nombre)
+    public PerkDefinition? ByKey(string key)
     {
         foreach (var p in _todos)
         {
-            if (string.Equals(p.Nombre, nombre, System.StringComparison.Ordinal))
+            if (string.Equals(p.Key, key, System.StringComparison.Ordinal))
                 return p;
         }
 
@@ -374,20 +374,20 @@ public sealed class TablaPerks
     /// evita el drop muerto: un Único de druida cuando no hay druida en el roster
     /// es un lugar de mochila gastado en nada.
     /// </remarks>
-    public DefinicionPerk? Tirar(TierPerk tier, IReadOnlyList<Clase> clasesDelJugador, Aleatorio rng)
+    public PerkDefinition? Roll(PerkTier tier, IReadOnlyList<DefenderClass> clasesDelJugador, Rng rng)
     {
-        var candidatos = new List<DefinicionPerk>();
+        var candidatos = new List<PerkDefinition>();
 
         foreach (var p in _todos)
         {
             // ⚠ Los Únicos NO caen y NO se compran: se fusionan. Que aparezca uno
             // en una tirada de drop es un bug de datos.
-            if (p.Tier == TierPerk.Unico || p.Tier != tier)
+            if (p.Tier == PerkTier.Unique || p.Tier != tier)
                 continue;
 
             foreach (var c in clasesDelJugador)
             {
-                if (p.SirveA(c))
+                if (p.WorksFor(c))
                 {
                     candidatos.Add(p);
                     break;
@@ -398,22 +398,22 @@ public sealed class TablaPerks
         if (candidatos.Count == 0)
             return null;
 
-        return candidatos[rng.Indice(candidatos.Count)];
+        return candidatos[rng.Index(candidatos.Count)];
     }
 }
 
 /// <summary>Las recetas de fusión, ya resueltas a ids.</summary>
-public sealed class TablaPlanos(Plano[] todos)
+public sealed class BlueprintTable(Blueprint[] todos)
 {
-    public IReadOnlyList<Plano> Todos { get; } = todos;
+    public IReadOnlyList<Blueprint> All { get; } = todos;
 
     /// <summary>Busca la receta que hacen esos dos Oro. El orden no importa.</summary>
-    public Plano? Buscar(int perkA, int perkB)
+    public Blueprint? Find(int perkA, int perkB)
     {
-        foreach (var p in Todos)
+        foreach (var p in All)
         {
-            if ((p.OroA == perkA && p.OroB == perkB) ||
-                (p.OroA == perkB && p.OroB == perkA))
+            if ((p.GoldA == perkA && p.GoldB == perkB) ||
+                (p.GoldA == perkB && p.GoldB == perkA))
             {
                 return p;
             }
@@ -427,11 +427,7 @@ public sealed class TablaPlanos(Plano[] todos)
 //  generador-armas.json
 // =============================================================================
 
-public sealed record DatoHabilidadArma(
-    HabilidadArma Habilidad,
-    FormulaMagnitud Magnitud,
-    string Nombre,
-    string Explica);
+public sealed record WeaponAbilityData(WeaponAbility Ability, MagnitudeFormula Magnitude);
 
 /// <summary>Los parámetros del generador de armas.</summary>
 /// <remarks>
@@ -440,119 +436,83 @@ public sealed record DatoHabilidadArma(
 /// capas, y acá un defensor es un sprite. Las armas se <b>generan</b>: esto son
 /// los parámetros del generador, no una lista de cosas.
 /// </remarks>
-public sealed class TablaArmas
+public sealed class WeaponTable
 {
-    private readonly Dictionary<HabilidadArma, DatoHabilidadArma> _porHabilidad = [];
+    private readonly Dictionary<WeaponAbility, WeaponAbilityData> _porHabilidad = [];
 
-    public TablaArmas(
+    public WeaponTable(
         int paso, int costoDano, int costoCadencia, int costoAlcance,
-        RangoChance chanceLegendaria, RangoChance chanceEpica, RangoChance chanceRara,
+        ChanceRange chanceLegendaria, ChanceRange chanceEpica, ChanceRange chanceRara,
         int porcLegendaria, int porcEpica, int porcRara, int porcComun,
         int divisorValor, int multiplicadorPrecioTienda,
-        HabilidadArma[] poolComun, HabilidadArma[] poolRaro, HabilidadArma[] poolRompen,
-        DatoHabilidadArma[] habilidades,
-        string nombreDano, string nombreCadencia, string nombreAlcance,
-        string sufijoRara, string sufijoEpica, string sufijoLegendaria)
+        WeaponAbility[] poolComun, WeaponAbility[] poolRaro, WeaponAbility[] poolRompen,
+        WeaponAbilityData[] habilidades)
     {
-        Paso = paso;
-        CostoDano = costoDano;
-        CostoCadencia = costoCadencia;
-        CostoAlcance = costoAlcance;
-        ChanceLegendaria = chanceLegendaria;
-        ChanceEpica = chanceEpica;
-        ChanceRara = chanceRara;
-        PorcentajeLegendaria = porcLegendaria;
-        PorcentajeEpica = porcEpica;
-        PorcentajeRara = porcRara;
-        PorcentajeComun = porcComun;
-        DivisorValor = divisorValor;
-        MultiplicadorPrecioTienda = multiplicadorPrecioTienda;
-        PoolComun = poolComun;
-        PoolRaro = poolRaro;
-        PoolRompen = poolRompen;
+        Step = paso;
+        DamageCost = costoDano;
+        CadenceCost = costoCadencia;
+        RangeCost = costoAlcance;
+        LegendaryChance = chanceLegendaria;
+        EpicChance = chanceEpica;
+        RareChance = chanceRara;
+        LegendaryPercent = porcLegendaria;
+        EpicPercent = porcEpica;
+        RarePercent = porcRara;
+        CommonPercent = porcComun;
+        ValueDivisor = divisorValor;
+        ShopPriceMultiplier = multiplicadorPrecioTienda;
+        CommonPool = poolComun;
+        RarePool = poolRaro;
+        BreakerPool = poolRompen;
         Habilidades = habilidades;
-        NombreDano = nombreDano;
-        NombreCadencia = nombreCadencia;
-        NombreAlcance = nombreAlcance;
-        SufijoRara = sufijoRara;
-        SufijoEpica = sufijoEpica;
-        SufijoLegendaria = sufijoLegendaria;
 
         foreach (var h in habilidades)
-            _porHabilidad[h.Habilidad] = h;
+            _porHabilidad[h.Ability] = h;
     }
 
-    public int Paso { get; }
-    public int CostoDano { get; }
-    public int CostoCadencia { get; }
-    public int CostoAlcance { get; }
+    public int Step { get; }
+    public int DamageCost { get; }
+    public int CadenceCost { get; }
+    public int RangeCost { get; }
 
-    public RangoChance ChanceLegendaria { get; }
-    public RangoChance ChanceEpica { get; }
-    public RangoChance ChanceRara { get; }
+    public ChanceRange LegendaryChance { get; }
+    public ChanceRange EpicChance { get; }
+    public ChanceRange RareChance { get; }
 
-    public int PorcentajeLegendaria { get; }
-    public int PorcentajeEpica { get; }
-    public int PorcentajeRara { get; }
-    public int PorcentajeComun { get; }
+    public int LegendaryPercent { get; }
+    public int EpicPercent { get; }
+    public int RarePercent { get; }
+    public int CommonPercent { get; }
 
-    public int DivisorValor { get; }
-    public int MultiplicadorPrecioTienda { get; }
+    public int ValueDivisor { get; }
+    public int ShopPriceMultiplier { get; }
 
-    public HabilidadArma[] PoolComun { get; }
-    public HabilidadArma[] PoolRaro { get; }
-    public HabilidadArma[] PoolRompen { get; }
+    public WeaponAbility[] CommonPool { get; }
+    public WeaponAbility[] RarePool { get; }
+    public WeaponAbility[] BreakerPool { get; }
 
-    public IReadOnlyList<DatoHabilidadArma> Habilidades { get; }
+    public IReadOnlyList<WeaponAbilityData> Habilidades { get; }
 
-    public string NombreDano { get; }
-    public string NombreCadencia { get; }
-    public string NombreAlcance { get; }
+    public WeaponAbilityData? Get(WeaponAbility h) => _porHabilidad.GetValueOrDefault(h);
 
-    public string SufijoRara { get; }
-    public string SufijoEpica { get; }
-    public string SufijoLegendaria { get; }
-
-    public DatoHabilidadArma? Por(HabilidadArma h) => _porHabilidad.GetValueOrDefault(h);
-
-    public int PorcentajeAHabilidad(RarezaArma r) => r switch
+    public int AbilityPercent(WeaponRarity r) => r switch
     {
-        RarezaArma.Legendaria => PorcentajeLegendaria,
-        RarezaArma.Epica => PorcentajeEpica,
-        RarezaArma.Rara => PorcentajeRara,
-        _ => PorcentajeComun,
+        WeaponRarity.Legendary => LegendaryPercent,
+        WeaponRarity.Epic => EpicPercent,
+        WeaponRarity.Rare => RarePercent,
+        _ => CommonPercent,
     };
 
-    public HabilidadArma[] PoolDe(RarezaArma r) => r switch
+    public WeaponAbility[] PoolOf(WeaponRarity r) => r switch
     {
-        RarezaArma.Legendaria => PoolRompen,
-        RarezaArma.Epica => PoolRaro,
-        _ => PoolComun,
+        WeaponRarity.Legendary => BreakerPool,
+        WeaponRarity.Epic => RarePool,
+        _ => CommonPool,
     };
 
-    public string SufijoDe(RarezaArma r) => r switch
-    {
-        RarezaArma.Rara => SufijoRara,
-        RarezaArma.Epica => SufijoEpica,
-        RarezaArma.Legendaria => SufijoLegendaria,
-        _ => "",
-    };
+    public int MagnitudeOf(WeaponAbility h, int presupuesto)
+        => Get(h)?.Magnitude.En(presupuesto) ?? 0;
 
-    public int MagnitudDe(HabilidadArma h, int presupuesto)
-        => Por(h)?.Magnitud.En(presupuesto) ?? 0;
-
-    public string NombreDeHabilidad(HabilidadArma h) => Por(h)?.Nombre ?? "";
-
-    /// <summary>Qué hace la habilidad, en una línea, para la UI.</summary>
-    public string ExplicarHabilidad(HabilidadArma h, int magnitud)
-    {
-        string plantilla = Por(h)?.Explica ?? "";
-
-        return plantilla.Length == 0
-            ? ""
-            : plantilla.Replace("{m}", magnitud.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                System.StringComparison.Ordinal);
-    }
 }
 
 // =============================================================================
@@ -574,7 +534,7 @@ public sealed class TablaArmas
 /// explicación de por qué es ese número es un número que nadie se anima a
 /// tocar.</para>
 /// </remarks>
-public static class LectorTablas
+public static class TableReader
 {
     private static readonly JsonDocumentOptions _opciones = new()
     {
@@ -582,7 +542,7 @@ public static class LectorTablas
         AllowTrailingCommas = true,
     };
 
-    public static JsonDocument Parsear(string texto, string archivo)
+    public static JsonDocument ParseJson(string texto, string archivo)
     {
         try
         {
@@ -590,7 +550,7 @@ public static class LectorTablas
         }
         catch (JsonException e)
         {
-            throw new DatosInvalidosException($"{archivo}: no es JSON válido — {e.Message}");
+            throw new InvalidBalanceDataException($"{archivo}: no es JSON válido — {e.Message}");
         }
     }
 
@@ -602,19 +562,19 @@ public static class LectorTablas
     private static JsonElement Obj(JsonElement padre, string prop, string archivo)
     {
         if (!padre.TryGetProperty(prop, out var e) || e.ValueKind != JsonValueKind.Object)
-            throw new DatosInvalidosException($"{archivo}: falta el objeto «{prop}»");
+            throw new InvalidBalanceDataException($"{archivo}: falta el objeto «{prop}»");
 
         return e;
     }
 
-    private static int Ent(JsonElement padre, string prop, string archivo)
+    private static int Int(JsonElement padre, string prop, string archivo)
     {
         if (!padre.TryGetProperty(prop, out var e) || e.ValueKind != JsonValueKind.Number)
-            throw new DatosInvalidosException($"{archivo}: falta el número «{prop}»");
+            throw new InvalidBalanceDataException($"{archivo}: falta el número «{prop}»");
 
         if (!e.TryGetInt32(out int v))
         {
-            throw new DatosInvalidosException(
+            throw new InvalidBalanceDataException(
                 $"{archivo}: «{prop}» tiene que ser un entero. " +
                 "Dentro de la simulación no existen los decimales (JUGABILIDAD.md §4).");
         }
@@ -622,7 +582,7 @@ public static class LectorTablas
         return v;
     }
 
-    private static int EntOpcional(JsonElement padre, string prop, int porDefecto)
+    private static int OptionalInt(JsonElement padre, string prop, int porDefecto)
         => padre.TryGetProperty(prop, out var e) && e.ValueKind == JsonValueKind.Number
            && e.TryGetInt32(out int v) ? v : porDefecto;
 
@@ -631,37 +591,37 @@ public static class LectorTablas
             ? e.ValueKind == JsonValueKind.True
             : porDefecto;
 
-    private static string Texto(JsonElement padre, string prop, string archivo)
+    private static string Text(JsonElement padre, string prop, string archivo)
     {
         if (!padre.TryGetProperty(prop, out var e) || e.ValueKind != JsonValueKind.String)
-            throw new DatosInvalidosException($"{archivo}: falta el texto «{prop}»");
+            throw new InvalidBalanceDataException($"{archivo}: falta el texto «{prop}»");
 
         return e.GetString() ?? "";
     }
 
-    private static string TextoOpcional(JsonElement padre, string prop)
+    private static string OptionalText(JsonElement padre, string prop)
         => padre.TryGetProperty(prop, out var e) && e.ValueKind == JsonValueKind.String
             ? e.GetString() ?? ""
             : "";
 
-    private static JsonElement Lista(JsonElement padre, string prop, string archivo)
+    private static JsonElement ArrayOf(JsonElement padre, string prop, string archivo)
     {
         if (!padre.TryGetProperty(prop, out var e) || e.ValueKind != JsonValueKind.Array)
-            throw new DatosInvalidosException($"{archivo}: falta la lista «{prop}»");
+            throw new InvalidBalanceDataException($"{archivo}: falta la lista «{prop}»");
 
         return e;
     }
 
-    private static int[] Enteros_(JsonElement padre, string prop, string archivo)
+    private static int[] IntArrayOf(JsonElement padre, string prop, string archivo)
     {
-        var arr = Lista(padre, prop, archivo);
+        var arr = ArrayOf(padre, prop, archivo);
         var salida = new int[arr.GetArrayLength()];
         int i = 0;
 
         foreach (var v in arr.EnumerateArray())
         {
             if (v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out salida[i]))
-                throw new DatosInvalidosException($"{archivo}: «{prop}[{i}]» no es un entero");
+                throw new InvalidBalanceDataException($"{archivo}: «{prop}[{i}]» no es un entero");
 
             i++;
         }
@@ -674,46 +634,46 @@ public static class LectorTablas
         if (System.Enum.TryParse<T>(valor, ignoreCase: true, out var v))
             return v;
 
-        throw new DatosInvalidosException(
+        throw new InvalidBalanceDataException(
             $"{archivo}: «{prop}» dice «{valor}», que no es un {typeof(T).Name} válido. " +
             $"Valores posibles: {string.Join(", ", System.Enum.GetNames<T>())}.");
     }
 
-    private static Clase[] ClasesDe(JsonElement padre, string archivo)
+    private static DefenderClass[] ClassesOf(JsonElement padre, string archivo)
     {
-        if (!padre.TryGetProperty("clases", out var arr) || arr.ValueKind != JsonValueKind.Array)
+        if (!padre.TryGetProperty("classes", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return [];
 
-        var lista = new List<Clase>();
+        var lista = new List<DefenderClass>();
 
         foreach (var v in arr.EnumerateArray())
-            lista.Add(Enum_<Clase>(v.GetString() ?? "", "clases", archivo));
+            lista.Add(Enum_<DefenderClass>(v.GetString() ?? "", "classes", archivo));
 
         return [.. lista];
     }
 
-    private static CurvaLineal Curva(JsonElement padre, string prop, string archivo)
+    private static LinearCurve Curve(JsonElement padre, string prop, string archivo)
     {
         var e = Obj(padre, prop, archivo);
-        return new CurvaLineal(Ent(e, "base", archivo), Ent(e, "porOleada", archivo));
+        return new LinearCurve(Int(e, "base", archivo), Int(e, "perWave", archivo));
     }
 
-    private static RangoChance Rango(JsonElement padre, string prop, string archivo)
+    private static ChanceRange Between(JsonElement padre, string prop, string archivo)
     {
         var e = Obj(padre, prop, archivo);
-        return new RangoChance(Ent(e, "divisor", archivo), Ent(e, "min", archivo), Ent(e, "max", archivo));
+        return new ChanceRange(Int(e, "divisor", archivo), Int(e, "min", archivo), Int(e, "max", archivo));
     }
 
-    private static HabilidadArma[] Pool(JsonElement padre, string prop, string archivo)
+    private static WeaponAbility[] Pool(JsonElement padre, string prop, string archivo)
     {
-        var arr = Lista(padre, prop, archivo);
-        var lista = new List<HabilidadArma>();
+        var arr = ArrayOf(padre, prop, archivo);
+        var lista = new List<WeaponAbility>();
 
         foreach (var v in arr.EnumerateArray())
-            lista.Add(Enum_<HabilidadArma>(v.GetString() ?? "", prop, archivo));
+            lista.Add(Enum_<WeaponAbility>(v.GetString() ?? "", prop, archivo));
 
         if (lista.Count == 0)
-            throw new DatosInvalidosException($"{archivo}: el pool «{prop}» está vacío");
+            throw new InvalidBalanceDataException($"{archivo}: el pool «{prop}» está vacío");
 
         return [.. lista];
     }
@@ -722,24 +682,24 @@ public static class LectorTablas
     //  clases.json
     // -------------------------------------------------------------------------
 
-    public static TablaClases Clases(string texto)
+    public static ClassTable Classes(string texto)
     {
         const string archivo = "clases.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var lista = new List<DatoClase>();
-        var vistas = new HashSet<Clase>();
+        var lista = new List<ClassData>();
+        var vistas = new HashSet<DefenderClass>();
 
-        foreach (var c in Lista(raiz, "clases", archivo).EnumerateArray())
+        foreach (var c in ArrayOf(raiz, "classes", archivo).EnumerateArray())
         {
-            var clase = Enum_<Clase>(Texto(c, "clase", archivo), "clase", archivo);
+            var clase = Enum_<DefenderClass>(Text(c, "class", archivo), "class", archivo);
 
             if (!vistas.Add(clase))
-                throw new DatosInvalidosException($"{archivo}: la clase «{clase}» está dos veces");
+                throw new InvalidBalanceDataException($"{archivo}: la clase «{clase}» está dos veces");
 
-            int alcance = Ent(c, "alcance", archivo);
+            int alcance = Int(c, "range", archivo);
 
             // ⚠ Con alcance 1 y distancia euclídea, una celda EN DIAGONAL queda a
             // √2 ≈ 1,41 y no entra: cubriría solo las cuatro ortogonales. Un
@@ -747,34 +707,34 @@ public static class LectorTablas
             // nada, y el jugador no tendría forma de saber por qué.
             if (alcance < 2)
             {
-                throw new DatosInvalidosException(
+                throw new InvalidBalanceDataException(
                     $"{archivo}: «{clase}» tiene alcance {alcance}. El mínimo es 2: " +
                     "con 1 no entran las diagonales y el defensor no toca nada.");
             }
 
-            int cadencia = Ent(c, "cadencia", archivo);
+            int cadencia = Int(c, "cadence", archivo);
 
             if (cadencia < 1)
-                throw new DatosInvalidosException($"{archivo}: «{clase}» tiene cadencia {cadencia}, tiene que ser 1 o más");
+                throw new InvalidBalanceDataException($"{archivo}: «{clase}» tiene cadencia {cadencia}, tiene que ser 1 o más");
 
-            lista.Add(new DatoClase(
+            lista.Add(new ClassData(
                 clase,
-                Ent(c, "costo", archivo),
-                Ent(c, "dano", archivo),
+                Int(c, "cost", archivo),
+                Int(c, "damage", archivo),
                 alcance,
                 cadencia,
-                Bool(c, "soporte", false)));
+                Bool(c, "support", false)));
         }
 
-        var tabla = new TablaClases(
+        var tabla = new ClassTable(
             [.. lista],
-            Ent(raiz, "extraDanoPorNivel", archivo),
-            Ent(raiz, "slotsPerkPorClase", archivo));
+            Int(raiz, "extraDamagePerLevel", archivo),
+            Int(raiz, "perkSlotsPerClass", archivo));
 
         // ⚠ Sin al menos una ofensiva, la elección inicial puede repartir tres
         // soportes y la corrida está perdida antes de empezar.
-        if (tabla.Ofensivas().Length == 0)
-            throw new DatosInvalidosException($"{archivo}: todas las clases son «soporte». Al menos una tiene que poder pelear sola.");
+        if (tabla.Offensive().Length == 0)
+            throw new InvalidBalanceDataException($"{archivo}: todas las clases son «soporte». Al menos una tiene que poder pelear sola.");
 
         return tabla;
     }
@@ -783,108 +743,112 @@ public static class LectorTablas
     //  perks.json
     // -------------------------------------------------------------------------
 
-    public static TablaPerks Perks(string texto)
+    public static PerkTable Perks(string texto)
     {
         const string archivo = "perks.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var apilado = Obj(raiz, "maxApiladoPorTier", archivo);
+        var apilado = Obj(raiz, "maxStackedPerTier", archivo);
 
-        int MaxDe(TierPerk t) => t switch
+        int MaxDe(PerkTier t) => t switch
         {
-            TierPerk.Bronce => Ent(apilado, "bronce", archivo),
-            TierPerk.Plata => Ent(apilado, "plata", archivo),
-            TierPerk.Oro => Ent(apilado, "oro", archivo),
-            _ => Ent(apilado, "unico", archivo),
+            PerkTier.Bronze => Int(apilado, "bronze", archivo),
+            PerkTier.Silver => Int(apilado, "silver", archivo),
+            PerkTier.Gold => Int(apilado, "gold", archivo),
+            _ => Int(apilado, "unique", archivo),
         };
 
-        var lista = new List<DefinicionPerk>();
+        var lista = new List<PerkDefinition>();
         var ids = new HashSet<int>();
-        var nombres = new HashSet<string>(System.StringComparer.Ordinal);
+        var claves = new HashSet<string>(System.StringComparer.Ordinal);
 
-        foreach (var p in Lista(raiz, "perks", archivo).EnumerateArray())
+        foreach (var p in ArrayOf(raiz, "perks", archivo).EnumerateArray())
         {
-            int id = Ent(p, "id", archivo);
-            string nombre = Texto(p, "nombre", archivo);
+            int id = Int(p, "id", archivo);
+            string clave = Text(p, "key", archivo);
 
             if (!ids.Add(id))
             {
-                throw new DatosInvalidosException(
-                    $"{archivo}: el id {id} está repetido (segundo: «{nombre}»). " +
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: el id {id} está repetido (segundo: «{clave}»). " +
                     "Los ids se escriben a mano y los guarda la mochila: tienen que ser únicos.");
             }
 
-            if (!nombres.Add(nombre))
-                throw new DatosInvalidosException($"{archivo}: el nombre «{nombre}» está repetido. planos.json referencia por nombre.");
+            if (!claves.Add(clave))
+            {
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: la key «{clave}» está repetida. " +
+                    "planos.json y los archivos de idioma referencian por key.");
+            }
 
-            var tier = Enum_<TierPerk>(Texto(p, "tier", archivo), "tier", archivo);
-            var efecto = Enum_<EfectoPerk>(Texto(p, "efecto", archivo), "efecto", archivo);
+            var tier = Enum_<PerkTier>(Text(p, "tier", archivo), "tier", archivo);
+            var efecto = Enum_<PerkEffect>(Text(p, "effect", archivo), "effect", archivo);
 
-            lista.Add(new DefinicionPerk
+            lista.Add(new PerkDefinition
             {
                 Id = id,
-                Nombre = nombre,
+                Key = clave,
                 Tier = tier,
-                Efecto = efecto,
-                Magnitud = Ent(p, "magnitud", archivo),
-                Clases = ClasesDe(p, archivo),
-                MaxApilado = EntOpcional(p, "maxApilado", MaxDe(tier)),
+                Effect = efecto,
+                Magnitude = Int(p, "magnitude", archivo),
+                Classes = ClassesOf(p, archivo),
+                MaxStacked = OptionalInt(p, "maxStacked", MaxDe(tier)),
             });
         }
 
         if (lista.Count == 0)
-            throw new DatosInvalidosException($"{archivo}: no trae perks");
+            throw new InvalidBalanceDataException($"{archivo}: no trae perks");
 
-        return new TablaPerks([.. lista]);
+        return new PerkTable([.. lista]);
     }
 
     // -------------------------------------------------------------------------
     //  planos.json
     // -------------------------------------------------------------------------
 
-    public static TablaPlanos Planos(string texto, TablaPerks perks)
+    public static BlueprintTable Blueprints(string texto, PerkTable perks)
     {
         const string archivo = "planos.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var lista = new List<Plano>();
+        var lista = new List<Blueprint>();
 
-        int IdDe(string nombre, string campo)
+        int IdOf(string clave, string campo)
         {
-            var p = perks.PorNombre(nombre)
-                ?? throw new DatosInvalidosException(
-                    $"{archivo}: «{campo}» dice «{nombre}», que no existe en perks.json");
+            var p = perks.ByKey(clave)
+                ?? throw new InvalidBalanceDataException(
+                    $"{archivo}: «{campo}» dice «{clave}», que no es la key de ningún perk de perks.json");
 
             return p.Id;
         }
 
-        foreach (var e in Lista(raiz, "planos", archivo).EnumerateArray())
+        foreach (var e in ArrayOf(raiz, "blueprints", archivo).EnumerateArray())
         {
-            string nombre = Texto(e, "nombre", archivo);
-            string oroA = Texto(e, "oroA", archivo);
-            string oroB = Texto(e, "oroB", archivo);
+            string clave = Text(e, "key", archivo);
+            string oroA = Text(e, "goldA", archivo);
+            string oroB = Text(e, "goldB", archivo);
 
             if (string.Equals(oroA, oroB, System.StringComparison.Ordinal))
-                throw new DatosInvalidosException($"{archivo}: «{nombre}» fusiona «{oroA}» consigo mismo");
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» fusiona «{oroA}» consigo mismo");
 
-            int idA = IdDe(oroA, "oroA");
-            int idB = IdDe(oroB, "oroB");
-            int idResultante = IdDe(nombre, "nombre");
+            int idA = IdOf(oroA, "goldA");
+            int idB = IdOf(oroB, "goldB");
+            int idResultante = IdOf(clave, "key");
 
             // ⚠ Dos Oro dan un Único. Cualquier otra combinación es un bug de
             // datos: un plano que consume un Bronce vaciaría el sentido de que el
             // jefe sea la única fuente de Oro.
-            if (perks.Por(idA).Tier != TierPerk.Oro || perks.Por(idB).Tier != TierPerk.Oro)
-                throw new DatosInvalidosException($"{archivo}: «{nombre}» tiene que fusionar dos perks de tier «oro»");
+            if (perks.Get(idA).Tier != PerkTier.Gold || perks.Get(idB).Tier != PerkTier.Gold)
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene que fusionar dos perks de tier «gold»");
 
-            if (perks.Por(idResultante).Tier != TierPerk.Unico)
-                throw new DatosInvalidosException($"{archivo}: «{nombre}» tiene que producir un perk de tier «unico»");
+            if (perks.Get(idResultante).Tier != PerkTier.Unique)
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene que producir un perk de tier «unique»");
 
-            lista.Add(new Plano(nombre, idA, idB, idResultante, Bool(e, "inicial", false)));
+            lista.Add(new Blueprint(clave, idA, idB, idResultante, Bool(e, "initial", false)));
         }
 
         // ⚠ Sin al menos una receta conocida de arranque, un jugador nuevo nunca
@@ -893,95 +857,85 @@ public static class LectorTablas
         bool hayInicial = false;
 
         foreach (var p in lista)
-            hayInicial |= p.Inicial;
+            hayInicial |= p.Initial;
 
         if (lista.Count > 0 && !hayInicial)
-            throw new DatosInvalidosException($"{archivo}: ningún plano tiene «inicial: true». Tiene que haber al menos uno.");
+            throw new InvalidBalanceDataException($"{archivo}: ningún plano tiene «initial: true». Tiene que haber al menos uno.");
 
-        return new TablaPlanos([.. lista]);
+        return new BlueprintTable([.. lista]);
     }
 
     // -------------------------------------------------------------------------
     //  generador-armas.json
     // -------------------------------------------------------------------------
 
-    public static TablaArmas Armas(string texto)
+    public static WeaponTable Weapons(string texto)
     {
         const string archivo = "generador-armas.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var afijos = Obj(raiz, "afijos", archivo);
-        var rareza = Obj(raiz, "rareza", archivo);
-        var porc = Obj(raiz, "porcentajeAHabilidad", archivo);
-        var valor = Obj(raiz, "valor", archivo);
+        var afijos = Obj(raiz, "affixes", archivo);
+        var rareza = Obj(raiz, "rarity", archivo);
+        var porc = Obj(raiz, "abilityPercent", archivo);
+        var valor = Obj(raiz, "value", archivo);
         var pools = Obj(raiz, "pools", archivo);
-        var nombres = Obj(raiz, "nombresBase", archivo);
-        var sufijos = Obj(raiz, "sufijoRareza", archivo);
 
-        var habilidades = new List<DatoHabilidadArma>();
-        var vistas = new HashSet<HabilidadArma>();
+        var habilidades = new List<WeaponAbilityData>();
+        var vistas = new HashSet<WeaponAbility>();
 
-        foreach (var h in Lista(raiz, "habilidades", archivo).EnumerateArray())
+        foreach (var h in ArrayOf(raiz, "abilities", archivo).EnumerateArray())
         {
-            var cual = Enum_<HabilidadArma>(Texto(h, "habilidad", archivo), "habilidad", archivo);
+            var cual = Enum_<WeaponAbility>(Text(h, "ability", archivo), "ability", archivo);
 
             if (!vistas.Add(cual))
-                throw new DatosInvalidosException($"{archivo}: la habilidad «{cual}» está dos veces");
+                throw new InvalidBalanceDataException($"{archivo}: la habilidad «{cual}» está dos veces");
 
-            habilidades.Add(new DatoHabilidadArma(
+            habilidades.Add(new WeaponAbilityData(
                 cual,
-                new FormulaMagnitud(
-                    Ent(h, "base", archivo),
-                    Ent(h, "divisor", archivo),
-                    Ent(h, "min", archivo),
-                    Ent(h, "max", archivo)),
-                Texto(h, "nombre", archivo),
-                TextoOpcional(h, "explica")));
+                new MagnitudeFormula(
+                    Int(h, "base", archivo),
+                    Int(h, "divisor", archivo),
+                    Int(h, "min", archivo),
+                    Int(h, "max", archivo))));
         }
 
-        var tabla = new TablaArmas(
-            Ent(afijos, "paso", archivo),
-            Ent(afijos, "costoPuntoDano", archivo),
-            Ent(afijos, "costoPuntoCadencia", archivo),
-            Ent(afijos, "costoPuntoAlcance", archivo),
-            Rango(rareza, "legendaria", archivo),
-            Rango(rareza, "epica", archivo),
-            Rango(rareza, "rara", archivo),
-            Ent(porc, "legendaria", archivo),
-            Ent(porc, "epica", archivo),
-            Ent(porc, "rara", archivo),
-            Ent(porc, "comun", archivo),
-            Ent(valor, "divisorValor", archivo),
-            Ent(valor, "multiplicadorPrecioTienda", archivo),
-            Pool(pools, "comun", archivo),
-            Pool(pools, "rara", archivo),
-            Pool(pools, "rompen", archivo),
-            [.. habilidades],
-            Texto(nombres, "dano", archivo),
-            Texto(nombres, "cadencia", archivo),
-            Texto(nombres, "alcance", archivo),
-            Texto(sufijos, "rara", archivo),
-            Texto(sufijos, "epica", archivo),
-            Texto(sufijos, "legendaria", archivo));
+        var tabla = new WeaponTable(
+            Int(afijos, "step", archivo),
+            Int(afijos, "damagePointCost", archivo),
+            Int(afijos, "cadencePointCost", archivo),
+            Int(afijos, "rangePointCost", archivo),
+            Between(rareza, "legendary", archivo),
+            Between(rareza, "epic", archivo),
+            Between(rareza, "rare", archivo),
+            Int(porc, "legendary", archivo),
+            Int(porc, "epic", archivo),
+            Int(porc, "rare", archivo),
+            Int(porc, "common", archivo),
+            Int(valor, "valueDivisor", archivo),
+            Int(valor, "shopPriceMultiplier", archivo),
+            Pool(pools, "common", archivo),
+            Pool(pools, "rare", archivo),
+            Pool(pools, "breakers", archivo),
+            [.. habilidades]);
 
         // Toda habilidad que un pool puede tirar necesita su fórmula, o el arma
         // saldría con magnitud 0 y la habilidad no haría nada.
-        foreach (var pool in new[] { tabla.PoolComun, tabla.PoolRaro, tabla.PoolRompen })
+        foreach (var pool in new[] { tabla.CommonPool, tabla.RarePool, tabla.BreakerPool })
         {
             foreach (var h in pool)
             {
-                if (tabla.Por(h) is null)
-                    throw new DatosInvalidosException($"{archivo}: «{h}» está en un pool pero no tiene fórmula en «habilidades»");
+                if (tabla.Get(h) is null)
+                    throw new InvalidBalanceDataException($"{archivo}: «{h}» está en un pool pero no tiene fórmula en «habilidades»");
             }
         }
 
-        if (tabla.DivisorValor == 0)
-            throw new DatosInvalidosException($"{archivo}: «divisorValor» no puede ser 0");
+        if (tabla.ValueDivisor == 0)
+            throw new InvalidBalanceDataException($"{archivo}: «divisorValor» no puede ser 0");
 
-        if (tabla.Paso < 1)
-            throw new DatosInvalidosException($"{archivo}: «paso» tiene que ser 1 o más");
+        if (tabla.Step < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «paso» tiene que ser 1 o más");
 
         return tabla;
     }
@@ -990,44 +944,44 @@ public static class LectorTablas
     //  curvas.json
     // -------------------------------------------------------------------------
 
-    public static DatoCurvas Curvas(string texto)
+    public static CurveData Curves(string texto)
     {
         const string archivo = "curvas.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var torre = Obj(raiz, "torre", archivo);
-        var corrida = Obj(raiz, "corrida", archivo);
-        var defensores = Obj(raiz, "defensores", archivo);
-        var economia = Obj(raiz, "economia", archivo);
-        var presupuesto = Obj(raiz, "presupuesto", archivo);
-        var porOleada = Obj(raiz, "curvasPorOleada", archivo);
-        var tienda = Obj(raiz, "tienda", archivo);
+        var torre = Obj(raiz, "tower", archivo);
+        var corrida = Obj(raiz, "run", archivo);
+        var defensores = Obj(raiz, "defenders", archivo);
+        var economia = Obj(raiz, "economy", archivo);
+        var presupuesto = Obj(raiz, "budget", archivo);
+        var porOleada = Obj(raiz, "perWaveCurves", archivo);
+        var tienda = Obj(raiz, "shop", archivo);
         var drops = Obj(raiz, "drops", archivo);
-        var oleada = Obj(raiz, "oleada", archivo);
-        var perksNpc = Obj(raiz, "perksNpc", archivo);
-        var jefe = Obj(raiz, "jefe", archivo);
+        var oleada = Obj(raiz, "wave", archivo);
+        var perksNpc = Obj(raiz, "npcPerks", archivo);
+        var jefe = Obj(raiz, "boss", archivo);
 
-        int oleadas = Ent(corrida, "oleadasPorCorrida", archivo);
-        int[] ultimaPorArea = Enteros_(corrida, "ultimaOleadaPorArea", archivo);
-        int areas = Ent(corrida, "cantidadAreas", archivo);
+        int oleadas = Int(corrida, "wavesPerRun", archivo);
+        int[] ultimaPorArea = IntArrayOf(corrida, "lastWavePerArea", archivo);
+        int areas = Int(corrida, "areaCount", archivo);
 
         if (ultimaPorArea.Length != areas)
         {
-            throw new DatosInvalidosException(
+            throw new InvalidBalanceDataException(
                 $"{archivo}: «cantidadAreas» dice {areas} pero «ultimaOleadaPorArea» trae {ultimaPorArea.Length} números");
         }
 
         if (areas == 0)
-            throw new DatosInvalidosException($"{archivo}: «cantidadAreas» no puede ser 0");
+            throw new InvalidBalanceDataException($"{archivo}: «cantidadAreas» no puede ser 0");
 
         // ⚠ La corrida son 100 oleadas y TERMINA ahí, matando al jefe final del
         // área 8. Si la última del reparto no coincide con el total, o queda una
         // corrida que nunca termina o queda un área a la que no se llega nunca.
         if (ultimaPorArea[^1] != oleadas)
         {
-            throw new DatosInvalidosException(
+            throw new InvalidBalanceDataException(
                 $"{archivo}: la última área termina en la oleada {ultimaPorArea[^1]} pero la corrida son {oleadas}. " +
                 "Tienen que coincidir: no hay modo sin fin.");
         }
@@ -1035,104 +989,104 @@ public static class LectorTablas
         for (int i = 1; i < ultimaPorArea.Length; i++)
         {
             if (ultimaPorArea[i] <= ultimaPorArea[i - 1])
-                throw new DatosInvalidosException($"{archivo}: «ultimaOleadaPorArea» tiene que ir en aumento (área {i + 1})");
+                throw new InvalidBalanceDataException($"{archivo}: «ultimaOleadaPorArea» tiene que ir en aumento (área {i + 1})");
         }
 
-        var intervalo = Obj(porOleada, "intervaloSpawnTicks", archivo);
-        var chancePerk = Obj(porOleada, "chancePerkNpc", archivo);
-        var costoNpc = Obj(oleada, "costoNpc", archivo);
+        var intervalo = Obj(porOleada, "spawnIntervalTicks", archivo);
+        var chancePerk = Obj(porOleada, "npcPerkChance", archivo);
+        var costoNpc = Obj(oleada, "npcCost", archivo);
 
-        var curvas = new DatoCurvas(
-            new DatoTorre(
-                Ent(torre, "hpInicial", archivo),
-                Ent(torre, "dano", archivo),
-                Ent(torre, "cadenciaTicks", archivo)),
+        var curvas = new CurveData(
+            new TowerData(
+                Int(torre, "initialHp", archivo),
+                Int(torre, "damage", archivo),
+                Int(torre, "cadenceTicks", archivo)),
 
-            new DatoCorrida(
+            new RunData(
                 oleadas,
                 areas,
                 ultimaPorArea,
-                Ent(corrida, "oleadasEntreElecciones", archivo),
-                Ent(corrida, "segundosDePreparacion", archivo)),
+                Int(corrida, "wavesBetweenChoices", archivo),
+                Int(corrida, "preparationSeconds", archivo)),
 
-            new DatoDefensores(
-                Ent(defensores, "lugaresMochila", archivo),
-                Ent(defensores, "slotsEquipoPorClase", archivo),
-                Ent(defensores, "porcentajeVentaDefensor", archivo),
-                Ent(defensores, "porcentajeVentaArma", archivo)),
+            new DefenderData(
+                Int(defensores, "backpackSlots", archivo),
+                Int(defensores, "gearSlotsPerClass", archivo),
+                Int(defensores, "defenderSellPercent", archivo),
+                Int(defensores, "weaponSellPercent", archivo)),
 
-            new DatoEconomia(
-                Ent(economia, "fichasDeOroInicial", archivo),
-                Ent(economia, "oroPorEnemigoAdelantado", archivo),
-                Ent(economia, "topeOroPorAdelantar", archivo)),
+            new EconomyData(
+                Int(economia, "startingGoldTokens", archivo),
+                Int(economia, "goldPerCalledEnemy", archivo),
+                Int(economia, "callGoldCap", archivo)),
 
-            new DatoPresupuesto(
-                Ent(presupuesto, "base", archivo),
-                Ent(presupuesto, "cuadratico", archivo),
-                Ent(presupuesto, "capEquivalenteMin", archivo),
-                Ent(presupuesto, "capEquivalenteMax", archivo)),
+            new BudgetData(
+                Int(presupuesto, "base", archivo),
+                Int(presupuesto, "quadratic", archivo),
+                Int(presupuesto, "equivalentCapMin", archivo),
+                Int(presupuesto, "equivalentCapMax", archivo)),
 
-            new DatoCurvasPorOleada(
-                Curva(porOleada, "bonusOroLimpiar", archivo),
-                Curva(porOleada, "presupuestoDropJefe", archivo),
-                Curva(porOleada, "presupuestoItemTienda", archivo),
-                Ent(intervalo, "base", archivo),
-                Ent(intervalo, "divisor", archivo),
-                Ent(intervalo, "min", archivo),
-                Ent(intervalo, "max", archivo),
-                Ent(chancePerk, "divisor", archivo),
-                Ent(chancePerk, "min", archivo),
-                Ent(chancePerk, "max", archivo)),
+            new PerWaveCurves(
+                Curve(porOleada, "clearGoldBonus", archivo),
+                Curve(porOleada, "bossDropBudget", archivo),
+                Curve(porOleada, "shopItemBudget", archivo),
+                Int(intervalo, "base", archivo),
+                Int(intervalo, "divisor", archivo),
+                Int(intervalo, "min", archivo),
+                Int(intervalo, "max", archivo),
+                Int(chancePerk, "divisor", archivo),
+                Int(chancePerk, "min", archivo),
+                Int(chancePerk, "max", archivo)),
 
-            new DatoTienda(
-                Ent(tienda, "perksEnStock", archivo),
-                Ent(tienda, "armasEnStock", archivo),
-                Ent(tienda, "chanceBronce", archivo),
-                Curva(tienda, "precioPerkBronce", archivo),
-                Curva(tienda, "precioPerkPlata", archivo)),
+            new ShopData(
+                Int(tienda, "perksInStock", archivo),
+                Int(tienda, "weaponsInStock", archivo),
+                Int(tienda, "bronzeChance", archivo),
+                Curve(tienda, "bronzePerkPrice", archivo),
+                Curve(tienda, "silverPerkPrice", archivo)),
 
-            new DatoDrops(
-                Ent(drops, "chanceComun", archivo),
-                Ent(drops, "chanceBronce", archivo)),
+            new DropData(
+                Int(drops, "commonChance", archivo),
+                Int(drops, "bronzeChance", archivo)),
 
-            new DatoOleada(
-                Ent(oleada, "maxNpcs", archivo),
-                Ent(oleada, "pesoAreaActual", archivo),
-                Ent(oleada, "pesoAreaAnterior", archivo),
-                Ent(costoNpc, "divisorHp", archivo),
-                Ent(costoNpc, "divisorDanoMax", archivo),
-                Ent(costoNpc, "divisorVelocidad", archivo),
-                Ent(oleada, "intervaloSpawnPorDefecto", archivo)),
+            new WaveData(
+                Int(oleada, "maxNpcs", archivo),
+                Int(oleada, "currentAreaWeight", archivo),
+                Int(oleada, "previousAreaWeight", archivo),
+                Int(costoNpc, "hpDivisor", archivo),
+                Int(costoNpc, "maxDamageDivisor", archivo),
+                Int(costoNpc, "speedDivisor", archivo),
+                Int(oleada, "defaultSpawnInterval", archivo)),
 
-            new DatoPerksNpc(
-                Ent(perksNpc, "costoVida", archivo),
-                Ent(perksNpc, "costoVelocidad", archivo),
-                Ent(perksNpc, "escalonVida", archivo),
-                Ent(perksNpc, "escalonVelocidad", archivo),
-                Ent(perksNpc, "maxVida", archivo),
-                Ent(perksNpc, "maxVelocidad", archivo),
-                Ent(perksNpc, "chanceVidaEnLaTirada", archivo),
-                Ent(perksNpc, "chanceVelocidadEnSobrante", archivo)),
+            new NpcPerkData(
+                Int(perksNpc, "healthCost", archivo),
+                Int(perksNpc, "speedCost", archivo),
+                Int(perksNpc, "healthStep", archivo),
+                Int(perksNpc, "speedStep", archivo),
+                Int(perksNpc, "maxHealth", archivo),
+                Int(perksNpc, "maxSpeed", archivo),
+                Int(perksNpc, "healthChanceInRoll", archivo),
+                Int(perksNpc, "speedChanceInLeftover", archivo)),
 
-            new DatoJefe(
-                Ent(jefe, "divisorVidaExtra", archivo),
-                Ent(jefe, "maxVidaExtra", archivo),
-                TextoOpcional(jefe, "nombreJefeFinal")));
+            new BossData(
+                Int(jefe, "extraHealthDivisor", archivo),
+                Int(jefe, "maxExtraHealth", archivo),
+                OptionalText(jefe, "finalBossName")));
 
         // ⚠ Sin tope de NPCs una oleada tardía compra miles de bichos: no es más
         // difícil, es más larga. Medido: corridas clavadas contra el techo de
         // 700.000 ticks en la oleada 55.
-        if (curvas.Oleada.MaxNpcs < 1)
-            throw new DatosInvalidosException($"{archivo}: «maxNpcs» tiene que ser 1 o más");
+        if (curvas.Wave.MaxNpcs < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «maxNpcs» tiene que ser 1 o más");
 
-        if (curvas.Oleada.DivisorHp == 0 || curvas.Oleada.DivisorDanoMax == 0 || curvas.Oleada.DivisorVelocidad == 0)
-            throw new DatosInvalidosException($"{archivo}: ningún divisor de «costoNpc» puede ser 0");
+        if (curvas.Wave.HpDivisor == 0 || curvas.Wave.MaxDamageDivisor == 0 || curvas.Wave.SpeedDivisor == 0)
+            throw new InvalidBalanceDataException($"{archivo}: ningún divisor de «costoNpc» puede ser 0");
 
-        if (curvas.Jefe.DivisorVidaExtra == 0)
-            throw new DatosInvalidosException($"{archivo}: «divisorVidaExtra» no puede ser 0");
+        if (curvas.Boss.ExtraHealthDivisor == 0)
+            throw new InvalidBalanceDataException($"{archivo}: «divisorVidaExtra» no puede ser 0");
 
-        if (curvas.Torre.CadenciaTicks < 1)
-            throw new DatosInvalidosException($"{archivo}: la cadencia de la Torre tiene que ser 1 tick o más");
+        if (curvas.Tower.CadenceTicks < 1)
+            throw new InvalidBalanceDataException($"{archivo}: la cadencia de la Tower tiene que ser 1 tick o más");
 
         return curvas;
     }
@@ -1141,65 +1095,65 @@ public static class LectorTablas
     //  combate.json
     // -------------------------------------------------------------------------
 
-    public static DatoCombate Combate(string texto)
+    public static CombatData Combat(string texto)
     {
         const string archivo = "combate.json";
 
-        using var doc = Parsear(texto, archivo);
+        using var doc = ParseJson(texto, archivo);
         var raiz = doc.RootElement;
 
-        var enemigo = Obj(raiz, "enemigo", archivo);
-        var slow = Obj(raiz, "ralentizar", archivo);
-        var comp = Obj(raiz, "comportamientos", archivo);
-        var arma = Obj(raiz, "habilidadesArma", archivo);
+        var enemigo = Obj(raiz, "enemy", archivo);
+        var slow = Obj(raiz, "slow", archivo);
+        var comp = Obj(raiz, "behaviors", archivo);
+        var arma = Obj(raiz, "weaponAbilities", archivo);
 
-        var combate = new DatoCombate(
-            Ent(enemigo, "divisorPromedioDano", archivo),
-            Ent(enemigo, "danoMinimo", archivo),
+        var combate = new CombatData(
+            Int(enemigo, "damageAverageDivisor", archivo),
+            Int(enemigo, "minimumDamage", archivo),
 
-            Ent(slow, "topePorciento", archivo),
-            Ent(slow, "duracionTicks", archivo),
+            Int(slow, "capPercent", archivo),
+            Int(slow, "durationTicks", archivo),
 
-            Ent(comp, "ventanaSaltoRicochetCeldas", archivo),
-            Ent(comp, "radioSplashCeldas", archivo),
-            Ent(comp, "rebotesRicochet", archivo),
-            Ent(comp, "rebotesPerforacion", archivo),
-            Ent(comp, "rebotesApocalipsis", archivo),
-            Ent(comp, "maxSecundariosSplashOro", archivo),
-            Ent(comp, "maxSecundariosOndaDeFrio", archivo),
-            Ent(comp, "maxSecundariosIraDeDiosYTormentaDivina", archivo),
-            Ent(comp, "slowTerribleHambre", archivo),
-            Ent(comp, "divisorPenetrante", archivo),
-            Ent(comp, "golpesPorCritico", archivo),
+            Int(comp, "ricochetJumpWindowCells", archivo),
+            Int(comp, "splashRadiusCells", archivo),
+            Int(comp, "ricochetBounces", archivo),
+            Int(comp, "perforationBounces", archivo),
+            Int(comp, "apocalypseBounces", archivo),
+            Int(comp, "maxGoldSplashSecondaries", archivo),
+            Int(comp, "maxFrostWaveSecondaries", archivo),
+            Int(comp, "maxDivineSecondaries", archivo),
+            Int(comp, "terribleHungerSlow", archivo),
+            Int(comp, "piercingDivisor", archivo),
+            Int(comp, "hitsPerCritical", archivo),
 
-            Ent(arma, "maxSecundariosSplash", archivo),
-            Ent(arma, "rebotesRebote", archivo),
-            Ent(arma, "maxSecundariosCadena", archivo),
-            Ent(arma, "topeBonusSed", archivo),
-            Ent(arma, "topePorcionAlcance", archivo),
-            Ent(arma, "escalaPorcionAlcance", archivo),
-            Ent(arma, "umbralEjecutarTropa", archivo),
-            Ent(arma, "umbralEjecutarJefe", archivo),
-            Bool(arma, "jefeFinalInmuneAEjecutar", true),
-            Ent(arma, "cooldownVampirismoTicks", archivo),
-            Ent(arma, "duracionMarcaCodiciaTicks", archivo));
+            Int(arma, "maxSplashSecondaries", archivo),
+            Int(arma, "bounceBounces", archivo),
+            Int(arma, "maxChainSecondaries", archivo),
+            Int(arma, "thirstBonusCap", archivo),
+            Int(arma, "rangePortionCap", archivo),
+            Int(arma, "rangePortionScale", archivo),
+            Int(arma, "executeThresholdTroop", archivo),
+            Int(arma, "executeThresholdBoss", archivo),
+            Bool(arma, "finalBossImmuneToExecute", true),
+            Int(arma, "vampirismCooldownTicks", archivo),
+            Int(arma, "greedMarkDurationTicks", archivo));
 
         // ⚠ Un slow del 100% no es un enemigo lento: es un enemigo parado, y un
         // enemigo parado fuera del alcance de todos clava la oleada para siempre.
-        if (combate.TopeSlowPorciento is < 0 or > 99)
-            throw new DatosInvalidosException($"{archivo}: «topePorciento» del slow tiene que estar entre 0 y 99");
+        if (combate.SlowCapPercent is < 0 or > 99)
+            throw new InvalidBalanceDataException($"{archivo}: «topePorciento» del slow tiene que estar entre 0 y 99");
 
-        if (combate.DuracionSlowTicks < 1)
-            throw new DatosInvalidosException($"{archivo}: el slow tiene que durar 1 tick o más. Si dura 0 no hace nada; si no vence, es permanente.");
+        if (combate.SlowDurationTicks < 1)
+            throw new InvalidBalanceDataException($"{archivo}: el slow tiene que durar 1 tick o más. Si dura 0 no hace nada; si no vence, es permanente.");
 
-        if (combate.GolpesPorCritico < 1)
-            throw new DatosInvalidosException($"{archivo}: «golpesPorCritico» tiene que ser 1 o más");
+        if (combate.HitsPerCritical < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «golpesPorCritico» tiene que ser 1 o más");
 
-        if (combate.DivisorPenetrante == 0 || combate.DivisorPromedioDanoEnemigo == 0)
-            throw new DatosInvalidosException($"{archivo}: ningún divisor puede ser 0");
+        if (combate.PiercingDivisor == 0 || combate.EnemyDamageAverageDivisor == 0)
+            throw new InvalidBalanceDataException($"{archivo}: ningún divisor puede ser 0");
 
-        if (combate.EscalaPorcionAlcance == 0)
-            throw new DatosInvalidosException($"{archivo}: «escalaPorcionAlcance» no puede ser 0");
+        if (combate.RangePortionScale == 0)
+            throw new InvalidBalanceDataException($"{archivo}: «escalaPorcionAlcance» no puede ser 0");
 
         return combate;
     }

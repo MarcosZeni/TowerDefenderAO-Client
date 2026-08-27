@@ -1,277 +1,277 @@
 {
   "version": 1,
-  "origen": "Bots.dat de Austral AO (Latin-1), resuelto contra OBJ.DAT (UTF-16 LE)",
-  "aviso": "Generado por el importador. NO editar a mano: se pisa en la próxima corrida de --importar-apariencia.",
-  "avisoTier": "El tier sale del NIVEL de la clase, no de un ítem equipado: nivel 1-2 → tier 1, 3-4 → tier 2, 5-6 → tier 3. La armadura, el casco y el escudo no dan stats, solo cambian el frame. Lo único que da números es el arma, y esa es un drop con stats propios.",
-  "avisoClaves": "Los valores son claves de Resources/graficos.json SIN la dirección: a «cuerpo.armaduraDeCuero» hay que agregarle .norte, .este, .oeste o .sur. Vacío = ese tier no tiene arte.",
-  "clases": [
+  "source": "Bots.dat de Austral AO (Latin-1), resuelto contra OBJ.DAT (UTF-16 LE)",
+  "note": "Generado por el importador. NO editar a mano: se pisa en la próxima corrida de --importar-apariencia.",
+  "tierNote": "El tier sale del NIVEL de la clase, no de un ítem equipado: nivel 1-2 → tier 1, 3-4 → tier 2, 5-6 → tier 3. La armadura, el casco y el escudo no dan stats, solo cambian el frame. Lo único que da números es el arma, y esa es un drop con stats propios.",
+  "keysNote": "Los valores son claves de Resources/graficos.json SIN la dirección: a «cuerpo.armaduraDeCuero» hay que agregarle .norte, .este, .oeste o .sur. Vacío = ese tier no tiene arte.",
+  "classes": [
     {
-      "clase": "Mago",
-      "cabeza": "cabeza.1",
+      "class": "Mage",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.tunicaAzulHEEoHM",
-          "arma": "arma.varaDeFresno",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Azul (H/E/EO-H/M)",
-          "nombreArma": "Vara de fresno"
+          "body": "cuerpo.tunicaAzulHEEoHM",
+          "weapon": "arma.varaDeFresno",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Azul (H/E/EO-H/M)",
+          "weaponName": "Vara de fresno"
         },
         {
-          "cuerpo": "cuerpo.tunicaDeRoja",
-          "arma": "arma.bastonNudoso",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Tunica de Roja",
-          "nombreArma": "Bastón nudoso"
+          "body": "cuerpo.tunicaDeRoja",
+          "weapon": "arma.bastonNudoso",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Tunica de Roja",
+          "weaponName": "Bastón nudoso"
         },
         {
-          "cuerpo": "cuerpo.tunicaLegendariaHEEoMH",
-          "arma": "arma.baculoEngarzada",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Legendaria (H/E/EO-M/H)",
-          "nombreArma": "Báculo Engarzada"
+          "body": "cuerpo.tunicaLegendariaHEEoMH",
+          "weapon": "arma.baculoEngarzada",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Legendaria (H/E/EO-M/H)",
+          "weaponName": "Báculo Engarzada"
         }
       ]
     },
     {
-      "clase": "Clerigo",
-      "cabeza": "cabeza.1",
+      "class": "Cleric",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.hachaDeBarbaro",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Hacha de bárbaro"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.hachaDeBarbaro",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Hacha de bárbaro"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.hachaDeGuerraDosFilos",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Hacha de guerra dos filos"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.hachaDeGuerraDosFilos",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Hacha de guerra dos filos"
         },
         {
-          "cuerpo": "cuerpo.armaduraDePlacasCompleta",
-          "arma": "arma.hachaDeGuerraDosFilos",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de placas completa",
-          "nombreArma": "Hacha de guerra dos filos"
+          "body": "cuerpo.armaduraDePlacasCompleta",
+          "weapon": "arma.hachaDeGuerraDosFilos",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de placas completa",
+          "weaponName": "Hacha de guerra dos filos"
         }
       ]
     },
     {
-      "clase": "Guerrero",
-      "cabeza": "cabeza.1",
+      "class": "Warrior",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.hachaDeBarbaro",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Hacha de bárbaro"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.hachaDeBarbaro",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Hacha de bárbaro"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.hachaDeGuerraDosFilos",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Hacha de guerra dos filos"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.hachaDeGuerraDosFilos",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Hacha de guerra dos filos"
         },
         {
-          "cuerpo": "cuerpo.armaduraDePlacasCompleta",
-          "arma": "arma.espadaDePlata",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de placas completa",
-          "nombreArma": "Espada de plata"
+          "body": "cuerpo.armaduraDePlacasCompleta",
+          "weapon": "arma.espadaDePlata",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de placas completa",
+          "weaponName": "Espada de plata"
         }
       ]
     },
     {
-      "clase": "Asesino",
-      "cabeza": "cabeza.1",
+      "class": "Assassin",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.daga2",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Daga + 2"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.daga2",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Daga + 2"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.daga3",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Daga + 3"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.daga3",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Daga + 3"
         },
         {
-          "cuerpo": "cuerpo.armaduraKlox",
-          "arma": "arma.daga4",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura Klox",
-          "nombreArma": "Daga + 4"
+          "body": "cuerpo.armaduraKlox",
+          "weapon": "arma.daga4",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura Klox",
+          "weaponName": "Daga + 4"
         }
       ]
     },
     {
-      "clase": "Ladron",
-      "cabeza": "cabeza.1",
+      "class": "Thief",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.daga2",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Daga + 2"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.daga2",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Daga + 2"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.daga2",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Daga + 2"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.daga2",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Daga + 2"
         },
         {
-          "cuerpo": "cuerpo.armaduraDePlacasCompleta",
-          "arma": "arma.daga2",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de placas completa",
-          "nombreArma": "Daga + 2"
+          "body": "cuerpo.armaduraDePlacasCompleta",
+          "weapon": "arma.daga2",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de placas completa",
+          "weaponName": "Daga + 2"
         }
       ]
     },
     {
-      "clase": "Bardo",
-      "cabeza": "cabeza.1",
+      "class": "Bard",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.tunicaAzulHEEoHM",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Azul (H/E/EO-H/M)",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaAzulHEEoHM",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Azul (H/E/EO-H/M)",
+          "weaponName": "Cimitarra"
         },
         {
-          "cuerpo": "cuerpo.tunicaDeRoja",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Tunica de Roja",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaDeRoja",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Tunica de Roja",
+          "weaponName": "Cimitarra"
         },
         {
-          "cuerpo": "cuerpo.tunicaLegendariaHEEoMH",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Legendaria (H/E/EO-M/H)",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaLegendariaHEEoMH",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Legendaria (H/E/EO-M/H)",
+          "weaponName": "Cimitarra"
         }
       ]
     },
     {
-      "clase": "Druida",
-      "cabeza": "cabeza.1",
+      "class": "Druid",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.tunicaAzulHEEoHM",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Azul (H/E/EO-H/M)",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaAzulHEEoHM",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Azul (H/E/EO-H/M)",
+          "weaponName": "Cimitarra"
         },
         {
-          "cuerpo": "cuerpo.tunicaDeRoja",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Tunica de Roja",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaDeRoja",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Tunica de Roja",
+          "weaponName": "Cimitarra"
         },
         {
-          "cuerpo": "cuerpo.tunicaLegendariaHEEoMH",
-          "arma": "arma.cimitarra",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Túnica Legendaria (H/E/EO-M/H)",
-          "nombreArma": "Cimitarra"
+          "body": "cuerpo.tunicaLegendariaHEEoMH",
+          "weapon": "arma.cimitarra",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Túnica Legendaria (H/E/EO-M/H)",
+          "weaponName": "Cimitarra"
         }
       ]
     },
     {
-      "clase": "Paladin",
-      "cabeza": "cabeza.1",
+      "class": "Paladin",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.hachaDeBarbaro",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Hacha de bárbaro"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.hachaDeBarbaro",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Hacha de bárbaro"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.hachaDeGuerraDosFilos",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Hacha de guerra dos filos"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.hachaDeGuerraDosFilos",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Hacha de guerra dos filos"
         },
         {
-          "cuerpo": "cuerpo.armaduraDePlacasCompleta",
-          "arma": "arma.espadaDePlata",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de placas completa",
-          "nombreArma": "Espada de plata"
+          "body": "cuerpo.armaduraDePlacasCompleta",
+          "weapon": "arma.espadaDePlata",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de placas completa",
+          "weaponName": "Espada de plata"
         }
       ]
     },
     {
-      "clase": "Cazador",
-      "cabeza": "cabeza.1",
+      "class": "Hunter",
+      "head": "cabeza.1",
       "tiers": [
         {
-          "cuerpo": "cuerpo.armaduraDeCuero",
-          "arma": "arma.arcoCompuesto",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cuero",
-          "nombreArma": "Arco compuesto"
+          "body": "cuerpo.armaduraDeCuero",
+          "weapon": "arma.arcoCompuesto",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cuero",
+          "weaponName": "Arco compuesto"
         },
         {
-          "cuerpo": "cuerpo.cotaDeMallas",
-          "arma": "arma.arcoCompuestoReforzado",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Cota de mallas",
-          "nombreArma": "Arco compuesto reforzado"
+          "body": "cuerpo.cotaDeMallas",
+          "weapon": "arma.arcoCompuestoReforzado",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Cota de mallas",
+          "weaponName": "Arco compuesto reforzado"
         },
         {
-          "cuerpo": "cuerpo.armaduraDeCazador",
-          "arma": "arma.arcoDeCazador",
-          "cabezaOffsetX": 0,
-          "cabezaOffsetY": -152,
-          "nombreArmadura": "Armadura de cazador",
-          "nombreArma": "Arco de Cazador"
+          "body": "cuerpo.armaduraDeCazador",
+          "weapon": "arma.arcoDeCazador",
+          "headOffsetX": 0,
+          "headOffsetY": -152,
+          "armorName": "Armadura de cazador",
+          "weaponName": "Arco de Cazador"
         }
       ]
     }

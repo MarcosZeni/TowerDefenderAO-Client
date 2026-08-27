@@ -1,15 +1,15 @@
 namespace TowerOfArgentum.Simulacion;
 
 /// <summary>Cómo terminó, o que sigue.</summary>
-public enum EstadoPartida
+public enum RunState
 {
-    EnCurso = 0,
+    InProgress = 0,
 
     /// <summary>Cayó la Torre.</summary>
-    Perdio = 1,
+    Lost = 1,
 
     /// <summary>Murió el jefe de la oleada 100.</summary>
-    Gano = 2,
+    Won = 2,
 }
 
 /// <summary>
@@ -30,18 +30,18 @@ public enum EstadoPartida
 /// reordenan nunca.</item>
 /// </list>
 /// </remarks>
-public sealed class Partida
+public sealed class Run
 {
-    private readonly Aleatorio _rng;
-    private readonly Mapa _mapa;
-    private readonly Ruta _ruta;
-    private readonly LogAcciones _log;
+    private readonly Rng _rng;
+    private readonly Map _mapa;
+    private readonly Route _ruta;
+    private readonly ActionLog _log;
 
     /// <summary>Índice espacial de enemigos, para el alcance.</summary>
-    private readonly GrillaEspacial _grilla;
+    private readonly SpatialGrid _grilla;
 
     /// <summary>Último tick en que curó Vampirismo, por clase. Ver la habilidad.</summary>
-    private readonly Dictionary<Clase, int> _ultimaCuraPorClase = [];
+    private readonly Dictionary<DefenderClass, int> _ultimaCuraPorClase = [];
 
     /// <summary>Buffer reusado por ElegirObjetivo, para no alocar por disparo.</summary>
     private readonly List<int> _candidatos = [];
@@ -57,16 +57,16 @@ public sealed class Partida
     /// siguiente. Se borra respetando el orden, con
     /// <see cref="List{T}.RemoveAll"/>, que es estable.
     /// </remarks>
-    private readonly List<Enemigo> _enemigos = [];
+    private readonly List<Enemy> _enemigos = [];
 
     /// <summary>Los defensores puestos, en orden de colocación.</summary>
-    private readonly List<Defensor> _defensores = [];
+    private readonly List<Defender> _defensores = [];
 
     /// <summary>
     /// Los NPCs comprados de la oleada actual que todavía no entraron, en el
     /// orden en que se compraron.
     /// </summary>
-    private readonly Queue<CompraNpc> _porSpawnear = new();
+    private readonly Queue<NpcPurchase> _porSpawnear = new();
 
     /// <summary>Ticks entre spawn y spawn de la oleada actual.</summary>
     /// <remarks>Arranca en el de <c>curvas.json</c> hasta que la primera oleada imponga el suyo.</remarks>
@@ -79,10 +79,10 @@ public sealed class Partida
     public Roster Roster { get; }
 
     /// <summary>Los lugares de mochila, compartidos entre perks y equipo.</summary>
-    public Mochila Mochila { get; }
+    public Backpack Backpack { get; }
 
     /// <summary>La tienda de la corrida. El stock lo decide la seed.</summary>
-    public Tienda Tienda { get; } = new();
+    public Shop Shop { get; } = new();
 
     /// <summary>
     /// Las 3 opciones de la pantalla de elección, cuando está abierta.
@@ -93,9 +93,9 @@ public sealed class Partida
     /// cliente modificado podría reclamar que le ofrecieron algo mejor de lo que
     /// el servidor va a regenerar.
     /// </remarks>
-    public Opcion[] OpcionesAbiertas { get; private set; } = [];
+    public Choice[] OpenChoices { get; private set; } = [];
 
-    public bool EsperandoEleccion => OpcionesAbiertas.Length > 0;
+    public bool WaitingForChoice => OpenChoices.Length > 0;
 
     /// <summary>
     /// La oleada anterior está limpia y la próxima espera el visto bueno.
@@ -109,10 +109,10 @@ public sealed class Partida
     /// de pared y no entra a la simulación. Para el tick, esperar 2 segundos o 29
     /// es exactamente lo mismo.</para>
     /// </remarks>
-    public bool EsperandoInicioDeOleada { get; private set; }
+    public bool WaitingForWaveStart { get; private set; }
 
     /// <summary>El reloj está detenido: preparación o elección.</summary>
-    public bool EnPausa => EsperandoInicioDeOleada || EsperandoEleccion;
+    public bool Paused => WaitingForWaveStart || WaitingForChoice;
 
     /// <summary>
     /// La corrida no puede avanzar sola: espera al jugador y el log está agotado.
@@ -127,10 +127,10 @@ public sealed class Partida
     /// de preparación es donde el jugador deja la corrida, así que el log termina
     /// ahí <b>casi siempre</b>.</para>
     /// </remarks>
-    public bool EsperaAlJugador => EnPausa && _cursorLog >= _log.Cantidad;
+    public bool EsperaAlJugador => Paused && _cursorLog >= _log.Count;
 
     /// <summary>Qué número de oleada viene. Durante la preparación, la que espera.</summary>
-    public int ProximaOleada => _oleadaArmada is null ? Oleada : Oleada + 1;
+    public int ProximaOleada => _oleadaArmada is null ? Wave : Wave + 1;
 
     /// <summary>
     /// Qué trae la oleada que viene: cuántos de cada bicho y cuáles con perk.
@@ -146,39 +146,39 @@ public sealed class Partida
     /// pierde contra un lobo blindado sin saber que estaba blindado no aprende
     /// nada.</para>
     /// </remarks>
-    public IReadOnlyList<AvanceDeOleada> AvanceProximaOleada()
+    public IReadOnlyList<WavePreview> AvanceProximaOleada()
     {
         if (_oleadaArmada is not { } armada)
             return [];
 
-        var porTipo = new Dictionary<int, AvanceDeOleada>();
+        var porTipo = new Dictionary<int, WavePreview>();
         var orden = new List<int>();
 
         foreach (var compra in armada.Npcs)
         {
-            if (!porTipo.TryGetValue(compra.TipoId, out var fila))
+            if (!porTipo.TryGetValue(compra.TypeId, out var fila))
             {
-                var dato = _datos.Por(compra.TipoId);
+                var dato = _datos.Get(compra.TypeId);
 
-                fila = new AvanceDeOleada
+                fila = new WavePreview
                 {
-                    TipoId = compra.TipoId,
-                    Nombre = dato?.Nombre ?? "?",
-                    Grafico = dato?.Grafico ?? "",
-                    EsJefe = compra.EsJefe,
+                    TypeId = compra.TypeId,
+                    Name = dato?.Name ?? "?",
+                    Graphic = dato?.Graphic ?? "",
+                    IsBoss = compra.IsBoss,
                 };
 
-                porTipo[compra.TipoId] = fila;
-                orden.Add(compra.TipoId);
+                porTipo[compra.TypeId] = fila;
+                orden.Add(compra.TypeId);
             }
 
             fila.Cuantos++;
 
-            if (compra.PerkVida > 0 || compra.PerkVelocidad > 0)
+            if (compra.HealthPerk > 0 || compra.SpeedPerk > 0)
                 fila.ConPerk++;
         }
 
-        var salida = new List<AvanceDeOleada>(orden.Count);
+        var salida = new List<WavePreview>(orden.Count);
 
         // En orden de aparición: el jugador ve la lista en el mismo orden en que
         // los bichos van a entrar por la ruta.
@@ -203,7 +203,7 @@ public sealed class Partida
     /// arrancar la oleada. El peligro que justifica el +1 no existe en pausa,
     /// justamente porque no hay ningún tick corriendo.</para>
     /// </remarks>
-    public int TickDeAccion => EnPausa ? Tick : Tick + 1;
+    public int TickDeAccion => Paused ? Tick : Tick + 1;
 
     /// <summary>Planos aprendidos en la cuenta. Los manda el servidor al empezar.</summary>
     private readonly HashSet<string> _planosAprendidos = [];
@@ -215,15 +215,15 @@ public sealed class Partida
     private int _ticksParaProximoSpawn;
 
     /// <summary>La oleada que viene, ya armada y esperando el botón.</summary>
-    private OleadaArmada? _oleadaArmada;
+    private BuiltWave? _oleadaArmada;
 
     /// <summary>
     /// Los datos de balance de la temporada. <b>Entrada de la simulación</b>,
     /// igual que la seed y el log.
     /// </summary>
-    private readonly DatosBalance _datos;
+    private readonly BalanceData _datos;
 
-    public DatosBalance Datos => _datos;
+    public BalanceData Datos => _datos;
 
     /// <summary>
     /// Arma una corrida.
@@ -236,24 +236,24 @@ public sealed class Partida
     /// de la de disco, y el síntoma —una corrida que mide otra cosa— no se ve
     /// hasta que el ranking no cierra.
     /// </remarks>
-    public Partida(ulong seed, Mapa mapa, LogAcciones log, DatosBalance datos)
+    public Run(ulong seed, Map mapa, ActionLog log, BalanceData datos)
     {
-        _rng = new Aleatorio(seed);
+        _rng = new Rng(seed);
         _mapa = mapa;
-        _ruta = mapa.Ruta;
+        _ruta = mapa.Route;
         _log = log;
-        _grilla = new GrillaEspacial(mapa.Ancho, mapa.Alto);
+        _grilla = new SpatialGrid(mapa.Width, mapa.Height);
         _datos = datos;
 
         Roster = new Roster(datos);
-        Mochila = new Mochila(datos);
-        _intervaloSpawn = datos.Curvas.Oleada.IntervaloSpawnPorDefecto;
+        Backpack = new Backpack(datos);
+        _intervaloSpawn = datos.Curves.Wave.DefaultSpawnInterval;
 
-        Torre = new Torre
+        Tower = new Tower
         {
-            HpMaximo = _datos.Curvas.Torre.HpInicial,
-            Hp = _datos.Curvas.Torre.HpInicial,
-            Celda = _ruta.Final,
+            MaxHp = _datos.Curves.Tower.HpInicial,
+            Hp = _datos.Curves.Tower.HpInicial,
+            Cell = _ruta.End,
         };
     }
 
@@ -261,21 +261,21 @@ public sealed class Partida
     public int Tick { get; private set; }
 
     /// <summary>Oleada actual, de 1 a 100.</summary>
-    public int Oleada { get; private set; }
+    public int Wave { get; private set; }
 
-    public int Oro { get; private set; }
+    public int Gold { get; private set; }
 
-    public Torre Torre { get; }
+    public Tower Tower { get; }
 
-    public EstadoPartida Estado { get; private set; } = EstadoPartida.EnCurso;
+    public RunState State { get; private set; } = RunState.InProgress;
 
-    public IReadOnlyList<Enemigo> Enemigos => _enemigos;
+    public IReadOnlyList<Enemy> Enemies => _enemigos;
 
-    public IReadOnlyList<Defensor> Defensores => _defensores;
+    public IReadOnlyList<Defender> Defenders => _defensores;
 
-    public Ruta Ruta => _ruta;
+    public Route Route => _ruta;
 
-    public Mapa Mapa => _mapa;
+    public Map Map => _mapa;
 
     /// <summary>
     /// ¿Se puede poner un defensor de esta clase en esta celda, ahora?
@@ -286,32 +286,32 @@ public sealed class Partida
     /// casos, a propósito:</b> si la UI dijera que sí y la simulación que no, el
     /// jugador vería un click que no hace nada.
     /// </remarks>
-    public bool PuedePoner(Clase clase, Celda celda)
+    public bool PuedePoner(DefenderClass clase, Cell celda)
     {
         // Solo se puede poner una clase contratada. El roster arranca vacío y se
         // llena eligiendo, así que la primera elección es obligatoria antes de
         // poder jugar.
-        if (!Roster.Tiene(clase))
+        if (!Roster.Has(clase))
             return false;
 
         if (!_mapa.EsColocable(celda))
             return false;
 
-        if (Oro < _datos.StatsDe(clase).Costo)
+        if (Gold < _datos.StatsOf(clase).Cost)
             return false;
 
         foreach (var d in _defensores)
-            if (d.Celda == celda)
+            if (d.Cell == celda)
                 return false;
 
         return true;
     }
 
     /// <summary>El defensor que está en esa celda, si hay alguno.</summary>
-    public Defensor? DefensorEn(Celda celda)
+    public Defender? DefensorEn(Cell celda)
     {
         foreach (var d in _defensores)
-            if (d.Celda == celda)
+            if (d.Cell == celda)
                 return d;
 
         return null;
@@ -327,9 +327,9 @@ public sealed class Partida
     /// cambiarlo, es una temporada nueva del ranking, no un arreglo
     /// (JUGABILIDAD.md §4.4).</para>
     /// </remarks>
-    public void Avanzar()
+    public void Advance()
     {
-        if (Estado != EstadoPartida.EnCurso)
+        if (State != RunState.InProgress)
             return;
 
         // 1. Acciones del jugador encoladas para este tick.
@@ -345,7 +345,7 @@ public sealed class Partida
         // en un punto fijo, dura lo mismo para todos y no deja reaccionar a nada
         // que esté pasando. Los `ticks` siguen midiendo cuánto tardás en matar,
         // que es lo que dice si tu tablero es bueno.
-        if (EnPausa)
+        if (Paused)
             return;
 
         // 2. Spawn de los que le tocan a este tick, con sus perks ya tirados.
@@ -376,62 +376,62 @@ public sealed class Partida
     }
 
     /// <summary>Corre N ticks de una. Para acelerar y para cargar una partida.</summary>
-    public void Avanzar(int ticks)
+    public void Advance(int ticks)
     {
-        for (int i = 0; i < ticks && Estado == EstadoPartida.EnCurso; i++)
-            Avanzar();
+        for (int i = 0; i < ticks && State == RunState.InProgress; i++)
+            Advance();
     }
 
     // =========================================================================
     //  Fase 1 — Acciones del jugador
     // =========================================================================
 
-    private void AplicarAccion(Accion accion)
+    private void AplicarAccion(PlayerAction accion)
     {
-        switch (accion.Tipo)
+        switch (accion.Kind)
         {
-            case TipoAccion.Poner:
-                Poner((Clase)accion.A, new Celda(accion.B, accion.C));
+            case ActionType.Place:
+                Place((DefenderClass)accion.A, new Cell(accion.B, accion.C));
                 break;
 
-            case TipoAccion.Vender:
-                Vender(accion.A);
+            case ActionType.Sell:
+                Sell(accion.A);
                 break;
 
-            case TipoAccion.AdelantarOleada:
+            case ActionType.CallNextWave:
                 Adelantar();
                 break;
 
-            case TipoAccion.Elegir:
-                Elegir(accion.A);
+            case ActionType.Choose:
+                Choose(accion.A);
                 break;
 
-            case TipoAccion.EquiparPerk:
-                EquiparPerk(accion.A, (Clase)accion.B);
+            case ActionType.EquipPerk:
+                EquipPerk(accion.A, (DefenderClass)accion.B);
                 break;
 
-            case TipoAccion.SacarPerk:
-                SacarPerk((Clase)accion.A, accion.B);
+            case ActionType.RemovePerk:
+                RemovePerk((DefenderClass)accion.A, accion.B);
                 break;
 
-            case TipoAccion.Equipar:
-                Equipar(accion.A, (Clase)accion.B);
+            case ActionType.Equip:
+                Equip(accion.A, (DefenderClass)accion.B);
                 break;
 
-            case TipoAccion.VenderEquipo:
-                VenderEquipo(accion.A);
+            case ActionType.SellGear:
+                SellGear(accion.A);
                 break;
 
-            case TipoAccion.Comprar:
-                Comprar(accion.A);
+            case ActionType.Buy:
+                Buy(accion.A);
                 break;
 
-            case TipoAccion.Descartar:
-                Mochila.SacarEn(accion.A);
+            case ActionType.Discard:
+                Backpack.RemoveAt(accion.A);
                 break;
 
-            case TipoAccion.Fusionar:
-                Fusionar(accion.A, accion.B, (Clase)accion.C);
+            case ActionType.Fuse:
+                Fuse(accion.A, accion.B, (DefenderClass)accion.C);
                 break;
 
             // El resto entra con sus sistemas. Se ignoran en silencio y no se
@@ -442,7 +442,7 @@ public sealed class Partida
         }
     }
 
-    private void Poner(Clase clase, Celda celda)
+    private void Place(DefenderClass clase, Cell celda)
     {
         // Se re-valida acá aunque la UI ya haya validado, porque el log de una
         // corrida guardada se re-simula por este mismo camino: un log manipulado
@@ -450,16 +450,16 @@ public sealed class Partida
         if (!PuedePoner(clase, celda))
             return;
 
-        var stats = _datos.StatsDe(clase);
-        Oro -= stats.Costo;
+        var stats = _datos.StatsOf(clase);
+        Gold -= stats.Cost;
 
-        _defensores.Add(new Defensor
+        _defensores.Add(new Defender
         {
-            IdColocacion = _proximaColocacion++,
-            Clase = clase,
-            Celda = celda,
-            TickColocacion = Tick,
-            CooldownRestante = 0,
+            PlacementId = _proximaColocacion++,
+            DefenderClass = clase,
+            Cell = celda,
+            PlacementTick = Tick,
+            RemainingCooldown = 0,
         });
     }
 
@@ -495,10 +495,10 @@ public sealed class Partida
     /// </remarks>
     private void Adelantar()
     {
-        if (EsperandoInicioDeOleada)
+        if (WaitingForWaveStart)
         {
-            EsperandoInicioDeOleada = false;
-            LanzarProximaOleada();
+            WaitingForWaveStart = false;
+            LaunchNextWave();
             return;
         }
 
@@ -509,17 +509,17 @@ public sealed class Partida
 
         int vivos = _enemigos.Count + _porSpawnear.Count;
 
-        Oro += Enteros.Limitar(vivos * _datos.Curvas.Economia.OroPorEnemigoAdelantado, 0, _datos.Curvas.Economia.TopeOroPorAdelantar);
+        Gold += Ints.Clamp(vivos * _datos.Curves.Economy.GoldPerCalledEnemy, 0, _datos.Curves.Economy.CallGoldCap);
 
-        LanzarProximaOleada();
+        LaunchNextWave();
     }
 
-    private void Elegir(int indice)
+    private void Choose(int indice)
     {
-        if (indice < 0 || indice >= OpcionesAbiertas.Length)
+        if (indice < 0 || indice >= OpenChoices.Length)
             return;
 
-        var opcion = OpcionesAbiertas[indice];
+        var opcion = OpenChoices[indice];
 
         // El oro inicial se entrega ACÁ y no en Empezar, porque depende de qué
         // clase tocó: dos fichas de TU clase, la misma cantidad para todos.
@@ -528,35 +528,35 @@ public sealed class Partida
         // o dos cazadores, y las corridas de clase cara se estancaban en la
         // oleada 1 — medido con --balance, mitad de las seeds muertas ahí. Es
         // determinista igual: sale de la acción de elegir, que está en el log.
-        bool primeraClase = Roster.Clases.Count == 0;
+        bool primeraClase = Roster.Classes.Count == 0;
 
-        if (opcion.Tipo == TipoOpcion.Contratar)
-            Roster.Contratar(opcion.Clase);
+        if (opcion.Kind == ChoiceType.Hire)
+            Roster.Hire(opcion.DefenderClass);
         else
-            Roster.Levelear(opcion.Clase);
+            Roster.LevelUp(opcion.DefenderClass);
 
         if (primeraClase)
-            Oro = _datos.Curvas.Economia.FichasDeOroInicial * _datos.StatsDe(opcion.Clase).Costo;
+            Gold = _datos.Curves.Economy.StartingGoldTokens * _datos.StatsOf(opcion.DefenderClass).Cost;
 
-        OpcionesAbiertas = [];
+        OpenChoices = [];
     }
 
     /// <summary>Equipa un perk de la mochila en una clase.</summary>
-    private void EquiparPerk(int indiceMochila, Clase clase)
+    private void EquipPerk(int indiceMochila, DefenderClass clase)
     {
-        if (indiceMochila < 0 || indiceMochila >= Mochila.Cosas.Count)
+        if (indiceMochila < 0 || indiceMochila >= Backpack.Items.Count)
             return;
 
-        var cosa = Mochila.Cosas[indiceMochila];
-        if (cosa.Tipo != TipoCosa.Perk)
+        var cosa = Backpack.Items[indiceMochila];
+        if (cosa.Kind != ItemType.Perk)
             return;
 
-        var ficha = Roster.Buscar(clase);
-        if (ficha is null || !ficha.TieneSlotLibre)
+        var ficha = Roster.Find(clase);
+        if (ficha is null || !ficha.HasFreeSlot)
             return;
 
-        var def = _datos.Perks.Por(cosa.Id);
-        if (!def.SirveA(clase))
+        var def = _datos.Perks.Get(cosa.Id);
+        if (!def.WorksFor(clase))
             return;
 
         // El tope de apilado sale del tier: Bronce 3, Plata 2, Oro y Único 1.
@@ -565,10 +565,10 @@ public sealed class Partida
             if (p == cosa.Id)
                 yaTiene++;
 
-        if (yaTiene >= def.MaxApilado)
+        if (yaTiene >= def.MaxStacked)
             return;
 
-        Mochila.SacarEn(indiceMochila);
+        Backpack.RemoveAt(indiceMochila);
         ficha.Perks.Add(cosa.Id);
     }
 
@@ -581,56 +581,56 @@ public sealed class Partida
     /// —probás uno, si no gusta lo volvés a guardar— y la elección se vuelve
     /// reversible, o sea gratis.
     /// </remarks>
-    private void SacarPerk(Clase clase, int slot)
+    private void RemovePerk(DefenderClass clase, int slot)
     {
-        var ficha = Roster.Buscar(clase);
+        var ficha = Roster.Find(clase);
         if (ficha is null || slot < 0 || slot >= ficha.Perks.Count)
             return;
 
         ficha.Perks.RemoveAt(slot);
     }
 
-    private void Equipar(int indiceMochila, Clase clase)
+    private void Equip(int indiceMochila, DefenderClass clase)
     {
-        if (indiceMochila < 0 || indiceMochila >= Mochila.Cosas.Count)
+        if (indiceMochila < 0 || indiceMochila >= Backpack.Items.Count)
             return;
 
-        var cosa = Mochila.Cosas[indiceMochila];
-        if (cosa.Tipo != TipoCosa.Arma)
+        var cosa = Backpack.Items[indiceMochila];
+        if (cosa.Kind != ItemType.Weapon)
             return;
 
-        var ficha = Roster.Buscar(clase);
-        var arma = Mochila.ArmaPorId(cosa.Id);
+        var ficha = Roster.Find(clase);
+        var arma = Backpack.WeaponById(cosa.Id);
         if (ficha is null || arma is null)
             return;
 
         // Lo que estaba puesto vuelve a la mochila si hay lugar. ⚠ El equipo SÍ
         // vuelve, al revés que los perks: el equipo se vende y se recambia, los
         // perks se destruyen. Son dos sistemas y no se mezclan.
-        int anterior = ficha.Arma;
+        int anterior = ficha.Weapon;
 
-        if (anterior >= 0 && !Mochila.Guardar(new CosaGuardada(TipoCosa.Arma, anterior)))
+        if (anterior >= 0 && !Backpack.Store(new StoredItem(ItemType.Weapon, anterior)))
             return;
 
-        Mochila.SacarEn(indiceMochila);
-        ficha.Arma = arma.Id;
+        Backpack.RemoveAt(indiceMochila);
+        ficha.Weapon = arma.Id;
     }
 
-    private void VenderEquipo(int indiceMochila)
+    private void SellGear(int indiceMochila)
     {
-        if (indiceMochila < 0 || indiceMochila >= Mochila.Cosas.Count)
+        if (indiceMochila < 0 || indiceMochila >= Backpack.Items.Count)
             return;
 
-        var cosa = Mochila.Cosas[indiceMochila];
-        if (cosa.Tipo != TipoCosa.Arma)
+        var cosa = Backpack.Items[indiceMochila];
+        if (cosa.Kind != ItemType.Weapon)
             return;
 
-        var arma = Mochila.ArmaPorId(cosa.Id);
+        var arma = Backpack.WeaponById(cosa.Id);
         if (arma is null)
             return;
 
-        Mochila.SacarEn(indiceMochila);
-        Oro += arma.Valor;
+        Backpack.RemoveAt(indiceMochila);
+        Gold += arma.Value;
     }
 
     /// <summary>
@@ -646,61 +646,61 @@ public sealed class Partida
     /// billetera, es la única progresión permanente del proyecto — y la lista es
     /// finita, que es la condición que hace tolerable la ventaja del veterano.</para>
     /// </remarks>
-    private void Fusionar(int indiceA, int indiceB, Clase clase)
+    private void Fuse(int indiceA, int indiceB, DefenderClass clase)
     {
         if (indiceA == indiceB)
             return;
 
-        if (indiceA < 0 || indiceA >= Mochila.Cosas.Count ||
-            indiceB < 0 || indiceB >= Mochila.Cosas.Count)
+        if (indiceA < 0 || indiceA >= Backpack.Items.Count ||
+            indiceB < 0 || indiceB >= Backpack.Items.Count)
         {
             return;
         }
 
-        var a = Mochila.Cosas[indiceA];
-        var b = Mochila.Cosas[indiceB];
+        var a = Backpack.Items[indiceA];
+        var b = Backpack.Items[indiceB];
 
-        if (a.Tipo != TipoCosa.Perk || b.Tipo != TipoCosa.Perk)
+        if (a.Kind != ItemType.Perk || b.Kind != ItemType.Perk)
             return;
 
-        if (_datos.Perks.Por(a.Id).Tier != TierPerk.Oro ||
-            _datos.Perks.Por(b.Id).Tier != TierPerk.Oro)
+        if (_datos.Perks.Get(a.Id).Tier != PerkTier.Gold ||
+            _datos.Perks.Get(b.Id).Tier != PerkTier.Gold)
         {
             return;
         }
 
-        var plano = _datos.Planos.Buscar(a.Id, b.Id);
+        var plano = _datos.Blueprints.Find(a.Id, b.Id);
         if (plano is null)
             return;
 
         // El plano tiene que estar aprendido, salvo los iniciales: sin al menos
         // una receta conocida, un jugador nuevo nunca ve un Único y la mecánica
         // le resulta invisible.
-        if (!plano.Inicial && !_planosAprendidos.Contains(plano.Nombre))
+        if (!plano.Initial && !_planosAprendidos.Contains(plano.Key))
             return;
 
-        var ficha = Roster.Buscar(clase);
+        var ficha = Roster.Find(clase);
         if (ficha is null)
             return;
 
-        var resultante = _datos.Perks.Por(plano.UnicoResultante);
-        if (!resultante.SirveA(clase))
+        var resultante = _datos.Perks.Get(plano.ResultingUnique);
+        if (!resultante.WorksFor(clase))
             return;
 
         // Se sacan en orden descendente para que el primer índice siga siendo
         // válido después de sacar el segundo.
         int mayor = System.Math.Max(indiceA, indiceB);
         int menor = System.Math.Min(indiceA, indiceB);
-        Mochila.SacarEn(mayor);
-        Mochila.SacarEn(menor);
+        Backpack.RemoveAt(mayor);
+        Backpack.RemoveAt(menor);
 
         // Si no hay slot libre, el Único va a la mochila y el jugador decide
         // después. Perderlo por no tener lugar sería castigar la mecánica que el
         // juego quiere enseñar.
-        if (ficha.TieneSlotLibre)
-            ficha.Perks.Add(plano.UnicoResultante);
+        if (ficha.HasFreeSlot)
+            ficha.Perks.Add(plano.ResultingUnique);
         else
-            Mochila.GuardarPerk(plano.UnicoResultante);
+            Backpack.StorePerk(plano.ResultingUnique);
     }
 
     /// <summary>
@@ -711,39 +711,39 @@ public sealed class Partida
     /// regenera el servidor de la seed. Guardar el contenido dejaría que un
     /// cliente modificado reclamara haber comprado algo que no estaba a la venta.
     /// </remarks>
-    private void Comprar(int indice)
+    private void Buy(int indice)
     {
-        var stock = Tienda.Stock;
+        var stock = Shop.Stock;
 
         if (indice < 0 || indice >= stock.Count)
             return;
 
         var oferta = stock[indice];
 
-        if (oferta.Vendida || Oro < oferta.Precio)
+        if (oferta.Sold || Gold < oferta.Price)
             return;
 
         // ⚠ Si la mochila está llena la compra no pasa y el oro NO se gasta.
         // Cobrarle al jugador por algo que no entra sería el peor error posible de
         // esta pantalla, y es exactamente el que sale de descontar antes de
         // guardar.
-        if (!Mochila.Guardar(new CosaGuardada(oferta.Tipo, oferta.Id)))
+        if (!Backpack.Store(new StoredItem(oferta.Kind, oferta.Id)))
             return;
 
-        Oro -= oferta.Precio;
-        Tienda.Vender(indice);
+        Gold -= oferta.Price;
+        Shop.Sell(indice);
     }
 
     /// <summary>Los planos que la cuenta tiene aprendidos. Los manda el servidor.</summary>
     public void AprenderPlano(string nombre) => _planosAprendidos.Add(nombre);
 
-    private void Vender(int idColocacion)
+    private void Sell(int idColocacion)
     {
-        int i = _defensores.FindIndex(d => d.IdColocacion == idColocacion);
+        int i = _defensores.FindIndex(d => d.PlacementId == idColocacion);
         if (i < 0) return;
 
-        var stats = _datos.StatsDe(_defensores[i].Clase);
-        Oro += Enteros.MultiplicarPorcentaje(stats.Costo, _datos.Curvas.Defensores.PorcentajeVentaDefensor);
+        var stats = _datos.StatsOf(_defensores[i].DefenderClass);
+        Gold += Ints.MultiplyPercent(stats.Cost, _datos.Curves.Defenders.DefenderSellPercent);
 
         _defensores.RemoveAt(i);
     }
@@ -769,33 +769,33 @@ public sealed class Partida
         // punto de la secuencia del RNG, y cualquier cambio de orden de fases la
         // correría.
         var compra = _porSpawnear.Dequeue();
-        var b = _datos.Por(compra.TipoId);
+        var b = _datos.Get(compra.TypeId);
 
         if (b is null)
             return;   // el tipo no está en los datos: no spawnea nada
 
-        int hpMaximo = Enteros.ConPorcentajes(b.Hp, compra.PerkVida);
+        int hpMaximo = Ints.WithPercents(b.Hp, compra.HealthPerk);
 
         // El daño sale del promedio de min y max, no de una tirada por golpe: una
         // tirada acá gastaría un número del RNG por cada golpe de cada enemigo, y
         // eso hace que agregar un defensor corra toda la secuencia posterior y
         // cambie los drops de la corrida entera.
-        int dano = System.Math.Max(_datos.Combate.DanoMinimoEnemigo, (b.DanoMin + b.DanoMax) / _datos.Combate.DivisorPromedioDanoEnemigo);
+        int dano = System.Math.Max(_datos.Combat.EnemyMinimumDamage, (b.MinDamage + b.MaxDamage) / _datos.Combat.EnemyDamageAverageDivisor);
 
-        _enemigos.Add(new Enemigo
+        _enemigos.Add(new Enemy
         {
-            IdSpawn = _proximoIdSpawn++,
-            TipoId = compra.TipoId,
-            EsJefe = compra.EsJefe,
-            HpMaximo = hpMaximo,
+            SpawnId = _proximoIdSpawn++,
+            TypeId = compra.TypeId,
+            IsBoss = compra.IsBoss,
+            MaxHp = hpMaximo,
             Hp = hpMaximo,
-            Velocidad = b.Velocidad,
-            Dano = dano,
-            CadenciaTicks = b.CadenciaTicks,
-            Oro = b.Oro,
-            DistanciaRecorrida = 0,
-            PerkVidaExtra = compra.PerkVida,
-            PerkVelocidadExtra = compra.PerkVelocidad,
+            Speed = b.Speed,
+            Damage = dano,
+            CadenceTicks = b.CadenceTicks,
+            Gold = b.Gold,
+            DistanceTravelled = 0,
+            ExtraHealthPerk = compra.HealthPerk,
+            ExtraSpeedPerk = compra.SpeedPerk,
         });
 
         _ticksParaProximoSpawn = _intervaloSpawn;
@@ -812,11 +812,11 @@ public sealed class Partida
         // para esto.
         foreach (var e in _enemigos)
         {
-            if (e.SlowPorciento > 0 && Tick >= e.SlowExpiraTick)
-                e.SlowPorciento = 0;
+            if (e.SlowPercent > 0 && Tick >= e.SlowExpiryTick)
+                e.SlowPercent = 0;
 
-            if (e.OroExtraPorciento > 0 && Tick >= e.OroExtraExpiraTick)
-                e.OroExtraPorciento = 0;
+            if (e.ExtraGoldPercent > 0 && Tick >= e.ExtraGoldExpiryTick)
+                e.ExtraGoldPercent = 0;
         }
     }
 
@@ -828,10 +828,10 @@ public sealed class Partida
     {
         foreach (var e in _enemigos)
         {
-            if (!e.Vivo || e.AtacandoTorre)
+            if (!e.Alive || e.AttackingTower)
                 continue;
 
-            e.DistanciaRecorrida += e.VelocidadEfectiva;
+            e.DistanceTravelled += e.EffectiveSpeed;
         }
     }
 
@@ -843,18 +843,18 @@ public sealed class Partida
     {
         foreach (var e in _enemigos)
         {
-            if (!e.Vivo || e.AtacandoTorre)
+            if (!e.Alive || e.AttackingTower)
                 continue;
 
-            if (e.DistanciaRecorrida >= _ruta.Largo)
+            if (e.DistanceTravelled >= _ruta.Length)
             {
-                e.DistanciaRecorrida = _ruta.Largo;
-                e.AtacandoTorre = true;
+                e.DistanceTravelled = _ruta.Length;
+                e.AttackingTower = true;
 
                 // Pega recién en su próximo turno de cadencia, no al llegar: si
                 // no, un enemigo rápido descarga un golpe gratis por el solo
                 // hecho de haber llegado en este tick.
-                e.CooldownAtaque = e.CadenciaTicks;
+                e.AttackCooldown = e.CadenceTicks;
             }
         }
     }
@@ -868,23 +868,23 @@ public sealed class Partida
         // La Torre devuelve el golpe a UNO por turno: el más viejo de los que la
         // están mordiendo. El orden de `_enemigos` es el de spawn, así que
         // "el primero" siempre significa lo mismo en las dos mitades.
-        Enemigo? mordiendo = null;
+        Enemy? mordiendo = null;
 
         foreach (var e in _enemigos)
         {
-            if (!e.Vivo || !e.AtacandoTorre)
+            if (!e.Alive || !e.AttackingTower)
                 continue;
 
             mordiendo ??= e;
 
-            if (e.CooldownAtaque > 0)
+            if (e.AttackCooldown > 0)
             {
-                e.CooldownAtaque--;
+                e.AttackCooldown--;
                 continue;
             }
 
-            Torre.Recibir(e.Dano);
-            e.CooldownAtaque = e.CadenciaTicks;
+            Tower.Receive(e.Damage);
+            e.AttackCooldown = e.CadenceTicks;
         }
 
         // ⚠ El cooldown de la Torre baja SOLO cuando hay a quién pegarle.
@@ -894,18 +894,18 @@ public sealed class Partida
         // Es la misma razón por la que el enemigo tampoco pega al llegar.
         if (mordiendo is null)
         {
-            Torre.CooldownAtaque = _datos.Curvas.Torre.CadenciaTicks;
+            Tower.AttackCooldown = _datos.Curves.Tower.CadenceTicks;
             return;
         }
 
-        if (Torre.CooldownAtaque > 0)
+        if (Tower.AttackCooldown > 0)
         {
-            Torre.CooldownAtaque--;
+            Tower.AttackCooldown--;
             return;
         }
 
-        mordiendo.Hp -= _datos.Curvas.Torre.Dano;
-        Torre.CooldownAtaque = _datos.Curvas.Torre.CadenciaTicks;
+        mordiendo.Hp -= _datos.Curves.Tower.Damage;
+        Tower.AttackCooldown = _datos.Curves.Tower.CadenceTicks;
     }
 
     // =========================================================================
@@ -918,45 +918,45 @@ public sealed class Partida
         // reconstruyera por defensor, el primero en disparar vería posiciones
         // distintas que el último y el resultado dependería del orden de la
         // lista de defensores.
-        _grilla.Reconstruir(_enemigos, _ruta);
+        _grilla.Rebuild(_enemigos, _ruta);
 
         foreach (var d in _defensores)
         {
-            if (d.CooldownRestante > 0)
+            if (d.RemainingCooldown > 0)
             {
-                d.CooldownRestante--;
+                d.RemainingCooldown--;
                 continue;
             }
 
             // base + nivel + perks + equipo, recalculado cada vez. Nada de esto
             // vive en el defensor: un cazador puesto en la oleada 3 y otro puesto
             // en la 40 pegan exactamente igual.
-            var stats = Roster.StatsDe(d.Clase, Mochila);
-            var objetivo = ElegirObjetivo(d, stats.AlcanceCeldas);
+            var stats = Roster.StatsOf(d.DefenderClass, Backpack);
+            var objetivo = ElegirObjetivo(d, stats.RangeCells);
 
             if (objetivo is null)
                 continue;
 
             // El contador de golpes del defensor, para los críticos: sube ANTES
             // de resolver el disparo, así "cada 7.º golpe" cuenta este.
-            d.ContadorGolpes++;
+            d.HitCounter++;
 
             // Daño instantáneo. El proyectil que se ve volar es SOLO render: si
             // el daño esperara a que el sprite llegue, el resultado dependería
             // de los FPS.
-            int dano = stats.Dano;
+            int dano = stats.Damage;
 
             // La habilidad del arma puede cambiar el daño ANTES de aplicarlo:
             // francotirador, carnicero y sed lo escalan. Las que agregan efectos
             // van después, con el daño ya resuelto.
-            dano = AjustarDanoPorHabilidad(stats, d, objetivo, dano);
+            dano = AdjustDamageByAbility(stats, d, objetivo, dano);
 
             objetivo.Hp -= dano;
 
-            AplicarComportamiento(stats, d, objetivo);
-            AplicarHabilidadDeArma(stats, d, objetivo, dano);
+            ApplyBehavior(stats, d, objetivo);
+            ApplyWeaponAbility(stats, d, objetivo, dano);
 
-            d.CooldownRestante = stats.CadenciaTicks;
+            d.RemainingCooldown = stats.CadenceTicks;
         }
     }
 
@@ -968,70 +968,70 @@ public sealed class Partida
     /// apilan</b> —"Ricochet dos veces" no quiere decir nada— y esa regla sale
     /// del tier, no de una lista de excepciones.
     /// </remarks>
-    private void AplicarComportamiento(StatsEfectivos stats, Defensor defensor, Enemigo objetivo)
+    private void ApplyBehavior(EffectiveStats stats, Defender defensor, Enemy objetivo)
     {
-        switch (stats.Comportamiento)
+        switch (stats.Behavior)
         {
-            case EfectoPerk.Ninguno:
+            case PerkEffect.None:
                 return;
 
-            case EfectoPerk.Ricochet:
-                AplicarRicochet(objetivo, stats.Dano, stats.MagnitudComportamiento, rebotes: _datos.Combate.RebotesRicochet);
+            case PerkEffect.Ricochet:
+                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.RicochetBounces);
                 return;
 
-            case EfectoPerk.Perforacion:
-                AplicarRicochet(objetivo, stats.Dano, stats.MagnitudComportamiento, rebotes: _datos.Combate.RebotesPerforacion);
+            case PerkEffect.Perforation:
+                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.PerforationBounces);
                 return;
 
-            case EfectoPerk.Splash:
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false, maxSecundarios: _datos.Combate.MaxSecundariosSplashOro);
+            case PerkEffect.Splash:
+                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxGoldSplashSecondaries);
                 return;
 
-            case EfectoPerk.OndaDeFrio:
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: true, maxSecundarios: _datos.Combate.MaxSecundariosOndaDeFrio);
+            case PerkEffect.FrostWave:
+                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: true, maxSecundarios: _datos.Combat.MaxFrostWaveSecondaries);
                 return;
 
-            case EfectoPerk.Ralentiza:
-                Ralentizar(objetivo, stats.MagnitudComportamiento);
+            case PerkEffect.Slow:
+                Ralentizar(objetivo, stats.BehaviorMagnitude);
                 return;
 
-            case EfectoPerk.Veneno:
-            case EfectoPerk.TerribleHambre:
+            case PerkEffect.Poison:
+            case PerkEffect.TerribleHunger:
                 // El veneno pega de una vez y no por tick: los efectos con
                 // duración son la fase 3 y todavía no existe. Cuando exista, esto
                 // se muda ahí, no se agrega otra fase.
-                objetivo.Hp -= Enteros.MultiplicarPorcentaje(stats.Dano, stats.MagnitudComportamiento);
+                objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude);
 
-                if (stats.Comportamiento == EfectoPerk.TerribleHambre)
-                    Ralentizar(objetivo, _datos.Combate.SlowTerribleHambre);
+                if (stats.Behavior == PerkEffect.TerribleHunger)
+                    Ralentizar(objetivo, _datos.Combat.TerribleHungerSlow);
 
                 return;
 
-            case EfectoPerk.Penetrante:
+            case PerkEffect.Piercing:
                 // Ignora la defensa. Como los enemigos todavía no la usan en el
                 // cálculo de daño, por ahora es un golpe extra proporcional.
-                objetivo.Hp -= Enteros.MultiplicarPorcentaje(stats.Dano, stats.MagnitudComportamiento / _datos.Combate.DivisorPenetrante);
+                objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude / _datos.Combat.PiercingDivisor);
                 return;
 
-            case EfectoPerk.IraDeDios:
-            case EfectoPerk.TormentaDivina:
+            case PerkEffect.WrathOfGod:
+            case PerkEffect.DivineStorm:
                 // Únicos que combinan crítico y splash. Se resuelven como splash
                 // reforzado: el radio es el mismo, el daño mucho mayor.
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false, maxSecundarios: _datos.Combate.MaxSecundariosDivino);
+                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxDivineSecondaries);
                 return;
 
-            case EfectoPerk.Apocalipsis:
+            case PerkEffect.Apocalypse:
                 // Ricochet en cadena: rebota a los tres siguientes vivos.
-                AplicarRicochet(objetivo, stats.Dano, stats.MagnitudComportamiento, rebotes: _datos.Combate.RebotesApocalipsis);
+                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.ApocalypseBounces);
                 return;
 
-            case EfectoPerk.GolpeCritico:
+            case PerkEffect.CriticalHit:
                 // Cada 7.º golpe DE ESTE defensor (propuesta V2). Sigue sin tirar
                 // el dado —una tirada acá gastaría RNG por disparo y correría los
                 // drops—, pero ya no es Tick % 7 global: con eso criticaban todos
                 // juntos, y las cadencias múltiplo de 7 criticaban siempre o nunca.
-                if (defensor.ContadorGolpes % _datos.Combate.GolpesPorCritico == 0)
-                    objetivo.Hp -= Enteros.MultiplicarPorcentaje(stats.Dano, stats.MagnitudComportamiento);
+                if (defensor.HitCounter % _datos.Combat.HitsPerCritical == 0)
+                    objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude);
 
                 return;
         }
@@ -1053,23 +1053,23 @@ public sealed class Partida
     /// splash tiene que salir del daño <b>ya escalado</b>, o un francotirador con
     /// splash haría el bonus solo al objetivo principal.
     /// </remarks>
-    private int AjustarDanoPorHabilidad(
-        StatsEfectivos stats, Defensor defensor, Enemigo objetivo, int dano)
+    private int AdjustDamageByAbility(
+        EffectiveStats stats, Defender defensor, Enemy objetivo, int dano)
     {
-        switch (stats.Habilidad)
+        switch (stats.Ability)
         {
-            case HabilidadArma.Francotirador:
-            case HabilidadArma.Carnicero:
+            case WeaponAbility.Sniper:
+            case WeaponAbility.Butcher:
             {
                 // Cuánto del alcance está usando el disparo, en porcentaje. Se
                 // mide en celdas al cuadrado —que es como se mide todo acá— y se
                 // compara contra el alcance al cuadrado: no hace falta raíz.
-                var celda = _ruta.CeldaEn(objetivo.DistanciaRecorrida);
+                var celda = _ruta.CellAt(objetivo.DistanceTravelled);
 
-                long d2 = Enteros.DistanciaCuadrado(
-                    defensor.Celda.X, defensor.Celda.Y, celda.X, celda.Y);
+                long d2 = Ints.SquaredDistance(
+                    defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
-                long alcance2 = (long)stats.AlcanceCeldas * stats.AlcanceCeldas;
+                long alcance2 = (long)stats.RangeCells * stats.RangeCells;
 
                 if (alcance2 <= 0)
                     return dano;
@@ -1078,25 +1078,25 @@ public sealed class Partida
 
                 // Francotirador premia lo lejano, carnicero lo cercano. Son la
                 // misma cuenta con el porcentaje dado vuelta, y por eso van juntas.
-                int factor = stats.Habilidad == HabilidadArma.Francotirador
+                int factor = stats.Ability == WeaponAbility.Sniper
                     ? porcion
                     : 100 - porcion;
 
-                return dano + Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad * factor / 100);
+                return dano + Ints.MultiplyPercent(dano, stats.AbilityMagnitude * factor / 100);
             }
 
-            case HabilidadArma.Sed:
+            case WeaponAbility.Thirst:
                 // Sube con cada muerte de la oleada y se reinicia al terminarla.
                 // Techo 100% (propuesta V2): con oleadas de 60 bichos, el tope de
                 // 300 se alcanzaba siempre y Sed era un ×4 garantizado.
-                return dano + Enteros.MultiplicarPorcentaje(
-                    dano, System.Math.Min(_datos.Combate.TopeBonusSed, defensor.MuertesEnLaOleada * stats.MagnitudHabilidad));
+                return dano + Ints.MultiplyPercent(
+                    dano, System.Math.Min(_datos.Combat.ThirstBonusCap, defensor.KillsInWave * stats.AbilityMagnitude));
 
-            case HabilidadArma.Critico:
+            case WeaponAbility.Critical:
                 // Cada 7.º golpe DE ESTE defensor (propuesta V2), igual que el
                 // perk. Sin dado, sin sincronización global.
-                return defensor.ContadorGolpes % _datos.Combate.GolpesPorCritico == 0
-                    ? Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad)
+                return defensor.HitCounter % _datos.Combat.HitsPerCritical == 0
+                    ? Ints.MultiplyPercent(dano, stats.AbilityMagnitude)
                     : dano;
 
             default:
@@ -1113,48 +1113,48 @@ public sealed class Partida
     /// en <c>Ninguno</c>: son la misma ranura, y apilarlas es exactamente lo que
     /// la regla "los comportamientos no se apilan" existe para evitar.
     /// </remarks>
-    private void AplicarHabilidadDeArma(
-        StatsEfectivos stats, Defensor defensor, Enemigo objetivo, int dano)
+    private void ApplyWeaponAbility(
+        EffectiveStats stats, Defender defensor, Enemy objetivo, int dano)
     {
-        switch (stats.Habilidad)
+        switch (stats.Ability)
         {
-            case HabilidadArma.Splash:
-                AplicarSplash(objetivo, dano, stats.MagnitudHabilidad, ralentiza: false, maxSecundarios: _datos.Combate.MaxSecundariosSplashArma);
+            case WeaponAbility.Splash:
+                ApplySplash(objetivo, dano, stats.AbilityMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxWeaponSplashSecondaries);
                 return;
 
-            case HabilidadArma.Rebote:
-                AplicarRicochet(objetivo, dano, stats.MagnitudHabilidad, rebotes: _datos.Combate.RebotesReboteArma);
+            case WeaponAbility.Bounce:
+                ApplyRicochet(objetivo, dano, stats.AbilityMagnitude, rebotes: _datos.Combat.WeaponBounceBounces);
                 return;
 
-            case HabilidadArma.Escarcha:
-                Ralentizar(objetivo, stats.MagnitudHabilidad);
+            case WeaponAbility.Frost:
+                Ralentizar(objetivo, stats.AbilityMagnitude);
                 return;
 
-            case HabilidadArma.Veneno:
-                objetivo.Hp -= Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad);
+            case WeaponAbility.Poison:
+                objetivo.Hp -= Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
                 return;
 
-            case HabilidadArma.Doble:
+            case WeaponAbility.DoubleShot:
                 // Un segundo golpe completo. Es la habilidad más simple y de las
                 // más fuertes: duplica todo lo que el defensor haga, incluidos los
                 // perks numéricos.
                 objetivo.Hp -= dano;
                 return;
 
-            case HabilidadArma.Ejecutar:
+            case WeaponAbility.Execute:
             {
                 // Umbrales de la propuesta V2: tropa hasta 20%, jefe hasta 5%, y
                 // el JEFE FINAL es inmune — matarlo es cómo se gana la corrida,
                 // y ganarla salteándole un cuarto de vida vaciaba el final.
-                if (_datos.Combate.JefeFinalInmuneAEjecutar && objetivo.EsJefe && Oleada >= _datos.Curvas.Corrida.OleadasPorCorrida)
+                if (_datos.Combat.FinalBossImmuneToExecute && objetivo.IsBoss && Wave >= _datos.Curves.RunCurve.WavesPerRun)
                     return;
 
-                if (objetivo.Vivo && objetivo.HpMaximo > 0)
+                if (objetivo.Alive && objetivo.MaxHp > 0)
                 {
                     int umbral = System.Math.Min(
-                        stats.MagnitudHabilidad, objetivo.EsJefe ? _datos.Combate.UmbralEjecutarJefe : _datos.Combate.UmbralEjecutarTropa);
+                        stats.AbilityMagnitude, objetivo.IsBoss ? _datos.Combat.ExecuteThresholdBoss : _datos.Combat.ExecuteThresholdTroop);
 
-                    int porcentaje = objetivo.Hp * 100 / objetivo.HpMaximo;
+                    int porcentaje = objetivo.Hp * 100 / objetivo.MaxHp;
 
                     if (porcentaje <= umbral)
                         objetivo.Hp = 0;
@@ -1163,27 +1163,27 @@ public sealed class Partida
                 return;
             }
 
-            case HabilidadArma.Cadena:
+            case WeaponAbility.Chain:
             {
                 // Le pega a hasta 5 secundarios en alcance (propuesta V2). Sin el
                 // techo, el daño escalaba lineal con la densidad y una oleada
                 // apretada lo multiplicaba por diez.
-                long alcance2 = (long)stats.AlcanceCeldas * stats.AlcanceCeldas;
-                int extra = Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad);
+                long alcance2 = (long)stats.RangeCells * stats.RangeCells;
+                int extra = Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
                 int alcanzados = 0;
 
                 foreach (var otro in _enemigos)
                 {
-                    if (alcanzados >= _datos.Combate.MaxSecundariosCadena)
+                    if (alcanzados >= _datos.Combat.MaxChainSecondaries)
                         break;
 
-                    if (!otro.Vivo || ReferenceEquals(otro, objetivo))
+                    if (!otro.Alive || ReferenceEquals(otro, objetivo))
                         continue;
 
-                    var celda = _ruta.CeldaEn(otro.DistanciaRecorrida);
+                    var celda = _ruta.CellAt(otro.DistanceTravelled);
 
-                    long d2 = Enteros.DistanciaCuadrado(
-                        defensor.Celda.X, defensor.Celda.Y, celda.X, celda.Y);
+                    long d2 = Ints.SquaredDistance(
+                        defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
                     if (d2 <= alcance2)
                     {
@@ -1195,27 +1195,27 @@ public sealed class Partida
                 return;
             }
 
-            case HabilidadArma.Vampirismo:
+            case WeaponAbility.Vampirism:
                 // Cura la Torre — con techo en su vida máxima y UN proc por clase
                 // cada 30 ticks (propuesta V2). El arma es de la clase: sin la
                 // ventana, diez unidades con la misma arma curaban cientos por
                 // segundo y la Torre se volvía inmortal.
-                if (!_ultimaCuraPorClase.TryGetValue(defensor.Clase, out int ultima) ||
-                    Tick - ultima >= _datos.Combate.CooldownVampirismoTicks)
+                if (!_ultimaCuraPorClase.TryGetValue(defensor.DefenderClass, out int ultima) ||
+                    Tick - ultima >= _datos.Combat.VampirismCooldownTicks)
                 {
-                    Torre.Hp = System.Math.Min(Torre.HpMaximo, Torre.Hp + stats.MagnitudHabilidad);
-                    _ultimaCuraPorClase[defensor.Clase] = Tick;
+                    Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + stats.AbilityMagnitude);
+                    _ultimaCuraPorClase[defensor.DefenderClass] = Tick;
                 }
 
                 return;
 
-            case HabilidadArma.Codicia:
+            case WeaponAbility.Greed:
                 // El oro extra se cobra en la fase de muertes, cuando se sepa si
                 // este golpe mató. La marca EXPIRA a los 60 ticks (propuesta V2):
                 // marcada para siempre, un tanque golpeado una vez era alcancía
                 // aunque lo matara otro, minutos después.
-                objetivo.OroExtraPorciento = stats.MagnitudHabilidad;
-                objetivo.OroExtraExpiraTick = Tick + _datos.Combate.DuracionMarcaCodiciaTicks;
+                objetivo.ExtraGoldPercent = stats.AbilityMagnitude;
+                objetivo.ExtraGoldExpiryTick = Tick + _datos.Combat.GreedMarkDurationTicks;
                 return;
 
             default:
@@ -1234,28 +1234,28 @@ public sealed class Partida
     /// <para>Dentro de la ventana se elige en orden de spawn, que es la regla de
     /// desempate de todo el combate.</para>
     /// </remarks>
-    private void AplicarRicochet(Enemigo objetivo, int danoBase, int magnitud, int rebotes)
+    private void ApplyRicochet(Enemy objetivo, int danoBase, int magnitud, int rebotes)
     {
-        long ventanaRuta = (long)_datos.Combate.VentanaSaltoRicochetCeldas * Enteros.MilesimasPorCelda;
+        long ventanaRuta = (long)_datos.Combat.RicochetJumpWindowCells * Ints.ThousandthsPerCell;
 
-        int dano = Enteros.MultiplicarPorcentaje(danoBase, magnitud);
+        int dano = Ints.MultiplyPercent(danoBase, magnitud);
         var anterior = objetivo;
 
         // Los ya golpeados en ESTA cadena, para no rebotar dos veces al mismo.
         // Lista y no HashSet: son 1-3 elementos.
-        var golpeados = new List<Enemigo> { objetivo };
+        var golpeados = new List<Enemy> { objetivo };
 
         while (rebotes > 0)
         {
-            Enemigo? proximo = null;
+            Enemy? proximo = null;
 
             foreach (var otro in _enemigos)
             {
-                if (!otro.Vivo || golpeados.Contains(otro))
+                if (!otro.Alive || golpeados.Contains(otro))
                     continue;
 
                 long diferencia = System.Math.Abs(
-                    otro.DistanciaRecorrida - anterior.DistanciaRecorrida);
+                    otro.DistanceTravelled - anterior.DistanceTravelled);
 
                 if (diferencia <= ventanaRuta)
                 {
@@ -1288,12 +1288,12 @@ public sealed class Partida
     /// la densidad multiplicaba el daño 5-10× en oleadas apretadas y el splash
     /// escalaba solo con que hubiera más bichos.
     /// </param>
-    private void AplicarSplash(
-        Enemigo objetivo, int danoBase, int magnitud, bool ralentiza, int maxSecundarios)
+    private void ApplySplash(
+        Enemy objetivo, int danoBase, int magnitud, bool ralentiza, int maxSecundarios)
     {
-        long radio = (long)_datos.Combate.RadioSplashCeldas * Enteros.MilesimasPorCelda;
+        long radio = (long)_datos.Combat.SplashRadiusCells * Ints.ThousandthsPerCell;
 
-        int dano = Enteros.MultiplicarPorcentaje(danoBase, magnitud);
+        int dano = Ints.MultiplyPercent(danoBase, magnitud);
         int alcanzados = 0;
 
         foreach (var otro in _enemigos)
@@ -1301,10 +1301,10 @@ public sealed class Partida
             if (alcanzados >= maxSecundarios)
                 break;
 
-            if (!otro.Vivo || ReferenceEquals(otro, objetivo))
+            if (!otro.Alive || ReferenceEquals(otro, objetivo))
                 continue;
 
-            long diferencia = System.Math.Abs(otro.DistanciaRecorrida - objetivo.DistanciaRecorrida);
+            long diferencia = System.Math.Abs(otro.DistanceTravelled - objetivo.DistanceTravelled);
 
             if (diferencia > radio)
                 continue;
@@ -1326,15 +1326,15 @@ public sealed class Partida
     /// 60%</b>. Antes era permanente, apilaba hasta -80% y dos fuentes de
     /// Escarcha dejaban la corrida en cámara lenta para siempre.</para>
     /// </remarks>
-    private void Ralentizar(Enemigo enemigo, int magnitud)
+    private void Ralentizar(Enemy enemigo, int magnitud)
     {
-        int potencia = System.Math.Min(magnitud, _datos.Combate.TopeSlowPorciento);
+        int potencia = System.Math.Min(magnitud, _datos.Combat.SlowCapPercent);
 
         if (potencia <= 0)
             return;
 
-        enemigo.SlowPorciento = System.Math.Max(enemigo.SlowPorciento, potencia);
-        enemigo.SlowExpiraTick = Tick + _datos.Combate.DuracionSlowTicks;
+        enemigo.SlowPercent = System.Math.Max(enemigo.SlowPercent, potencia);
+        enemigo.SlowExpiryTick = Tick + _datos.Combat.SlowDurationTicks;
     }
 
     /// <summary>
@@ -1347,32 +1347,32 @@ public sealed class Partida
     /// decidiría el orden de la lista, que es justo lo que no puede decidir
     /// nada.
     /// </remarks>
-    private Enemigo? ElegirObjetivo(Defensor defensor, int alcanceCeldas)
+    private Enemy? ElegirObjetivo(Defender defensor, int alcanceCeldas)
     {
         long alcanceCuadrado = (long)alcanceCeldas * alcanceCeldas;
 
         // La grilla devuelve candidatos por cercanía, ya ordenados por id de
         // spawn. Sigue habiendo que comparar la distancia: el rectángulo de
         // celdas es más grande que el círculo de alcance.
-        _grilla.Candidatos(defensor.Celda, alcanceCeldas, _candidatos);
+        _grilla.Candidatos(defensor.Cell, alcanceCeldas, _candidatos);
 
-        Enemigo? mejor = null;
+        Enemy? mejor = null;
 
         foreach (int i in _candidatos)
         {
             var e = _enemigos[i];
 
-            if (!e.Vivo)
+            if (!e.Alive)
                 continue;
 
-            var celda = _ruta.CeldaEn(e.DistanciaRecorrida);
-            long d2 = Enteros.DistanciaCuadrado(
-                defensor.Celda.X, defensor.Celda.Y, celda.X, celda.Y);
+            var celda = _ruta.CellAt(e.DistanceTravelled);
+            long d2 = Ints.SquaredDistance(
+                defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
             if (d2 > alcanceCuadrado)
                 continue;
 
-            if (mejor is null || e.DistanciaRecorrida > mejor.DistanciaRecorrida)
+            if (mejor is null || e.DistanceTravelled > mejor.DistanceTravelled)
             {
                 mejor = e;
             }
@@ -1395,14 +1395,14 @@ public sealed class Partida
         // la marcha, el orden de las tiradas dependería de cómo borra la lista.
         foreach (var e in _enemigos)
         {
-            if (e.Vivo)
+            if (e.Alive)
                 continue;
 
             // El oro extra de Codicia se cobra ACÁ, no al golpear: solo cuenta si
             // el golpe efectivamente mató.
-            Oro += Enteros.ConPorcentajes(e.Oro, e.OroExtraPorciento);
+            Gold += Ints.WithPercents(e.Gold, e.ExtraGoldPercent);
 
-            TirarDrop(e);
+            RollDrop(e);
         }
 
         // La habilidad Sed cuenta muertes por defensor. Se atribuyen al que tenga
@@ -1411,7 +1411,7 @@ public sealed class Partida
         ContarMuertesParaSed();
 
         // RemoveAll es estable: conserva el orden relativo de los que quedan.
-        _enemigos.RemoveAll(e => !e.Vivo);
+        _enemigos.RemoveAll(e => !e.Alive);
     }
 
     /// <summary>
@@ -1431,25 +1431,25 @@ public sealed class Partida
     {
         foreach (var d in _defensores)
         {
-            var stats = Roster.StatsDe(d.Clase, Mochila);
+            var stats = Roster.StatsOf(d.DefenderClass, Backpack);
 
-            if (stats.Habilidad != HabilidadArma.Sed)
+            if (stats.Ability != WeaponAbility.Thirst)
                 continue;
 
-            long alcance2 = (long)stats.AlcanceCeldas * stats.AlcanceCeldas;
+            long alcance2 = (long)stats.RangeCells * stats.RangeCells;
 
             foreach (var e in _enemigos)
             {
-                if (e.Vivo)
+                if (e.Alive)
                     continue;
 
-                var celda = _ruta.CeldaEn(e.DistanciaRecorrida);
+                var celda = _ruta.CellAt(e.DistanceTravelled);
 
-                long dist2 = Enteros.DistanciaCuadrado(
-                    d.Celda.X, d.Celda.Y, celda.X, celda.Y);
+                long dist2 = Ints.SquaredDistance(
+                    d.Cell.X, d.Cell.Y, celda.X, celda.Y);
 
                 if (dist2 <= alcance2)
-                    d.MuertesEnLaOleada++;
+                    d.KillsInWave++;
             }
         }
     }
@@ -1470,18 +1470,18 @@ public sealed class Partida
     /// <para>Nada de esto va al log: lo determina el RNG sembrado, así que el
     /// servidor lo reproduce solo. El log lleva decisiones, no resultados.</para>
     /// </remarks>
-    private void TirarDrop(Enemigo enemigo)
+    private void RollDrop(Enemy enemigo)
     {
-        bool esJefe = enemigo.EsJefe;
-        var clases = Roster.Disponibles();
+        bool esJefe = enemigo.IsBoss;
+        var clases = Roster.Available();
 
         if (clases.Count == 0)
             return;
 
         if (esJefe)
         {
-            var oro = _datos.Perks.Tirar(TierPerk.Oro, clases, _rng);
-            if (oro is not null && !Mochila.GuardarPerk(oro.Id))
+            var oro = _datos.Perks.Roll(PerkTier.Gold, clases, _rng);
+            if (oro is not null && !Backpack.StorePerk(oro.Id))
             {
                 // Mochila llena: se pierde. La UI de verdad va a abrir el diálogo
                 // de "destruí uno de los 15 o el entrante" antes de llegar acá.
@@ -1490,30 +1490,30 @@ public sealed class Partida
             // El jefe suelta además una pieza de equipo, con presupuesto atado a
             // la oleada: así un ítem de la 80 es mejor que uno de la 10 sin que
             // haya que escribir listas por tramo.
-            var arma = GeneradorArmas.Generar(
-                _datos.Curvas.PorOleada.PresupuestoDropJefe.En(Oleada),
-                clases, _rng, Mochila.ProximoIdArma, _datos.Armas);
+            var arma = WeaponGenerator.Generate(
+                _datos.Curves.PorOleada.BossDropBudget.En(Wave),
+                clases, _rng, Backpack.NextWeaponId, _datos.Weapons);
 
-            int idArma = Mochila.RegistrarArma(arma);
-            Mochila.Guardar(new CosaGuardada(TipoCosa.Arma, idArma));
+            int idArma = Backpack.RegisterWeapon(arma);
+            Backpack.Store(new StoredItem(ItemType.Weapon, idArma));
             return;
         }
 
         // El bicho común tira bronce o plata, con poca chance.
-        if (!_rng.Ocurre(_datos.Curvas.Drops.ChanceComun))
+        if (!_rng.Happens(_datos.Curves.Drops.CommonChance))
             return;
 
-        if (_rng.Ocurre(_datos.Curvas.Drops.ChanceBronce))
+        if (_rng.Happens(_datos.Curves.Drops.BronzeChance))
         {
-            var bronce = _datos.Perks.Tirar(TierPerk.Bronce, clases, _rng);
+            var bronce = _datos.Perks.Roll(PerkTier.Bronze, clases, _rng);
             if (bronce is not null)
-                Mochila.GuardarPerk(bronce.Id);
+                Backpack.StorePerk(bronce.Id);
         }
         else
         {
-            var plata = _datos.Perks.Tirar(TierPerk.Plata, clases, _rng);
+            var plata = _datos.Perks.Roll(PerkTier.Silver, clases, _rng);
             if (plata is not null)
-                Mochila.GuardarPerk(plata.Id);
+                Backpack.StorePerk(plata.Id);
         }
     }
 
@@ -1523,9 +1523,9 @@ public sealed class Partida
 
     private void FaseChequeos()
     {
-        if (!Torre.EnPie)
+        if (!Tower.Standing)
         {
-            Estado = EstadoPartida.Perdio;
+            State = RunState.Lost;
             return;
         }
 
@@ -1534,28 +1534,28 @@ public sealed class Partida
         if (!oleadaLimpia)
             return;
 
-        if (Oleada >= _datos.Curvas.Corrida.OleadasPorCorrida)
+        if (Wave >= _datos.Curves.RunCurve.WavesPerRun)
         {
             // ⚠ Se gana matando al jefe de la 100, no "sobreviviendo". La
             // corrida TERMINA acá: no hay modo sin fin y no hay área 9.
-            Estado = EstadoPartida.Gano;
+            State = RunState.Won;
             return;
         }
 
         // La elección frena la corrida: no se puede cerrar sin elegir. Frenarla
         // acá y no al empezar la oleada siguiente le da al jugador el momento de
         // calma para decidir, que es cuando la decisión se piensa.
-        if (EsperandoEleccion)
+        if (WaitingForChoice)
             return;
 
-        if (Oleada - _oleadaUltimaEleccion >= _datos.Curvas.Corrida.OleadasEntreElecciones)
+        if (Wave - _oleadaUltimaEleccion >= _datos.Curves.RunCurve.WavesBetweenChoices)
         {
-            var opciones = ArmadorEleccion.Siguiente(Roster, _rng, _datos);
-            _oleadaUltimaEleccion = Oleada;
+            var opciones = ChoiceBuilder.Next(Roster, _rng, _datos);
+            _oleadaUltimaEleccion = Wave;
 
             if (opciones.Length > 0)
             {
-                OpcionesAbiertas = opciones;
+                OpenChoices = opciones;
                 return;
             }
 
@@ -1612,7 +1612,7 @@ public sealed class Partida
         // cobrara al matar al último bicho, un jugador que pierde en ese mismo
         // tick se llevaría el bonus de una oleada que no terminó de aguantar. Y
         // cobrarlo antes de la preparación es lo que le da con qué comprar.
-        Oro += _bonusOroOleada;
+        Gold += _bonusOroOleada;
         _bonusOroOleada = 0;
 
         // ⚠ Se arma con `Oleada + 1` y el contador NO se toca todavía.
@@ -1620,39 +1620,39 @@ public sealed class Partida
         // Mientras dura la preparación, `Oleada` sigue diciendo la que se jugó. Si
         // se incrementara acá, una corrida abandonada en la preparación reportaría
         // al ranking una oleada que nunca se jugó.
-        var receta = Balance.RecetaDe(Oleada + 1, _datos);
-        _oleadaArmada = ArmadorOleadas.Armar(receta, _rng, _datos);
+        var receta = Balance.RecipeOf(Wave + 1, _datos);
+        _oleadaArmada = WaveBuilder.Armar(receta, _rng, _datos);
 
-        Tienda.Renovar(Oleada + 1, Roster, Mochila, _rng, _datos);
+        Shop.Refresh(Wave + 1, Roster, Backpack, _rng, _datos);
 
-        EsperandoInicioDeOleada = true;
+        WaitingForWaveStart = true;
     }
 
     /// <summary>
     /// Suelta la oleada ya armada. Cierra la preparación y arranca el reloj.
     /// </summary>
-    private void LanzarProximaOleada()
+    private void LaunchNextWave()
     {
         if (_oleadaArmada is not { } armada)
             return;
 
-        Oleada++;
+        Wave++;
 
         // ⚠ La Sed se reinicia con cada oleada. Sin esto el contador crecería
         // durante las 100 y el bonus sería infinito: el techo tiene que ser
         // cuánto se puede matar de una vez, no cuánto se lleva matado.
         foreach (var d in _defensores)
-            d.MuertesEnLaOleada = 0;
+            d.KillsInWave = 0;
 
         foreach (var compra in armada.Npcs)
             _porSpawnear.Enqueue(compra);
 
-        _intervaloSpawn = armada.IntervaloSpawnTicks;
+        _intervaloSpawn = armada.SpawnIntervalTicks;
         _bonusOroOleada = armada.BonusOro;
         _ticksParaProximoSpawn = 0;
         _oleadaArmada = null;
 
-        EsperandoInicioDeOleada = false;
+        WaitingForWaveStart = false;
     }
 
     /// <summary>
@@ -1662,12 +1662,12 @@ public sealed class Partida
     {
         // ⚠ Acá NO se entrega oro: el inicial son dos fichas de la clase que
         // toque, y eso se sabe recién al elegirla. Ver Elegir().
-        Oro = 0;
+        Gold = 0;
 
         // 1 de 3 al empezar. La corrida arranca con la pantalla de elección
         // abierta y el roster vacío: no se puede poner nada hasta elegir.
-        OpcionesAbiertas = ArmadorEleccion.Inicial(_rng, _datos);
+        OpenChoices = ChoiceBuilder.Initial(_rng, _datos);
 
-        LanzarProximaOleada();
+        LaunchNextWave();
     }
 }

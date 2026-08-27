@@ -18,7 +18,7 @@ namespace TowerOfArgentum;
 public partial class Juego : Node2D
 {
     /// <summary>Milisegundos de un tick. 1000/30 = 33,33… y acá se trunca a 33.</summary>
-    private const long MsPorTick = 1000 / Enteros.TicksPorSegundo;
+    private const long MsPorTick = 1000 / Ints.TicksPerSecond;
 
     /// <summary>
     /// Techo de ticks por frame.
@@ -33,8 +33,8 @@ public partial class Juego : Node2D
     /// </remarks>
     private const int MaxTicksPorFrame = 8;
 
-    public Partida Partida { get; private set; } = null!;
-    private LogAcciones _log = null!;
+    public Run Run { get; private set; } = null!;
+    private ActionLog _log = null!;
     private long _ultimoMs;
     private long _acumulador;
 
@@ -73,22 +73,22 @@ public partial class Juego : Node2D
 
         // Con Retomar la partida ya viene armada y re-simulada; acá solo se crea
         // la nueva.
-        if (Partida is null)
+        if (Run is null)
         {
             // ⚠ El layout lo elige la SEED, con su propio generador. No se usa el
             // _rng de la partida porque ese ya arrancó a consumir números adentro
             // de Partida: pedirle uno acá correría toda la secuencia posterior.
-            var mapaNuevo = Layouts.Elegir(Seed, CargadorDatos.Actual);
-            _log = new LogAcciones();
-            Partida = new Partida(Seed, mapaNuevo, _log, CargadorDatos.Actual);
-            Partida.Empezar();
+            var mapaNuevo = Layouts.Choose(Seed, CargadorDatos.Actual);
+            _log = new ActionLog();
+            Run = new Run(Seed, mapaNuevo, _log, CargadorDatos.Actual);
+            Run.Empezar();
         }
 
-        var mapa = Partida.Mapa;
+        var mapa = Run.Map;
 
         // El portal de entrada. Va de hijo y no dibujado a mano porque son
         // partículas: tienen que vivir entre frames, no repintarse de cero.
-        var entrada = mapa.Ruta.Entrada;
+        var entrada = mapa.Route.Entrada;
         var (px, py) = Escala.CentroDe(entrada.X, entrada.Y);
 
         AddChild(new PortalEntrada(new Color(0.45f, 0.78f, 1f))
@@ -98,7 +98,7 @@ public partial class Juego : Node2D
 
         // Y el otro extremo: la Torre. Va un poco más arriba del centro de su
         // celda porque flota, y la punta de abajo tiene que quedar apoyada.
-        var (tx, ty) = Escala.CentroDe(Partida.Torre.Celda.X, Partida.Torre.Celda.Y);
+        var (tx, ty) = Escala.CentroDe(Run.Tower.Cell.X, Run.Tower.Cell.Y);
 
         AddChild(new CristalTorre(this)
         {
@@ -107,8 +107,8 @@ public partial class Juego : Node2D
 
         _ultimoMs = RelojFino.Ms;
 
-        GD.Print($"Corrida iniciada · seed {Seed} · run {RunId} · " +
-                 $"ruta de {mapa.Ruta.Largo / Enteros.MilesimasPorCelda} celdas");
+        GD.Print($"RunCurve iniciada · seed {Seed} · run {RunId} · " +
+                 $"ruta de {mapa.Route.Length / Ints.ThousandthsPerCell} celdas");
     }
 
     /// <summary>
@@ -118,7 +118,7 @@ public partial class Juego : Node2D
     /// Sale gratis del determinismo: guardar es escribir la seed y el log, y
     /// cargar es re-simular desde el tick 0. Ver <see cref="Guardado"/>.
     /// </remarks>
-    public void GuardarCorrida() => Guardado.Guardar(Seed, RunId, _log, Partida.Tick);
+    public void GuardarCorrida() => Guardado.Store(Seed, RunId, _log, Run.Tick);
 
     /// <summary>Abierto el menú de ESC. Congela el reloj, como <c>_pausado</c>.</summary>
     public bool MenuAbierto { get; set; }
@@ -137,13 +137,13 @@ public partial class Juego : Node2D
     /// </remarks>
     private void GuardarAlAbrirPreparacion()
     {
-        if (!Partida.EsperandoInicioDeOleada || Partida.Estado != EstadoPartida.EnCurso)
+        if (!Run.WaitingForWaveStart || Run.State != RunState.InProgress)
             return;
 
-        if (_oleadaGuardada == Partida.Oleada)
+        if (_oleadaGuardada == Run.Wave)
             return;
 
-        _oleadaGuardada = Partida.Oleada;
+        _oleadaGuardada = Run.Wave;
         GuardarCorrida();
     }
 
@@ -154,23 +154,23 @@ public partial class Juego : Node2D
     /// ⚠ Llamar ANTES de agregar el nodo al árbol: <c>_Ready</c> ve la partida ya
     /// puesta y no crea otra.
     /// </remarks>
-    public void Retomar(Partida partida, LogAcciones log, ulong seed, long runId)
+    public void Retomar(Run partida, ActionLog log, ulong seed, long runId)
     {
-        Partida = partida;
+        Run = partida;
         _log = log;
         Seed = seed;
         RunId = runId;
 
         // La oleada retomada ya está guardada — es de donde venimos. Sin esto, el
         // primer frame la volvería a guardar, inofensivo pero al pedo.
-        _oleadaGuardada = partida.Oleada;
+        _oleadaGuardada = partida.Wave;
     }
 
     /// <summary>La clase que se va a poner con el próximo click.</summary>
-    private Clase _claseElegida = Clase.Cazador;
+    private DefenderClass _claseElegida = DefenderClass.Hunter;
 
     /// <summary>Bajo qué celda está el mouse. Fuera de la grilla, <c>null</c>.</summary>
-    private Celda? _celdaMouse;
+    private Cell? _celdaMouse;
 
     /// <summary>
     /// Registra una acción del jugador y la encola para el tick <b>siguiente</b>.
@@ -182,9 +182,9 @@ public partial class Juego : Node2D
     /// cuándo cayó el evento dentro del frame. Con el tick siguiente, la acción
     /// entra siempre en la fase 1, que es donde el orden dice que entra.
     /// </remarks>
-    private void Encolar(System.Func<int, Accion> armar)
+    private void Encolar(System.Func<int, PlayerAction> armar)
     {
-        _log.Agregar(armar(Partida.TickDeAccion));
+        _log.Agregar(armar(Run.TickDeAccion));
     }
 
     /// <summary>Elige una de las 3 opciones. Lo llama la pantalla de elección.</summary>
@@ -193,7 +193,7 @@ public partial class Juego : Node2D
     /// lo regenera el servidor de la seed; si se guardara el contenido, un
     /// cliente modificado podría reclamar que le ofrecieron algo mejor.
     /// </remarks>
-    public void Elegir(int indice) => Encolar(t => Accion.Elegir(t, indice));
+    public void Choose(int indice) => Encolar(t => PlayerAction.Choose(t, indice));
 
     /// <summary>
     /// Arranca la oleada que espera. Lo llama el botón y el fin de los 30 s.
@@ -205,50 +205,50 @@ public partial class Juego : Node2D
     /// </remarks>
     public void ComenzarOleada()
     {
-        if (!Partida.EsperandoInicioDeOleada)
+        if (!Run.WaitingForWaveStart)
             return;
 
-        Encolar(t => new Accion(t, TipoAccion.AdelantarOleada, 0, 0, 0));
+        Encolar(t => new PlayerAction(t, ActionType.CallNextWave, 0, 0, 0));
     }
 
     /// <summary>El id de la corrida del lado del servidor. 0 = corrida local.</summary>
     public long RunId { get; set; }
 
     /// <summary>El log, para poder reportarlo y guardarlo.</summary>
-    public LogAcciones Log => _log;
+    public ActionLog Log => _log;
 
     /// <summary>La seed con la que corre. La manda el servidor.</summary>
     public ulong Seed { get; private set; }
 
     /// <summary>El overlay de mochila, para poder abrirlo con Tab.</summary>
-    public PantallaMochila? Mochila { get; set; }
+    public PantallaMochila? Backpack { get; set; }
 
     /// <summary>Equipa lo que está en ese lugar de la mochila.</summary>
-    public void EquiparDeMochila(int indice, Clase clase)
+    public void EquiparDeMochila(int indice, DefenderClass clase)
     {
-        var cosa = Partida.Mochila.Cosas[indice];
+        var cosa = Run.Backpack.Items[indice];
 
         // Perk y equipo son dos acciones distintas del log, aunque la UI las
         // muestre en la misma grilla: el perk se destruye al sacarlo y el equipo
         // vuelve. Confundirlas sería confundir las dos reglas.
-        var tipo = cosa.Tipo == TipoCosa.Perk ? TipoAccion.EquiparPerk : TipoAccion.Equipar;
+        var tipo = cosa.Kind == ItemType.Perk ? ActionType.EquipPerk : ActionType.Equip;
 
-        _log.Agregar(new Accion(Partida.TickDeAccion, tipo, indice, (int)clase, 0));
+        _log.Agregar(new PlayerAction(Run.TickDeAccion, tipo, indice, (int)clase, 0));
     }
 
     /// <summary>
     /// Saca un perk equipado. <b>Lo destruye.</b> La UI ya pidió confirmación.
     /// </summary>
-    public void SacarPerk(Clase clase, int slot)
-        => _log.Agregar(new Accion(Partida.TickDeAccion, TipoAccion.SacarPerk, (int)clase, slot, 0));
+    public void RemovePerk(DefenderClass clase, int slot)
+        => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.RemovePerk, (int)clase, slot, 0));
 
     /// <summary>La clase que se pone con el próximo click, para la UI.</summary>
-    public Clase ClaseElegida => _claseElegida;
+    public DefenderClass ClaseElegida => _claseElegida;
 
     /// <summary>Cicla entre las clases del roster.</summary>
     private void CambiarClase(int delta)
     {
-        var disponibles = Partida.Roster.Disponibles();
+        var disponibles = Run.Roster.Available();
         if (disponibles.Count == 0)
             return;
 
@@ -284,9 +284,9 @@ public partial class Juego : Node2D
             return;
         }
 
-        if (Partida.EnPausa)
+        if (Run.Paused)
         {
-            Partida.Avanzar();
+            Run.Advance();
             QueueRedraw();
             GuardarAlAbrirPreparacion();
             return;
@@ -297,7 +297,7 @@ public partial class Juego : Node2D
         int corridos = 0;
         while (_acumulador >= MsPorTick && corridos < MaxTicksPorFrame)
         {
-            Partida.Avanzar();
+            Run.Advance();
             _acumulador -= MsPorTick;
             corridos++;
         }
@@ -326,10 +326,10 @@ public partial class Juego : Node2D
     /// </remarks>
     private void AjustarClaseElegida()
     {
-        if (Partida.Roster.Tiene(_claseElegida))
+        if (Run.Roster.Has(_claseElegida))
             return;
 
-        var disponibles = Partida.Roster.Disponibles();
+        var disponibles = Run.Roster.Available();
 
         if (disponibles.Count > 0)
         {
@@ -339,9 +339,9 @@ public partial class Juego : Node2D
     }
 
     /// <summary>Elige la clase a poner. La llama la barra de clases del HUD.</summary>
-    public void SeleccionarClase(Clase clase)
+    public void SeleccionarClase(DefenderClass clase)
     {
-        if (!Partida.Roster.Tiene(clase) || _claseElegida == clase)
+        if (!Run.Roster.Has(clase) || _claseElegida == clase)
             return;
 
         _claseElegida = clase;
@@ -363,10 +363,10 @@ public partial class Juego : Node2D
 
         var celda = ACelda(posicion);
 
-        if (celda is null || !Partida.PuedePoner(_claseElegida, celda.Value))
+        if (celda is null || !Run.PuedePoner(_claseElegida, celda.Value))
             return false;
 
-        Encolar(t => Accion.Poner(t, _claseElegida, celda.Value));
+        Encolar(t => PlayerAction.Place(t, _claseElegida, celda.Value));
         return true;
     }
 
@@ -397,7 +397,7 @@ public partial class Juego : Node2D
     /// desempata por ticks, así que actuar en pausa sería tiempo de pensar gratis
     /// en una tabla de velocidad.
     /// </remarks>
-    private bool PuedeActuar => !_pausado && Partida.Estado == EstadoPartida.EnCurso;
+    private bool PuedeActuar => !_pausado && Run.State == RunState.InProgress;
 
     private void AtenderClick(InputEventMouseButton boton)
     {
@@ -414,9 +414,9 @@ public partial class Juego : Node2D
         }
         else if (boton.ButtonIndex == MouseButton.Right)
         {
-            var defensor = Partida.DefensorEn(celda.Value);
+            var defensor = Run.DefensorEn(celda.Value);
             if (defensor is not null)
-                Encolar(t => Accion.Vender(t, defensor.IdColocacion));
+                Encolar(t => PlayerAction.Sell(t, defensor.PlacementId));
         }
     }
 
@@ -463,42 +463,42 @@ public partial class Juego : Node2D
             // Tab abre la mochila. Es un overlay y NO frena la corrida: pausar es
             // tiempo de pensar gratis en una tabla de velocidad, y equipar tiene
             // que costar algo (INTERFAZ.md §5).
-            case Atajo.Mochila:
-                Mochila?.Alternar();
+            case Atajo.Backpack:
+                Backpack?.Alternar();
                 break;
 
-            case Atajo.AdelantarOleada:
+            case Atajo.CallNextWave:
                 // Adelantar oleada: existe por el ranking. Sin esto, el desempate
                 // por ticks no mide nada porque todos los que ganan tardan igual.
                 if (PuedeActuar)
-                    Encolar(Accion.AdelantarOleada);
+                    Encolar(PlayerAction.CallNextWave);
 
                 break;
         }
     }
 
     /// <summary>Convierte una posición de pantalla en celda de la grilla.</summary>
-    private Celda? ACelda(Vector2 posicion)
+    private Cell? ACelda(Vector2 posicion)
     {
         int x = (int)(posicion.X / Escala.LadoCelda);
         int y = (int)(posicion.Y / Escala.LadoCelda);
-        var celda = new Celda(x, y);
+        var celda = new Cell(x, y);
 
-        return Partida.Mapa.EnGrilla(celda) ? celda : null;
+        return Run.Map.InGrid(celda) ? celda : null;
     }
 
     public override void _Draw()
     {
         const int celda = Escala.LadoCelda;
-        var ruta = Partida.Ruta;
-        var mapa = Partida.Mapa;
+        var ruta = Run.Route;
+        var mapa = Run.Map;
 
         // El suelo del área, horneado. Va primero: todo lo demás se dibuja encima.
         //
         // Si falta el arte devuelve null y el mundo se dibuja como antes, sobre el
         // fondo pelado. Ver PisoHorneado.
         var piso = PisoHorneado.Para(
-            CargadorDatos.Actual.Areas.DeOleada(System.Math.Max(1, Partida.ProximaOleada)), Seed, Partida.Mapa);
+            CargadorDatos.Actual.Areas.OfWave(System.Math.Max(1, Run.ProximaOleada)), Seed, Run.Map);
 
         if (piso is not null)
             DrawTexture(piso, Vector2.Zero);
@@ -519,11 +519,11 @@ public partial class Juego : Node2D
             ? new Color(0.55f, 0.90f, 0.60f, 0.45f)
             : new Color(0.35f, 0.70f, 0.45f, 0.25f);
 
-        for (int y = 0; y < mapa.Alto; y++)
+        for (int y = 0; y < mapa.Height; y++)
         {
-            for (int x = 0; x < mapa.Ancho; x++)
+            for (int x = 0; x < mapa.Width; x++)
             {
-                if (!mapa.EsColocable(new Celda(x, y)))
+                if (!mapa.EsColocable(new Cell(x, y)))
                     continue;
 
                 DrawRect(new Rect2(x * celda, y * celda, celda, celda), relleno);
@@ -552,29 +552,29 @@ public partial class Juego : Node2D
         // animado. Ver CristalTorre.
 
         // Los defensores.
-        foreach (var d in Partida.Defensores)
+        foreach (var d in Run.Defenders)
         {
             if (!DibujarDefensor(d, celda))
             {
                 DrawRect(
-                    new Rect2(d.Celda.X * celda + 8, d.Celda.Y * celda + 8, celda - 16, celda - 16),
+                    new Rect2(d.Cell.X * celda + 8, d.Cell.Y * celda + 8, celda - 16, celda - 16),
                     new Color(0.2f, 0.8f, 0.4f));
             }
         }
 
         // Los enemigos. La posición fina viene de la ruta y NO vuelve a la
         // simulación: es solo para que el sprite no salte de celda en celda.
-        foreach (var e in Partida.Enemigos)
+        foreach (var e in Run.Enemies)
         {
-            var (fx, fy) = ruta.PosicionFina(e.DistanciaRecorrida);
+            var (fx, fy) = ruta.PosicionFina(e.DistanceTravelled);
 
             var centro = new Vector2(
-                (float)fx / Enteros.MilesimasPorCelda * celda + (celda / 2f),
-                (float)fy / Enteros.MilesimasPorCelda * celda + (celda / 2f));
+                (float)fx / Ints.ThousandthsPerCell * celda + (celda / 2f),
+                (float)fy / Ints.ThousandthsPerCell * celda + (celda / 2f));
 
             // Los que llevan perk se ven distinto. Está escrito que "tiene que
             // verse"; esto es el placeholder de eso (INTERFAZ.md §5).
-            bool conPerk = e.PerkVidaExtra > 0 || e.PerkVelocidadExtra > 0;
+            bool conPerk = e.ExtraHealthPerk > 0 || e.ExtraSpeedPerk > 0;
 
             if (!DibujarBicho(e, centro, celda, conPerk))
             {
@@ -585,7 +585,7 @@ public partial class Juego : Node2D
             }
 
             // Barra de vida.
-            float porcion = e.HpMaximo == 0 ? 0f : (float)e.Hp / e.HpMaximo;
+            float porcion = e.MaxHp == 0 ? 0f : (float)e.Hp / e.MaxHp;
             DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40, 5), new Color(0, 0, 0, 0.6f));
             DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40 * porcion, 5), new Color(0.2f, 0.9f, 0.2f));
         }
@@ -610,23 +610,23 @@ public partial class Juego : Node2D
     /// el mapa.</para>
     /// </remarks>
     /// <returns><c>false</c> si falta el arte y hay que dibujar la primitiva.</returns>
-    private bool DibujarDefensor(Defensor d, int celda)
+    private bool DibujarDefensor(Defender d, int celda)
     {
-        var enRoster = Partida.Roster.Buscar(d.Clase);
+        var enRoster = Run.Roster.Find(d.DefenderClass);
 
         if (enRoster is null)
             return false;
 
-        var apariencia = CargadorApariencia.De(d.Clase, enRoster.TierVisual);
+        var apariencia = CargadorApariencia.De(d.DefenderClass, enRoster.VisualTier);
 
-        if (apariencia is null || apariencia.Cuerpo.Length == 0)
+        if (apariencia is null || apariencia.Body.Length == 0)
             return false;
 
         string direccion = Direcciones[MirandoHacia(d)];
 
         var centro = new Vector2(
-            (d.Celda.X + 0.5f) * celda,
-            (d.Celda.Y + 0.5f) * celda);
+            (d.Cell.X + 0.5f) * celda,
+            (d.Cell.Y + 0.5f) * celda);
 
         // El cuerpo es la pieza que ancla: la cabeza y el arma van a su mismo
         // punto de apoyo. Si no está, no se dibuja nada, porque una cabeza sola
@@ -635,7 +635,7 @@ public partial class Juego : Node2D
         // ⚠ El cuerpo va QUIETO, cuadro 0. Sus cuadros son el ciclo de caminar de
         // AO, y un defensor plantado que "camina" en el lugar marea — pedido del
         // 2026-08-26. La única pieza que anima es el arma.
-        if (!DibujarPieza(apariencia.Cuerpo, direccion, centro, celda, Vector2.Zero, animar: false))
+        if (!DibujarPieza(apariencia.Body, direccion, centro, celda, Vector2.Zero, animar: false))
             return false;
 
         // ⚠ La cabeza va corrida, y el offset sale del cuerpo.
@@ -644,11 +644,11 @@ public partial class Juego : Node2D
         // píxeles x4 y el mundo se dibuja a la mitad, así que se escala igual que
         // el sprite. Es lo que separa razas altas de bajas: -38 px contra -28.
         var offsetCabeza = new Vector2(
-            apariencia.CabezaOffset.X * 0.5f,
-            apariencia.CabezaOffset.Y * 0.5f);
+            apariencia.HeadOffset.X * 0.5f,
+            apariencia.HeadOffset.Y * 0.5f);
 
-        DibujarPieza(apariencia.Cabeza, direccion, centro, celda, offsetCabeza, animar: false);
-        DibujarPieza(apariencia.Arma, direccion, centro, celda, Vector2.Zero, animar: true);
+        DibujarPieza(apariencia.Head, direccion, centro, celda, offsetCabeza, animar: false);
+        DibujarPieza(apariencia.Weapon, direccion, centro, celda, Vector2.Zero, animar: true);
 
         return true;
     }
@@ -664,25 +664,25 @@ public partial class Juego : Node2D
     /// copias de la parte más delicada del combate para ganar que el muñeco mire
     /// al bicho correcto una vez cada tanto.</para>
     /// </remarks>
-    private int MirandoHacia(Defensor d)
+    private int MirandoHacia(Defender d)
     {
         float mejor = float.MaxValue;
         int direccion = 3;
 
-        var ruta = Partida.Ruta;
+        var ruta = Run.Route;
 
-        foreach (var e in Partida.Enemigos)
+        foreach (var e in Run.Enemies)
         {
-            if (!e.Vivo)
+            if (!e.Alive)
                 continue;
 
-            var (fx, fy) = ruta.PosicionFina(e.DistanciaRecorrida);
+            var (fx, fy) = ruta.PosicionFina(e.DistanceTravelled);
 
-            float ex = (float)fx / Enteros.MilesimasPorCelda;
-            float ey = (float)fy / Enteros.MilesimasPorCelda;
+            float ex = (float)fx / Ints.ThousandthsPerCell;
+            float ey = (float)fy / Ints.ThousandthsPerCell;
 
-            float dx = ex - d.Celda.X;
-            float dy = ey - d.Celda.Y;
+            float dx = ex - d.Cell.X;
+            float dy = ey - d.Cell.Y;
             float distancia = (dx * dx) + (dy * dy);
 
             if (distancia >= mejor)
@@ -718,7 +718,7 @@ public partial class Juego : Node2D
 
         // La animación sale del tick, igual que la del bicho. Con animar en falso
         // va siempre el cuadro 0: el de estar parado.
-        long ms = (long)Partida.Tick * MsPorTick;
+        long ms = (long)Run.Tick * MsPorTick;
 
         bool mueve = animar && Configuracion.AnimarArmas;
         var textura = CargadorGraficos.Textura(completa, mueve ? (int)(ms / g.MsPorFrame) : 0);
@@ -752,15 +752,15 @@ public partial class Juego : Node2D
     /// encima de la ruta.</para>
     /// </remarks>
     /// <returns><c>false</c> si ese bicho todavía no tiene arte.</returns>
-    private bool DibujarBicho(Enemigo e, Vector2 centro, int celda, bool conPerk)
+    private bool DibujarBicho(Enemy e, Vector2 centro, int celda, bool conPerk)
     {
-        var dato = CargadorDatos.Actual.Por(e.TipoId);
+        var dato = CargadorDatos.Actual.Get(e.TypeId);
 
-        if (dato is null || dato.Grafico.Length == 0)
+        if (dato is null || dato.Graphic.Length == 0)
             return false;
 
-        int direccion = Partida.Ruta.Direccion(e.DistanciaRecorrida);
-        string clave = $"{dato.Grafico}.{Direcciones[direccion]}";
+        int direccion = Run.Route.Direccion(e.DistanceTravelled);
+        string clave = $"{dato.Graphic}.{Direcciones[direccion]}";
 
         var g = CargadorGraficos.Datos(clave);
 
@@ -773,14 +773,14 @@ public partial class Juego : Node2D
         // para abajo: con los 55 ms/cuadro que trae el arte de Austral y un tick de
         // 33 ms daba 1, o sea 33 ms, un 66 % más rápido de lo que dice el dato. La
         // hormiga caminaba como si patinara.
-        long ms = (long)Partida.Tick * MsPorTick;
+        long ms = (long)Run.Tick * MsPorTick;
         int cuadro = (int)(ms / g.MsPorFrame);
 
         // Cada bicho arranca en un cuadro distinto. Sin esto los treinta enemigos
         // de una oleada mueven la pata en el mismo tick y parecen un desfile.
         // `IdSpawn` no se reusa nunca, así que sirve de desfasaje y no cambia
         // dentro de la vida del enemigo.
-        cuadro += e.IdSpawn;
+        cuadro += e.SpawnId;
 
         var textura = CargadorGraficos.Textura(clave, cuadro);
 
@@ -790,7 +790,7 @@ public partial class Juego : Node2D
         // El arte está en x4 y el mundo se dibuja a la mitad de eso: la celda mide
         // 64 px porque el tile x4 de AO mide 128 (INTERFAZ.md §2). La escala
         // visual del bicho se multiplica encima.
-        float escala = 0.5f * dato.EscalaVisual / 100f;
+        float escala = 0.5f * dato.VisualScale / 100f;
 
         var tamano = textura.GetSize() * escala;
 
@@ -821,14 +821,14 @@ public partial class Juego : Node2D
         if (_celdaMouse is not { } c)
             return;
 
-        var stats = CargadorDatos.Actual.StatsDe(_claseElegida);
-        bool puede = Partida.PuedePoner(_claseElegida, c);
-        var ocupada = Partida.DefensorEn(c);
+        var stats = CargadorDatos.Actual.StatsOf(_claseElegida);
+        bool puede = Run.PuedePoner(_claseElegida, c);
+        var ocupada = Run.DefensorEn(c);
 
         // El alcance de lo que se está por poner, o de lo que ya está ahí.
         int alcance = ocupada is null
-            ? stats.AlcanceCeldas
-            : CargadorDatos.Actual.StatsDe(ocupada.Clase).AlcanceCeldas;
+            ? stats.RangeCells
+            : CargadorDatos.Actual.StatsOf(ocupada.DefenderClass).RangeCells;
 
         if (puede || ocupada is not null)
         {

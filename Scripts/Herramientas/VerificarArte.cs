@@ -127,7 +127,7 @@ public static class VerificarArte
     }
 
     /// <summary>Todas las regiones de una entrada: la suelta o las del array.</summary>
-    private static IEnumerable<(int X, int Y, int Ancho, int Alto, int Cuadro)> RegionesDe(JsonNode entrada)
+    private static IEnumerable<(int X, int Y, int Width, int Height, int Cuadro)> RegionesDe(JsonNode entrada)
     {
         if (entrada["regiones"] is JsonArray regiones)
         {

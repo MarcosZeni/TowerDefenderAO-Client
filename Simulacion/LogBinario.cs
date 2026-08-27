@@ -25,7 +25,7 @@ namespace TowerOfArgentum.Simulacion;
 /// Con 100 oleadas y decenas de miles de acciones, eso es la diferencia entre un
 /// log que entra en el <c>MEDIUMBLOB</c> y uno que hay que truncar.</para>
 /// </remarks>
-public static class LogBinario
+public static class BinaryLog
 {
     /// <summary>
     /// Versión del formato, primer byte del blob.
@@ -37,7 +37,7 @@ public static class LogBinario
     /// </remarks>
     public const byte Version = 1;
 
-    public static byte[] Escribir(LogAcciones log)
+    public static byte[] Escribir(ActionLog log)
     {
         using var salida = new MemoryStream();
         salida.WriteByte(Version);
@@ -48,36 +48,36 @@ public static class LogBinario
         using (var comprimido = new DeflateStream(salida, CompressionLevel.SmallestSize, leaveOpen: true))
         using (var w = new BinaryWriter(comprimido))
         {
-            EscribirVarint(w, (uint)log.Cantidad);
+            WriteVarint(w, (uint)log.Count);
 
             int tickAnterior = 0;
 
-            foreach (var a in log.Todas)
+            foreach (var a in log.All)
             {
                 // El delta nunca es negativo porque el log está ordenado por tick:
                 // se escribe mientras se juega y nunca se reordena. Si alguna vez
                 // diera negativo, sería que alguien ordenó la lista, y eso además
                 // rompería el determinismo.
-                EscribirVarint(w, (uint)(a.Tick - tickAnterior));
+                WriteVarint(w, (uint)(a.Tick - tickAnterior));
                 tickAnterior = a.Tick;
 
-                w.Write((byte)a.Tipo);
+                w.Write((byte)a.Kind);
 
                 // Los tres campos van en zigzag: pueden ser negativos (un índice
                 // de mochila inválido, un -1 de "ninguno") y un varint crudo
                 // gastaría 5 bytes en cada número negativo.
-                EscribirVarint(w, ZigZag(a.A));
-                EscribirVarint(w, ZigZag(a.B));
-                EscribirVarint(w, ZigZag(a.C));
+                WriteVarint(w, ZigZag(a.A));
+                WriteVarint(w, ZigZag(a.B));
+                WriteVarint(w, ZigZag(a.C));
             }
         }
 
         return salida.ToArray();
     }
 
-    public static LogAcciones Leer(byte[] datos)
+    public static ActionLog Leer(byte[] datos)
     {
-        var log = new LogAcciones();
+        var log = new ActionLog();
 
         if (datos.Length < 2)
             return log;
@@ -96,19 +96,19 @@ public static class LogBinario
         using var descomprimido = new DeflateStream(entrada, CompressionMode.Decompress);
         using var r = new BinaryReader(descomprimido);
 
-        uint cantidad = LeerVarint(r);
+        uint cantidad = ReadVarint(r);
         int tick = 0;
 
         for (uint i = 0; i < cantidad; i++)
         {
-            tick += (int)LeerVarint(r);
+            tick += (int)ReadVarint(r);
 
-            var tipo = (TipoAccion)r.ReadByte();
-            int a = DesZigZag(LeerVarint(r));
-            int b = DesZigZag(LeerVarint(r));
-            int c = DesZigZag(LeerVarint(r));
+            var tipo = (ActionType)r.ReadByte();
+            int a = UnZigZag(ReadVarint(r));
+            int b = UnZigZag(ReadVarint(r));
+            int c = UnZigZag(ReadVarint(r));
 
-            log.Agregar(new Accion(tick, tipo, a, b, c));
+            log.Agregar(new PlayerAction(tick, tipo, a, b, c));
         }
 
         return log;
@@ -118,7 +118,7 @@ public static class LogBinario
     /// Entero de longitud variable: 7 bits de datos por byte, el octavo dice si
     /// sigue. Un número chico ocupa 1 byte; uno grande, hasta 5.
     /// </summary>
-    private static void EscribirVarint(BinaryWriter w, uint valor)
+    private static void WriteVarint(BinaryWriter w, uint valor)
     {
         while (valor >= 0x80)
         {
@@ -129,7 +129,7 @@ public static class LogBinario
         w.Write((byte)valor);
     }
 
-    private static uint LeerVarint(BinaryReader r)
+    private static uint ReadVarint(BinaryReader r)
     {
         uint resultado = 0;
         int corrimiento = 0;
@@ -158,5 +158,5 @@ public static class LogBinario
     /// </summary>
     private static uint ZigZag(int v) => (uint)((v << 1) ^ (v >> 31));
 
-    private static int DesZigZag(uint v) => (int)(v >> 1) ^ -(int)(v & 1);
+    private static int UnZigZag(uint v) => (int)(v >> 1) ^ -(int)(v & 1);
 }

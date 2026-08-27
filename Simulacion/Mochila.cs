@@ -5,16 +5,16 @@ namespace TowerOfArgentum.Simulacion;
 /// Solo dos. ⚠ <b>Armadura, casco y escudo no son ítems</b>: no dan stats y no
 /// ocupan lugar. Son el frame que cambia cuando la clase sube de nivel.
 /// </remarks>
-public enum TipoCosa
+public enum ItemType
 {
     Perk = 0,
 
     /// <summary>Un arma. El único ítem con stats del juego.</summary>
-    Arma = 1,
+    Weapon = 1,
 }
 
 /// <summary>Una cosa en la mochila: o un perk, o un arma.</summary>
-public readonly record struct CosaGuardada(TipoCosa Tipo, int Id);
+public readonly record struct StoredItem(ItemType Kind, int Id);
 
 /// <summary>
 /// La mochila. <b>15 lugares, compartidos entre perks y equipo.</b>
@@ -34,22 +34,22 @@ public readonly record struct CosaGuardada(TipoCosa Tipo, int Id);
 /// distintos, sin pesos, sin dos bolsos: eso es Tetris de inventario, que es un
 /// juego distinto. Austral lo tiene porque es un MMO; un TD no lo necesita.</para>
 /// </remarks>
-public sealed class Mochila(DatosBalance datos)
+public sealed class Backpack(BalanceData datos)
 {
-    private readonly List<CosaGuardada> _cosas = [];
-    private readonly Dictionary<int, Arma> _armas = [];
+    private readonly List<StoredItem> _cosas = [];
+    private readonly Dictionary<int, Weapon> _armas = [];
     private int _proximoIdArma;
 
-    public IReadOnlyList<CosaGuardada> Cosas => _cosas;
+    public IReadOnlyList<StoredItem> Items => _cosas;
 
     public int Ocupados => _cosas.Count;
 
     /// <summary>Cuántos lugares tiene. Sale de <c>curvas.json</c>.</summary>
-    public int Tope { get; } = datos.Curvas.Defensores.LugaresMochila;
+    public int Cap { get; } = datos.Curves.Defenders.BackpackSlots;
 
-    public bool Llena => _cosas.Count >= Tope;
+    public bool Llena => _cosas.Count >= Cap;
 
-    public Arma? ArmaPorId(int id) => _armas.GetValueOrDefault(id);
+    public Weapon? WeaponById(int id) => _armas.GetValueOrDefault(id);
 
     /// <summary>
     /// Mete algo. Devuelve <c>false</c> si no había lugar.
@@ -61,7 +61,7 @@ public sealed class Mochila(DatosBalance datos)
     /// perder algo por un ítem que ni se quería es de las cosas que más molestan.
     /// Es una decisión, así que va al log como <c>Descartar</c>.
     /// </remarks>
-    public bool Guardar(CosaGuardada cosa)
+    public bool Store(StoredItem cosa)
     {
         if (Llena)
             return false;
@@ -70,7 +70,7 @@ public sealed class Mochila(DatosBalance datos)
         return true;
     }
 
-    public bool GuardarPerk(int idPerk) => Guardar(new CosaGuardada(TipoCosa.Perk, idPerk));
+    public bool StorePerk(int idPerk) => Store(new StoredItem(ItemType.Perk, idPerk));
 
     /// <summary>
     /// Registra un arma generada y devuelve su id.
@@ -80,33 +80,33 @@ public sealed class Mochila(DatosBalance datos)
     /// dentro de la corrida: el log guarda "equipé el arma 7", y si dos armas
     /// compartieran número, re-simular equiparía la otra.
     /// </remarks>
-    public int RegistrarArma(Arma plantilla)
+    public int RegisterWeapon(Weapon plantilla)
     {
         int id = _proximoIdArma++;
 
-        _armas[id] = new Arma
+        _armas[id] = new Weapon
         {
             Id = id,
-            Nombre = plantilla.Nombre,
-            Rareza = plantilla.Rareza,
-            GraficoId = plantilla.GraficoId,
-            Dano = plantilla.Dano,
-            Cadencia = plantilla.Cadencia,
-            Alcance = plantilla.Alcance,
-            Habilidad = plantilla.Habilidad,
-            Magnitud = plantilla.Magnitud,
-            Clases = plantilla.Clases,
-            Valor = plantilla.Valor,
+            BaseKind = plantilla.BaseKind,
+            Rarity = plantilla.Rarity,
+            GraphicId = plantilla.GraphicId,
+            Damage = plantilla.Damage,
+            Cadence = plantilla.Cadence,
+            Range = plantilla.Range,
+            Ability = plantilla.Ability,
+            Magnitude = plantilla.Magnitude,
+            Classes = plantilla.Classes,
+            Value = plantilla.Value,
         };
 
         return id;
     }
 
     /// <summary>Cuántas armas se registraron. Es el próximo id que va a salir.</summary>
-    public int ProximoIdArma => _proximoIdArma;
+    public int NextWeaponId => _proximoIdArma;
 
     /// <summary>Saca una cosa de la mochila. El objeto en sí sigue existiendo.</summary>
-    public bool Sacar(CosaGuardada cosa)
+    public bool Sacar(StoredItem cosa)
     {
         int i = _cosas.IndexOf(cosa);
         if (i < 0)
@@ -120,7 +120,7 @@ public sealed class Mochila(DatosBalance datos)
     }
 
     /// <summary>Saca por posición, que es como la nombra el log.</summary>
-    public CosaGuardada? SacarEn(int indice)
+    public StoredItem? RemoveAt(int indice)
     {
         if (indice < 0 || indice >= _cosas.Count)
             return null;

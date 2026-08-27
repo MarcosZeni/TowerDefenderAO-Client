@@ -38,8 +38,8 @@ public partial class PantallaFinDeCorrida : Control
 
     public override void _Process(double delta)
     {
-        var partida = _juego.Partida;
-        bool termino = partida is not null && partida.Estado != EstadoPartida.EnCurso;
+        var partida = _juego.Run;
+        bool termino = partida is not null && partida.State != RunState.InProgress;
 
         Visible = termino;
 
@@ -68,30 +68,30 @@ public partial class PantallaFinDeCorrida : Control
     /// <para>Si falla, el guardado local <b>no se borra</b>: la corrida se puede
     /// reintentar más tarde en vez de perderse por un problema de red.</para>
     /// </remarks>
-    private async System.Threading.Tasks.Task ReportarAsync(Partida partida)
+    private async System.Threading.Tasks.Task ReportarAsync(Run partida)
     {
         if (!Red.ApiCliente.Logueado || _juego.RunId <= 0)
         {
-            _estadoEnvio = "corrida local: no se reportó al servidor";
+            _estadoEnvio = Loc.Get("ui.fin.corrida_local");
             return;
         }
 
-        _estadoEnvio = "reportando…";
+        _estadoEnvio = Loc.Get("ui.fin.reportando");
 
-        byte[] log = LogBinario.Escribir(_juego.Log);
+        byte[] log = BinaryLog.Escribir(_juego.Log);
 
         var (ok, datos, error) = await Red.ApiCliente.TerminarCorridaAsync(
             _juego.RunId,
-            partida.Estado == EstadoPartida.Gano,
-            partida.Oleada,
-            CargadorDatos.Actual.Areas.DeOleada(partida.Oleada),
+            partida.State == RunState.Won,
+            partida.Wave,
+            CargadorDatos.Actual.Areas.OfWave(partida.Wave),
             partida.Tick,
             log);
 
         if (ok && datos is not null)
         {
-            _oroGanado = datos.OroGanado;
-            _estadoEnvio = $"billetera: {datos.OroTotal}";
+            _oroGanado = datos.GoldEarned;
+            _estadoEnvio = $"{Loc.Get("ui.fin.billetera")} {datos.GoldTotal}";
             Guardado.Borrar();
         }
         else
@@ -99,17 +99,17 @@ public partial class PantallaFinDeCorrida : Control
             // El guardado queda: la corrida se puede reintentar. Perderla por un
             // corte de red sería lo peor que puede pasar después de horas de
             // juego.
-            _estadoEnvio = error ?? "no se pudo reportar";
+            _estadoEnvio = error ?? Loc.Get("ui.fin.no_se_pudo_reportar");
         }
     }
 
     public override void _Draw()
     {
-        var partida = _juego.Partida;
-        if (partida is null || partida.Estado == EstadoPartida.EnCurso)
+        var partida = _juego.Run;
+        if (partida is null || partida.State == RunState.InProgress)
             return;
 
-        bool gano = partida.Estado == EstadoPartida.Gano;
+        bool gano = partida.State == RunState.Won;
 
         DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.62f));
 
@@ -123,52 +123,54 @@ public partial class PantallaFinDeCorrida : Control
         float x = panel.Position.X + 60;
         float y = panel.Position.Y + 100;
 
-        Texto(gano ? "GANASTE" : "CAYÓ LA TORRE", x, y, 54, acento);
+        Text(Loc.Get(gano ? "ui.fin.ganaste" : "ui.fin.cayo_la_torre"), x, y, 54, acento);
 
         y += 70;
 
         if (gano)
         {
-            Texto("Mataste al jefe de la oleada 100.", x, y, 22, Blanco);
+            Text(Loc.Get("ui.fin.mataste_al_jefe"), x, y, 22, Blanco);
         }
         else
         {
             // "Llegaste a la N de 100" y no solo "oleada N": el 100 es el final
             // real de la corrida, y verlo dice cuánto falta.
-            Texto($"Llegaste a la oleada {partida.Oleada} de {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida}.",
+            Text($"{Loc.Get("ui.fin.llegaste_a_la_oleada")} {partida.Wave} " +
+                 $"{Loc.Get("ui.fin.de")} {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun}.",
                 x, y, 22, Blanco);
         }
 
         y += 60;
 
-        int segundos = partida.Tick / Enteros.TicksPorSegundo;
+        int segundos = partida.Tick / Ints.TicksPerSecond;
 
-        Texto($"área {CargadorDatos.Actual.Areas.DeOleada(partida.Oleada)} · " +
-              $"{segundos / 60:00}:{segundos % 60:00} · {partida.Tick} ticks",
+        Text($"{Loc.Get("ui.fin.area")} {CargadorDatos.Actual.Areas.OfWave(partida.Wave)} · " +
+              $"{segundos / 60:00}:{segundos % 60:00} · {partida.Tick} {Loc.Get("ui.fin.ticks")}",
             x, y, 21, Gris);
 
         y += 34;
 
         // Los ticks son el desempate del ranking, así que se dice para qué sirven.
-        Texto("el ranking desempata por ticks: menos es mejor", x, y, 17, Gris);
+        Text(Loc.Get("ui.fin.desempate"), x, y, 17, Gris);
 
         y += 62;
 
         if (_oroGanado >= 0)
         {
-            Texto($"+{_oroGanado} de oro a la billetera", x, y, 26, new Color(0.98f, 0.85f, 0.35f));
+            Text($"+{_oroGanado} {Loc.Get("ui.fin.de_oro_a_la_billetera")}",
+                x, y, 26, new Color(0.98f, 0.85f, 0.35f));
             y += 34;
         }
 
-        Texto(_estadoEnvio, x, y, 18, Gris);
+        Text(_estadoEnvio, x, y, 18, Gris);
 
-        Texto("esc para volver al menú",
+        Text(Loc.Get("ui.fin.esc_volver"),
             panel.Position.X + 60, panel.Position.Y + panel.Size.Y - 40, 18, Gris);
     }
 
     private static readonly Color Blanco = new(0.93f, 0.93f, 0.91f);
     private static readonly Color Gris = new(0.62f, 0.62f, 0.60f);
 
-    private void Texto(string s, float x, float y, int tamano, Color color)
+    private void Text(string s, float x, float y, int tamano, Color color)
         => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }

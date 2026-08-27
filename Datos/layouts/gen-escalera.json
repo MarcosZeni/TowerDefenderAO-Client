@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "leyenda": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
-  "aviso": "Se dibuja con Escenas/EditorLayouts.tscn o lo genera --generar-layouts. Se puede corregir a mano, pero después hay que pasarlo por --validar-layouts.",
-  "ancho": 20,
-  "alto": 11,
-  "largoRuta": 28,
-  "valido": true,
-  "filas": [
+  "legend": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+  "note": "Se dibuja con Escenas/EditorLayouts.tscn o lo genera --generar-layouts. Se puede corregir a mano, pero después hay que pasarlo por --validar-layouts.",
+  "width": 20,
+  "height": 11,
+  "routeLength": 28,
+  "valid": true,
+  "rows": [
     "XXXXXXXXXXXXXXXXXXXX",
     "XXX.....XXXXXXXXXXXX",
     "X.E####.XXXXXXXXXXXX",

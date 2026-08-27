@@ -1,22 +1,22 @@
 namespace TowerOfArgentum.Simulacion;
 
 /// <summary>Lo que se compró para una oleada, en el orden en que entra.</summary>
-public sealed class OleadaArmada
+public sealed class BuiltWave
 {
-    public required int Numero { get; init; }
+    public required int Number { get; init; }
 
     /// <summary>Los tipos, en orden de entrada. El jefe va último.</summary>
-    public required List<CompraNpc> Npcs { get; init; }
+    public required List<NpcPurchase> Npcs { get; init; }
 
     /// <summary>Ticks entre un spawn y el siguiente.</summary>
-    public required int IntervaloSpawnTicks { get; init; }
+    public required int SpawnIntervalTicks { get; init; }
 
     /// <summary>Oro que se lleva el jugador por limpiarla.</summary>
     public required int BonusOro { get; init; }
 }
 
 /// <summary>Un NPC comprado, con los perks que le tocaron.</summary>
-public readonly record struct CompraNpc(int TipoId, int PerkVida, int PerkVelocidad, bool EsJefe);
+public readonly record struct NpcPurchase(int TypeId, int HealthPerk, int SpeedPerk, bool IsBoss);
 
 /// <summary>
 /// La receta de una oleada: cuánto se puede gastar y en qué.
@@ -24,22 +24,22 @@ public readonly record struct CompraNpc(int TipoId, int PerkVida, int PerkVeloci
 /// <remarks>
 /// La arma <see cref="Balance.RecetaDe"/> con las curvas de <c>curvas.json</c>.
 /// </remarks>
-public sealed class RecetaOleada
+public sealed class WaveRecipe
 {
-    public required int Numero { get; init; }
+    public required int Number { get; init; }
 
     /// <summary>La palanca principal de dificultad.</summary>
-    public required int Presupuesto { get; init; }
+    public required int Budget { get; init; }
 
     /// <summary>Tipos que pueden salir, con su peso entero.</summary>
-    public required (int TipoId, int Peso)[] Permitidos { get; init; }
+    public required (int TypeId, int Weight)[] Allowed { get; init; }
 
-    public int JefeTipoId { get; init; } = -1;
+    public int BossTypeId { get; init; } = -1;
 
     /// <summary>Porcentaje entero: cuántos NPCs salen con perk.</summary>
-    public int ChancePerkNpc { get; init; }
+    public int NpcPerkChance { get; init; }
 
-    public int IntervaloSpawnTicks { get; init; } = 30;
+    public int SpawnIntervalTicks { get; init; } = 30;
 
     public int BonusOro { get; init; }
 }
@@ -61,7 +61,7 @@ public sealed class RecetaOleada
 /// <item>El balance se toca en un número, no reescribiendo veinte listas.</item>
 /// </list>
 /// </remarks>
-public static class ArmadorOleadas
+public static class WaveBuilder
 {
     // ⚠ Acá ya no hay números. Todos viven en `curvas.json` («perksNpc»,
     // «oleada», «jefe») y llegan por DatosBalance. Lo que queda son las reglas
@@ -70,30 +70,30 @@ public static class ArmadorOleadas
     // Lo que esos números significan, y por qué son esos, está escrito en el
     // propio curvas.json: es el lugar donde los va a leer el que balancea.
 
-    public static OleadaArmada Armar(RecetaOleada receta, Aleatorio rng, DatosBalance datos)
+    public static BuiltWave Armar(WaveRecipe receta, Rng rng, BalanceData datos)
     {
-        var cfg = datos.Curvas.PerksNpc;
-        var npcs = new List<CompraNpc>();
-        int restante = receta.Presupuesto;
+        var cfg = datos.Curves.PerksNpc;
+        var npcs = new List<NpcPurchase>();
+        int restante = receta.Budget;
 
         // Regla 3: el jefe se descuenta ANTES de comprar el resto, y aparece
         // último. Al revés, una oleada con jefe traería la misma cantidad de
         // bichos más el jefe, y sería un salto de dificultad y no un cambio de
         // forma.
-        bool hayJefe = receta.JefeTipoId >= 0;
+        bool hayJefe = receta.BossTypeId >= 0;
         if (hayJefe)
-            restante -= Costo(receta.JefeTipoId, datos);
+            restante -= Cost(receta.BossTypeId, datos);
 
         int masBarato = int.MaxValue;
-        foreach (var (tipoId, _) in receta.Permitidos)
-            masBarato = System.Math.Min(masBarato, Costo(tipoId, datos));
+        foreach (var (tipoId, _) in receta.Allowed)
+            masBarato = System.Math.Min(masBarato, Cost(tipoId, datos));
 
         // Regla 1: se gasta hasta que no alcance para el más barato — ahora con
         // el tope de cantidad. Lo que sobre se convierte en perks más abajo.
-        while (restante >= masBarato && npcs.Count < datos.Curvas.Oleada.MaxNpcs)
+        while (restante >= masBarato && npcs.Count < datos.Curves.Wave.MaxNpcs)
         {
-            int tipoId = ElegirPorPeso(receta.Permitidos, rng);
-            int costo = Costo(tipoId, datos);
+            int tipoId = ElegirPorPeso(receta.Allowed, rng);
+            int costo = Cost(tipoId, datos);
 
             if (costo > restante)
             {
@@ -111,28 +111,28 @@ public static class ArmadorOleadas
             int perkVida = 0;
             int perkVelocidad = 0;
 
-            if (rng.Ocurre(receta.ChancePerkNpc))
+            if (rng.Happens(receta.NpcPerkChance))
             {
-                if (rng.Ocurre(cfg.ChanceVidaEnLaTirada) && restante >= cfg.CostoVida)
+                if (rng.Happens(cfg.HealthChanceInRoll) && restante >= cfg.HealthCost)
                 {
-                    perkVida = cfg.EscalonVida;
-                    restante -= cfg.CostoVida;
+                    perkVida = cfg.HealthStep;
+                    restante -= cfg.HealthCost;
                 }
-                else if (restante >= cfg.CostoVelocidad)
+                else if (restante >= cfg.SpeedCost)
                 {
-                    perkVelocidad = cfg.EscalonVelocidad;
-                    restante -= cfg.CostoVelocidad;
+                    perkVelocidad = cfg.SpeedStep;
+                    restante -= cfg.SpeedCost;
                 }
             }
 
-            npcs.Add(new CompraNpc(tipoId, perkVida, perkVelocidad, EsJefe: false));
+            npcs.Add(new NpcPurchase(tipoId, perkVida, perkVelocidad, IsBoss: false));
         }
 
         // El presupuesto que no entró en NPCs se convierte en perks sobre los ya
         // comprados. Es la misma regla de siempre —el perk se paga del
         // presupuesto— aplicada al sobrante: en las oleadas tardías eso es casi
         // todo el presupuesto, y de ahí sale la dificultad.
-        restante = RepartirSobranteEnPerks(npcs, restante, rng, cfg);
+        restante = SpreadLeftoverOnPerks(npcs, restante, rng, cfg);
 
         if (hayJefe)
         {
@@ -140,16 +140,16 @@ public static class ArmadorOleadas
             // (propuesta V2): el jefe es fuerte por diseño, no por residuo del
             // presupuesto. Antes era sobrante/4 sin tope y en las áreas tardías
             // salían jefes con miles de por ciento de HP.
-            var j = datos.Curvas.Jefe;
-            int vidaExtraJefe = System.Math.Min(restante / j.DivisorVidaExtra, j.MaxVidaExtra);
-            npcs.Add(new CompraNpc(receta.JefeTipoId, vidaExtraJefe, 0, EsJefe: true));
+            var j = datos.Curves.Boss;
+            int vidaExtraJefe = System.Math.Min(restante / j.ExtraHealthDivisor, j.MaxExtraHealth);
+            npcs.Add(new NpcPurchase(receta.BossTypeId, vidaExtraJefe, 0, IsBoss: true));
         }
 
-        return new OleadaArmada
+        return new BuiltWave
         {
-            Numero = receta.Numero,
+            Number = receta.Number,
             Npcs = npcs,
-            IntervaloSpawnTicks = receta.IntervaloSpawnTicks,
+            SpawnIntervalTicks = receta.SpawnIntervalTicks,
             BonusOro = receta.BonusOro,
         };
     }
@@ -167,39 +167,39 @@ public static class ArmadorOleadas
     /// defensa que lo toque. La vida no necesita techo — más vida siempre es
     /// solo más tiempo bajo fuego.</para>
     /// </remarks>
-    private static int RepartirSobranteEnPerks(
-        List<CompraNpc> npcs, int restante, Aleatorio rng, DatoPerksNpc cfg)
+    private static int SpreadLeftoverOnPerks(
+        List<NpcPurchase> npcs, int restante, Rng rng, NpcPerkData cfg)
     {
         if (npcs.Count == 0)
             return restante;
 
         // El jefe todavía no está en la lista, así que esto solo toca a la tropa.
-        while (restante >= cfg.CostoVida)
+        while (restante >= cfg.HealthCost)
         {
             bool gastoAlgo = false;
 
-            for (int i = 0; i < npcs.Count && restante >= cfg.CostoVida; i++)
+            for (int i = 0; i < npcs.Count && restante >= cfg.HealthCost; i++)
             {
                 var npc = npcs[i];
 
                 // La velocidad sale a veces y con techo; la vida es el destino
                 // por defecto del presupuesto.
                 bool aVelocidad =
-                    npc.PerkVelocidad < cfg.MaxVelocidad &&
-                    restante >= cfg.CostoVelocidad &&
-                    rng.Ocurre(cfg.ChanceVelocidadEnSobrante);
+                    npc.SpeedPerk < cfg.MaxSpeed &&
+                    restante >= cfg.SpeedCost &&
+                    rng.Happens(cfg.SpeedChanceInLeftover);
 
                 // ⚠ La vida también tiene techo ahora (propuesta V2): un NPC
                 // topeado en las dos cosas se saltea, y si TODOS están topeados
                 // gastoAlgo queda en falso y el sobrante va al jefe.
-                if (!aVelocidad && npc.PerkVida >= cfg.MaxVida)
+                if (!aVelocidad && npc.HealthPerk >= cfg.MaxHealth)
                     continue;
 
                 npcs[i] = aVelocidad
-                    ? npc with { PerkVelocidad = npc.PerkVelocidad + cfg.EscalonVelocidad }
-                    : npc with { PerkVida = npc.PerkVida + cfg.EscalonVida };
+                    ? npc with { SpeedPerk = npc.SpeedPerk + cfg.SpeedStep }
+                    : npc with { HealthPerk = npc.HealthPerk + cfg.HealthStep };
 
-                restante -= aVelocidad ? cfg.CostoVelocidad : cfg.CostoVida;
+                restante -= aVelocidad ? cfg.SpeedCost : cfg.HealthCost;
                 gastoAlgo = true;
             }
 
@@ -218,16 +218,16 @@ public static class ArmadorOleadas
     /// lo demás: un peso de <c>0.3</c> no se representa exacto en binario, y dos
     /// máquinas podrían caer de lados distintos del corte.
     /// </remarks>
-    private static int ElegirPorPeso((int TipoId, int Peso)[] permitidos, Aleatorio rng)
+    private static int ElegirPorPeso((int TypeId, int Weight)[] permitidos, Rng rng)
     {
         int total = 0;
         foreach (var (_, peso) in permitidos)
             total += peso;
 
         if (total <= 0)
-            return permitidos[0].TipoId;
+            return permitidos[0].TypeId;
 
-        int tirada = rng.Rango(0, total);
+        int tirada = rng.Between(0, total);
 
         foreach (var (tipoId, peso) in permitidos)
         {
@@ -236,7 +236,7 @@ public static class ArmadorOleadas
                 return tipoId;
         }
 
-        return permitidos[^1].TipoId;
+        return permitidos[^1].TypeId;
     }
 
     /// <summary>
@@ -251,18 +251,18 @@ public static class ArmadorOleadas
     /// <para>El HP pesa más que el daño porque en un tower defense aguantar es
     /// lo que cuesta matar; el daño solo importa si llega a la Torre.</para>
     /// </remarks>
-    internal static int Costo(int tipoId, DatosBalance datos)
+    internal static int Cost(int tipoId, BalanceData datos)
     {
-        var e = datos.Por(tipoId);
+        var e = datos.Get(tipoId);
 
         if (e is null)
             return int.MaxValue;   // no existe: que no lo compre nadie
 
         // La velocidad entra porque un bicho rápido pasa menos tiempo bajo fuego,
         // y eso lo hace más difícil sin tocarle una estadística de combate.
-        var c = datos.Curvas.Oleada;
+        var c = datos.Curves.Wave;
 
-        return (e.Hp / c.DivisorHp) + (e.DanoMax / c.DivisorDanoMax) + (e.Velocidad / c.DivisorVelocidad);
+        return (e.Hp / c.HpDivisor) + (e.MaxDamage / c.MaxDamageDivisor) + (e.Speed / c.SpeedDivisor);
     }
 }
 
@@ -274,16 +274,16 @@ public static class ArmadorOleadas
 /// renglones iguales. <b>No es entrada de la simulación</b> — se deriva de la
 /// oleada ya armada y no vuelve al tick.
 /// </remarks>
-public sealed class AvanceDeOleada
+public sealed class WavePreview
 {
-    public required int TipoId { get; init; }
+    public required int TypeId { get; init; }
 
-    public required string Nombre { get; init; }
+    public required string Name { get; init; }
 
     /// <summary>La clave del sprite, para dibujarlo al lado del nombre.</summary>
-    public required string Grafico { get; init; }
+    public required string Graphic { get; init; }
 
-    public required bool EsJefe { get; init; }
+    public required bool IsBoss { get; init; }
 
     public int Cuantos { get; set; }
 

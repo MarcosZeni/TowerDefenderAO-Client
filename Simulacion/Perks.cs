@@ -14,21 +14,21 @@ namespace TowerOfArgentum.Simulacion;
 /// Bronce escala un número que ya existía; el Único agrega algo que la clase no
 /// hacía.</para>
 /// </remarks>
-public enum TierPerk
+public enum PerkTier
 {
-    Bronce = 0,
-    Plata = 1,
-    Oro = 2,
-    Unico = 3,
+    Bronze = 0,
+    Silver = 1,
+    Gold = 2,
+    Unique = 3,
 }
 
 /// <summary>Qué toca un perk numérico.</summary>
-public enum EfectoPerk
+public enum PerkEffect
 {
-    Ninguno = 0,
-    Dano = 1,
-    Cadencia = 2,
-    Alcance = 3,
+    None = 0,
+    Damage = 1,
+    Cadence = 2,
+    Range = 3,
 
     /// <summary>Comportamiento: el disparo rebota a un segundo enemigo.</summary>
     Ricochet = 10,
@@ -37,38 +37,38 @@ public enum EfectoPerk
     Splash = 11,
 
     /// <summary>Comportamiento: el objetivo queda más lento un rato.</summary>
-    Ralentiza = 12,
+    Slow = 12,
 
     /// <summary>Comportamiento: cada tantos golpes, uno pega mucho más.</summary>
-    GolpeCritico = 13,
+    CriticalHit = 13,
 
     /// <summary>Comportamiento: envenena, daño por tick durante un rato.</summary>
-    Veneno = 14,
+    Poison = 14,
 
     /// <summary>Comportamiento: cada tantos golpes, uno atraviesa la defensa.</summary>
-    Penetrante = 15,
+    Piercing = 15,
 
     // -------------------------------------------------------------------------
     //  Únicos — no caen ni se compran: salen de fusionar dos Oro con un plano
     // -------------------------------------------------------------------------
 
     /// <summary>Ricochet que además atraviesa.</summary>
-    Perforacion = 20,
+    Perforation = 20,
 
     /// <summary>Splash que además ralentiza.</summary>
-    OndaDeFrio = 21,
+    FrostWave = 21,
 
     /// <summary>Crítico que además hace splash.</summary>
-    IraDeDios = 22,
+    WrathOfGod = 22,
 
     /// <summary>Ricochet en cadena, sin tope de rebotes cercanos.</summary>
-    Apocalipsis = 23,
+    Apocalypse = 23,
 
     /// <summary>Veneno que además ralentiza.</summary>
-    TerribleHambre = 24,
+    TerribleHunger = 24,
 
     /// <summary>Splash grande que pega dos veces.</summary>
-    TormentaDivina = 25,
+    DivineStorm = 25,
 }
 
 /// <summary>
@@ -80,18 +80,18 @@ public enum EfectoPerk
 /// defensor no guarda perks: calcula <c>base + nivel + perks + equipo</c> cada
 /// vez, así que no hay estado duplicado ni desincronización posible.
 /// </remarks>
-public sealed class DefinicionPerk
+public sealed class PerkDefinition
 {
     public required int Id { get; init; }
 
-    public required string Nombre { get; init; }
+    public required string Key { get; init; }
 
-    public required TierPerk Tier { get; init; }
+    public required PerkTier Tier { get; init; }
 
-    public required EfectoPerk Efecto { get; init; }
+    public required PerkEffect Effect { get; init; }
 
     /// <summary>Cuánto suma, en puntos porcentuales. Cero si es comportamiento.</summary>
-    public int Magnitud { get; init; }
+    public int Magnitude { get; init; }
 
     /// <summary>
     /// Qué clases lo pueden equipar. Vacío = cualquiera.
@@ -102,7 +102,7 @@ public sealed class DefinicionPerk
     /// entre 50 y 90 definiciones; compartiendo Bronce y Plata entre las 9 y Oro
     /// entre dos o tres, quedan ~40.
     /// </remarks>
-    public Clase[] Clases { get; init; } = [];
+    public DefenderClass[] Classes { get; init; } = [];
 
     /// <summary>
     /// Cuántas copias del mismo perk se pueden equipar en una clase.
@@ -112,9 +112,9 @@ public sealed class DefinicionPerk
     /// escribe a mano cuando un perk necesita otra cosa. La regla es la misma de
     /// arriba: <b>apilable si es un número, único si es un comportamiento</b>.
     /// </remarks>
-    public int MaxApilado { get; init; }
+    public int MaxStacked { get; init; }
 
-    public bool SirveA(Clase clase) => Clases.Length == 0 || System.Array.IndexOf(Clases, clase) >= 0;
+    public bool WorksFor(DefenderClass clase) => Classes.Length == 0 || System.Array.IndexOf(Classes, clase) >= 0;
 }
 
 /// <summary>
@@ -134,4 +134,4 @@ public sealed class DefinicionPerk
 /// apuntando a otro perk en cuanto alguien agregue uno en el medio, y el síntoma
 /// sería una fusión que produce algo que no es.</para>
 /// </remarks>
-public sealed record Plano(string Nombre, int OroA, int OroB, int UnicoResultante, bool Inicial);
+public sealed record Blueprint(string Key, int GoldA, int GoldB, int ResultingUnique, bool Initial);

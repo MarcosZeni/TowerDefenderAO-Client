@@ -60,7 +60,7 @@ public static class ImportadorNpcs
         /// <summary>El número de NPC en <c>NPCs.dat</c>. Es la trazabilidad al original.</summary>
         public required int NpcOriginal { get; init; }
 
-        public required string Nombre { get; init; }
+        public required string Name { get; init; }
 
         /// <summary>
         /// A qué área pertenece, de 1 a 8. Sale del HP reescalado.
@@ -87,18 +87,18 @@ public static class ImportadorNpcs
         /// </summary>
         public required int Body { get; init; }
 
-        public required int DanoMin { get; init; }
-        public required int DanoMax { get; init; }
+        public required int MinDamage { get; init; }
+        public required int MaxDamage { get; init; }
         public required int Defensa { get; init; }
         public required int PoderAtaque { get; init; }
-        public required int Oro { get; init; }
+        public required int Gold { get; init; }
         public required int Exp { get; init; }
 
         /// <summary>Milésimas de celda por tick. Derivada, no viene del .dat.</summary>
-        public required int Velocidad { get; init; }
+        public required int Speed { get; init; }
 
         /// <summary>Ticks entre golpe y golpe a la Torre.</summary>
-        public required int CadenciaTicks { get; init; }
+        public required int CadenceTicks { get; init; }
 
         /// <summary>
         /// Cuánto se dibuja de grande, en porcentaje. 100 es el tamaño natural.
@@ -120,7 +120,7 @@ public static class ImportadorNpcs
         /// cuerpo, más grande es más duro</b>. No hace falta arte nuevo y se lee de
         /// una.</para>
         /// </remarks>
-        public required int EscalaVisual { get; init; }
+        public required int VisualScale { get; init; }
 
         /// <summary>
         /// La clave de este bicho en <c>Resources\graficos.json</c>, sin la
@@ -135,7 +135,7 @@ public static class ImportadorNpcs
         /// enemigo que ahora se llama "Rata". Con la clave en el dato, el que
         /// dibuja no adivina y el validador puede comparar.</para>
         /// </remarks>
-        public required string Grafico { get; init; }
+        public required string Graphic { get; init; }
     }
 
     /// <summary>
@@ -252,7 +252,7 @@ public static class ImportadorNpcs
     private static void CoronarAlJefeFinal(List<EnemigoImportado> enemigos)
     {
         int i = enemigos.FindIndex(e =>
-            string.Equals(e.Nombre, "Dragón Rojo", System.StringComparison.OrdinalIgnoreCase));
+            string.Equals(e.Name, "Dragón Rojo", System.StringComparison.OrdinalIgnoreCase));
 
         if (i < 0)
             return;
@@ -275,11 +275,11 @@ public static class ImportadorNpcs
 
             // Pega fuerte pero lento: un jefe que mata la Torre en tres golpes no
             // se pelea, se pierde.
-            DanoMin = dragon.DanoMin * 3,
-            DanoMax = dragon.DanoMax * 3,
-            CadenciaTicks = 55,
-            Velocidad = 22,
-            Oro = hpFinal / 4,
+            MinDamage = dragon.MinDamage * 3,
+            MaxDamage = dragon.MaxDamage * 3,
+            CadenceTicks = 55,
+            Speed = 22,
+            Gold = hpFinal / 4,
         });
     }
 
@@ -363,7 +363,7 @@ public static class ImportadorNpcs
             }
 
             int hpCrudo = Entero(campos, "MaxHP");
-            string nombre = Texto(campos, "Name", $"npc{npcActual}");
+            string nombre = Text(campos, "Name", $"npc{npcActual}");
 
             if (!EsFauna(nombre, hpCrudo))
             {
@@ -420,7 +420,7 @@ public static class ImportadorNpcs
             {
                 Id = enemigos.Count,
                 NpcOriginal = npcActual,
-                Nombre = nombre,
+                Name = nombre,
                 Area = 0,   // se asigna al final, por percentil
                 HpEscalado = hpEscalado,
                 HpCrudo = hpCrudo,
@@ -434,8 +434,8 @@ public static class ImportadorNpcs
                 // ese dato invertido pasaba tal cual al JSON. Lo encontró el
                 // validador; en runtime habría sido un promedio de daño más bajo
                 // de lo previsto y nadie se habría enterado.
-                DanoMin = System.Math.Min(danoA, danoB),
-                DanoMax = System.Math.Max(danoA, danoB),
+                MinDamage = System.Math.Min(danoA, danoB),
+                MaxDamage = System.Math.Max(danoA, danoB),
 
                 Defensa = Entero(campos, "DEF"),
                 PoderAtaque = Entero(campos, "PoderAtaque"),
@@ -445,20 +445,20 @@ public static class ImportadorNpcs
                 // porque allá el oro es economía de mundo. Acá el oro es el ritmo
                 // al que el jugador puede poner defensores, así que tiene que ser
                 // proporcional a lo que costó matarlo.
-                Oro = System.Math.Max(1, hpEscalado / 8),
+                Gold = System.Math.Max(1, hpEscalado / 8),
 
                 Exp = Entero(campos, "GiveEXP"),
-                Velocidad = VelocidadDe(hpEscalado),
+                Speed = VelocidadDe(hpEscalado),
 
                 // Lo grande pega más lento. Junto con la velocidad, hace que un
                 // bicho de área tardía se sienta pesado y no solo "más números".
-                CadenciaTicks = CadenciaDe(hpEscalado),
+                CadenceTicks = CadenciaDe(hpEscalado),
 
                 // La marca de variante la pone MarcarVariantes al final, cuando ya
                 // se sabe qué cuerpos comparten dos bichos y cuál de los dos es el
                 // duro.
-                EscalaVisual = 100,
-                Grafico = ClaveGrafico(nombre),
+                VisualScale = 100,
+                Graphic = ClaveGrafico(nombre),
             });
 
             campos.Clear();
@@ -517,21 +517,21 @@ public static class ImportadorNpcs
             {
                 Id = i,
                 NpcOriginal = e.NpcOriginal,
-                Nombre = e.Nombre,
+                Name = e.Name,
                 Area = e.Area,
                 HpEscalado = e.HpEscalado,
                 HpCrudo = e.HpCrudo,
                 Body = e.Body,
-                DanoMin = e.DanoMin,
-                DanoMax = e.DanoMax,
+                MinDamage = e.MinDamage,
+                MaxDamage = e.MaxDamage,
                 Defensa = e.Defensa,
                 PoderAtaque = e.PoderAtaque,
-                Oro = e.Oro,
+                Gold = e.Gold,
                 Exp = e.Exp,
-                Velocidad = e.Velocidad,
-                CadenciaTicks = e.CadenciaTicks,
-                EscalaVisual = 100,
-                Grafico = e.Grafico,
+                Speed = e.Speed,
+                CadenceTicks = e.CadenceTicks,
+                VisualScale = 100,
+                Graphic = e.Graphic,
             });
         }
 
@@ -568,7 +568,7 @@ public static class ImportadorNpcs
 
         foreach (var e in enemigos)
         {
-            var clave = (e.Body, e.HpEscalado, e.DanoMin, e.DanoMax, e.Velocidad, e.CadenciaTicks);
+            var clave = (e.Body, e.HpEscalado, e.MinDamage, e.MaxDamage, e.Speed, e.CadenceTicks);
 
             if (vistos.Add(clave))
                 quedan.Add(e);
@@ -637,7 +637,7 @@ public static class ImportadorNpcs
 
                 enemigos[grupo[escalon]] = enemigos[grupo[escalon]] with
                 {
-                    EscalaVisual = escala,
+                    VisualScale = escala,
                 };
 
                 marcados++;
@@ -713,9 +713,9 @@ public static class ImportadorNpcs
 
         if (enemigos.Count > 0)
         {
-            GD.Print($"  más flojo    : {enemigos[0].Nombre} " +
+            GD.Print($"  más flojo    : {enemigos[0].Name} " +
                      $"({enemigos[0].HpCrudo} → {enemigos[0].HpEscalado} HP)");
-            GD.Print($"  más duro     : {enemigos[^1].Nombre} " +
+            GD.Print($"  más duro     : {enemigos[^1].Name} " +
                      $"({enemigos[^1].HpCrudo} → {enemigos[^1].HpEscalado} HP)");
         }
 
@@ -802,7 +802,7 @@ public static class ImportadorNpcs
             ? n
             : 0;
 
-    private static string Texto(Dictionary<string, string> campos, string clave, string porDefecto)
+    private static string Text(Dictionary<string, string> campos, string clave, string porDefecto)
         => campos.TryGetValue(clave, out string? v) && v.Length > 0 ? v : porDefecto;
 
     /// <summary>

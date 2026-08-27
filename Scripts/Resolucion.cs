@@ -31,14 +31,14 @@ public static class Resolucion
         new(3840, 2160),
     ];
 
-    private const string Ruta = "user://video.cfg";
+    private const string Route = "user://video.cfg";
 
     /// <summary>Aplica lo guardado, o pantalla completa si no hay nada.</summary>
     public static void AplicarGuardada()
     {
         var config = new ConfigFile();
 
-        if (config.Load(Ruta) != Error.Ok)
+        if (config.Load(Route) != Error.Ok)
         {
             Completa();
             return;
@@ -61,7 +61,7 @@ public static class Resolucion
     public static void Completa()
     {
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
-        Guardar(completa: true, DisplayServer.ScreenGetSize());
+        Store(completa: true, DisplayServer.ScreenGetSize());
     }
 
     public static void EnVentana(Vector2I tamano)
@@ -74,10 +74,10 @@ public static class Resolucion
         var pantalla = DisplayServer.ScreenGetSize();
         DisplayServer.WindowSetPosition((pantalla - tamano) / 2);
 
-        Guardar(completa: false, tamano);
+        Store(completa: false, tamano);
     }
 
-    private static void Guardar(bool completa, Vector2I tamano)
+    private static void Store(bool completa, Vector2I tamano)
     {
         var config = new ConfigFile();
 
@@ -87,9 +87,9 @@ public static class Resolucion
 
         // user:// y no al lado del ejecutable: una build instalada en Archivos de
         // Programa no puede escribir en su propia carpeta.
-        config.Save(Ruta);
+        config.Save(Route);
     }
 
     /// <summary>Si existe un archivo de video guardado.</summary>
-    public static bool HayGuardado() => ArchivoGodot.FileExists(Ruta);
+    public static bool HayGuardado() => ArchivoGodot.FileExists(Route);
 }

@@ -11,9 +11,9 @@ public enum CeldaLayout
 {
     Bloqueado = 0,
     Colocable = 1,
-    Ruta = 2,
+    Route = 2,
     Entrada = 3,
-    Torre = 4,
+    Tower = 4,
 }
 
 /// <summary>
@@ -29,11 +29,11 @@ public enum CeldaLayout
 /// </remarks>
 public sealed class LayoutMapa
 {
-    public const int Ancho = 20;
+    public const int Width = 20;
 
-    public const int Alto = 11;
+    public const int Height = 11;
 
-    private readonly CeldaLayout[,] _celdas = new CeldaLayout[Ancho, Alto];
+    private readonly CeldaLayout[,] _celdas = new CeldaLayout[Width, Height];
 
     /// <summary>Largo del camino en celdas, contando entrada y Torre. 0 si no traza.</summary>
     public int LargoRuta { get; private set; }
@@ -63,14 +63,14 @@ public sealed class LayoutMapa
     ///
     /// <para>El primero es la entrada y el último es la Torre.</para>
     /// </remarks>
-    public static LayoutMapa DeVertices(IReadOnlyList<Celda> vertices)
+    public static LayoutMapa DeVertices(IReadOnlyList<Cell> vertices)
     {
         var mapa = new LayoutMapa();
 
         if (vertices.Count < 2)
             return mapa;
 
-        var camino = new List<Celda>();
+        var camino = new List<Cell>();
 
         for (int i = 0; i < vertices.Count - 1; i++)
         {
@@ -90,7 +90,7 @@ public sealed class LayoutMapa
             while (actual != b)
             {
                 camino.Add(actual);
-                actual = new Celda(actual.X + pasoX, actual.Y + pasoY);
+                actual = new Cell(actual.X + pasoX, actual.Y + pasoY);
             }
         }
 
@@ -99,14 +99,14 @@ public sealed class LayoutMapa
         foreach (var c in camino)
         {
             if (Adentro(c))
-                mapa._celdas[c.X, c.Y] = CeldaLayout.Ruta;
+                mapa._celdas[c.X, c.Y] = CeldaLayout.Route;
         }
 
         var entrada = camino[0];
         var torre = camino[^1];
 
         if (Adentro(entrada)) mapa._celdas[entrada.X, entrada.Y] = CeldaLayout.Entrada;
-        if (Adentro(torre)) mapa._celdas[torre.X, torre.Y] = CeldaLayout.Torre;
+        if (Adentro(torre)) mapa._celdas[torre.X, torre.Y] = CeldaLayout.Tower;
 
         foreach (var c in camino)
             mapa.AbrirCostados(c);
@@ -124,7 +124,7 @@ public sealed class LayoutMapa
     /// costado del camino igual, y dejarla bloqueada muerde las esquinas. Solo
     /// pisa lo bloqueado, así que dos tramos paralelos no se comen entre sí.
     /// </remarks>
-    public void AbrirCostados(Celda c)
+    public void AbrirCostados(Cell c)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -133,7 +133,7 @@ public sealed class LayoutMapa
                 int x = c.X + dx;
                 int y = c.Y + dy;
 
-                if (x < 0 || y < 0 || x >= Ancho || y >= Alto)
+                if (x < 0 || y < 0 || x >= Width || y >= Height)
                     continue;
 
                 if (_celdas[x, y] == CeldaLayout.Bloqueado)
@@ -167,8 +167,8 @@ public sealed class LayoutMapa
         }
     }
 
-    private static bool Adentro(Celda c)
-        => c.X >= 0 && c.Y >= 0 && c.X < Ancho && c.Y < Alto;
+    private static bool Adentro(Cell c)
+        => c.X >= 0 && c.Y >= 0 && c.X < Width && c.Y < Height;
 
     // -------------------------------------------------------------------------
     //  Validación
@@ -194,19 +194,19 @@ public sealed class LayoutMapa
     {
         var problemas = new List<string>();
 
-        Celda? entrada = null;
-        Celda? torre = null;
+        Cell? entrada = null;
+        Cell? torre = null;
         int celdasRuta = 0;
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 switch (_celdas[x, y])
                 {
-                    case CeldaLayout.Entrada: entrada = new Celda(x, y); celdasRuta++; break;
-                    case CeldaLayout.Torre: torre = new Celda(x, y); celdasRuta++; break;
-                    case CeldaLayout.Ruta: celdasRuta++; break;
+                    case CeldaLayout.Entrada: entrada = new Cell(x, y); celdasRuta++; break;
+                    case CeldaLayout.Tower: torre = new Cell(x, y); celdasRuta++; break;
+                    case CeldaLayout.Route: celdasRuta++; break;
                 }
             }
         }
@@ -221,7 +221,7 @@ public sealed class LayoutMapa
 
         if (entrada is { } e && torre is { } t)
         {
-            var camino = Trazar(e, t, out string error);
+            var camino = Trace(e, t, out string error);
 
             if (camino is null)
             {
@@ -238,7 +238,7 @@ public sealed class LayoutMapa
                 }
             }
 
-            if (t.X < 2 || t.Y < 2 || t.X >= Ancho - 2 || t.Y >= Alto - 2)
+            if (t.X < 2 || t.Y < 2 || t.X >= Width - 2 || t.Y >= Height - 2)
                 problemas.Add($"la Torre ({t.X},{t.Y}) está a menos de 2 celdas del borde");
         }
 
@@ -268,24 +268,24 @@ public sealed class LayoutMapa
     /// bifurcación y no hay forma de decir cuánto avanzó un enemigo; <b>cero</b>
     /// antes de la Torre es un camino cortado.
     /// </remarks>
-    public List<Celda>? Trazar(Celda entrada, Celda torre, out string error)
+    public List<Cell>? Trace(Cell entrada, Cell torre, out string error)
     {
         error = "";
 
-        var camino = new List<Celda> { entrada };
-        var visitadas = new HashSet<Celda> { entrada };
+        var camino = new List<Cell> { entrada };
+        var visitadas = new HashSet<Cell> { entrada };
         var actual = entrada;
 
         while (actual != torre)
         {
-            var siguientes = new List<Celda>();
+            var siguientes = new List<Cell>();
 
-            foreach (var v in Vecinos(actual))
+            foreach (var v in Neighbours(actual))
             {
                 if (visitadas.Contains(v))
                     continue;
 
-                if (_celdas[v.X, v.Y] is CeldaLayout.Ruta or CeldaLayout.Torre)
+                if (_celdas[v.X, v.Y] is CeldaLayout.Route or CeldaLayout.Tower)
                     siguientes.Add(v);
             }
 
@@ -310,29 +310,29 @@ public sealed class LayoutMapa
     }
 
     /// <summary>Los cuatro vecinos ortogonales. No se camina en diagonal.</summary>
-    public static IEnumerable<Celda> Vecinos(Celda c)
+    public static IEnumerable<Cell> Neighbours(Cell c)
     {
-        if (c.X > 0) yield return new Celda(c.X - 1, c.Y);
-        if (c.Y > 0) yield return new Celda(c.X, c.Y - 1);
-        if (c.X < Ancho - 1) yield return new Celda(c.X + 1, c.Y);
-        if (c.Y < Alto - 1) yield return new Celda(c.X, c.Y + 1);
+        if (c.X > 0) yield return new Cell(c.X - 1, c.Y);
+        if (c.Y > 0) yield return new Cell(c.X, c.Y - 1);
+        if (c.X < Width - 1) yield return new Cell(c.X + 1, c.Y);
+        if (c.Y < Height - 1) yield return new Cell(c.X, c.Y + 1);
     }
 
     public int ContarPegadas()
     {
         int cuantas = 0;
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 if (_celdas[x, y] != CeldaLayout.Colocable)
                     continue;
 
-                foreach (var v in Vecinos(new Celda(x, y)))
+                foreach (var v in Neighbours(new Cell(x, y)))
                 {
-                    if (_celdas[v.X, v.Y] is CeldaLayout.Ruta
-                        or CeldaLayout.Entrada or CeldaLayout.Torre)
+                    if (_celdas[v.X, v.Y] is CeldaLayout.Route
+                        or CeldaLayout.Entrada or CeldaLayout.Tower)
                     {
                         cuantas++;
                         break;
@@ -345,16 +345,16 @@ public sealed class LayoutMapa
     }
 
     /// <summary>Las cuatro esquinas de 3×2 celdas donde flota el HUD.</summary>
-    public static IEnumerable<Celda> Esquinas()
+    public static IEnumerable<Cell> Esquinas()
     {
         for (int dy = 0; dy < 2; dy++)
         {
             for (int dx = 0; dx < 3; dx++)
             {
-                yield return new Celda(dx, dy);
-                yield return new Celda(Ancho - 1 - dx, dy);
-                yield return new Celda(dx, Alto - 1 - dy);
-                yield return new Celda(Ancho - 1 - dx, Alto - 1 - dy);
+                yield return new Cell(dx, dy);
+                yield return new Cell(Width - 1 - dx, dy);
+                yield return new Cell(dx, Height - 1 - dy);
+                yield return new Cell(Width - 1 - dx, Height - 1 - dy);
             }
         }
     }
@@ -365,19 +365,19 @@ public sealed class LayoutMapa
 
     public string[] AAscii()
     {
-        var filas = new string[Alto];
+        var filas = new string[Height];
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            var fila = new StringBuilder(Ancho);
+            var fila = new StringBuilder(Width);
 
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 fila.Append(_celdas[x, y] switch
                 {
                     CeldaLayout.Bloqueado => 'X',
                     CeldaLayout.Colocable => '.',
-                    CeldaLayout.Ruta => '#',
+                    CeldaLayout.Route => '#',
                     CeldaLayout.Entrada => 'E',
                     _ => 'T',
                 });
@@ -393,16 +393,16 @@ public sealed class LayoutMapa
     {
         var mapa = new LayoutMapa();
 
-        for (int y = 0; y < Alto && y < filas.Count; y++)
+        for (int y = 0; y < Height && y < filas.Count; y++)
         {
-            for (int x = 0; x < Ancho && x < filas[y].Length; x++)
+            for (int x = 0; x < Width && x < filas[y].Length; x++)
             {
                 mapa._celdas[x, y] = filas[y][x] switch
                 {
                     '.' => CeldaLayout.Colocable,
-                    '#' => CeldaLayout.Ruta,
+                    '#' => CeldaLayout.Route,
                     'E' => CeldaLayout.Entrada,
-                    'T' => CeldaLayout.Torre,
+                    'T' => CeldaLayout.Tower,
                     _ => CeldaLayout.Bloqueado,
                 };
             }
@@ -439,7 +439,7 @@ public sealed class LayoutMapa
     /// archivo y se lee en un diff. Una lista de pares no la entiende nadie a los
     /// seis meses.
     /// </remarks>
-    public void Guardar(string ruta)
+    public void Store(string ruta)
     {
         var filas = new JsonArray();
 
@@ -455,8 +455,8 @@ public sealed class LayoutMapa
                         "--generar-layouts. Se puede corregir a mano, pero después hay " +
                         "que pasarlo por --validar-layouts.",
 
-            ["ancho"] = Ancho,
-            ["alto"] = Alto,
+            ["ancho"] = Width,
+            ["alto"] = Height,
             ["largoRuta"] = LargoRuta,
             ["valido"] = Valido,
             ["filas"] = filas,

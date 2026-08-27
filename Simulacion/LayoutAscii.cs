@@ -19,11 +19,11 @@ namespace TowerOfArgentum.Simulacion;
 /// E entrada · # ruta · . colocable · X bloqueado · T la Torre
 /// </code>
 /// </remarks>
-public static class LayoutAscii
+public static class AsciiLayout
 {
-    public const int Ancho = 20;
+    public const int Width = 20;
 
-    public const int Alto = 11;
+    public const int Height = 11;
 
     /// <summary>
     /// Arma el <see cref="Mapa"/>, o devuelve <c>null</c> si el layout no cierra.
@@ -33,24 +33,24 @@ public static class LayoutAscii
     /// quien carga sabe mejor qué hacer —saltearlo y seguir con los demás— que
     /// esta función.
     /// </remarks>
-    public static Mapa? Construir(IReadOnlyList<string> filas)
+    public static Map? Construir(IReadOnlyList<string> filas)
     {
-        if (filas.Count < Alto)
+        if (filas.Count < Height)
             return null;
 
-        Celda? entrada = null;
-        Celda? torre = null;
-        var ruta = new HashSet<Celda>();
-        var colocables = new List<Celda>();
+        Cell? entrada = null;
+        Cell? torre = null;
+        var ruta = new HashSet<Cell>();
+        var colocables = new List<Cell>();
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            if (filas[y].Length < Ancho)
+            if (filas[y].Length < Width)
                 return null;
 
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
-                var c = new Celda(x, y);
+                var c = new Cell(x, y);
 
                 switch (filas[y][x])
                 {
@@ -65,7 +65,7 @@ public static class LayoutAscii
         if (entrada is not { } e || torre is not { } t)
             return null;
 
-        var camino = Trazar(ruta, e, t);
+        var camino = Trace(ruta, e, t);
 
         if (camino is null)
             return null;
@@ -80,27 +80,27 @@ public static class LayoutAscii
         // parser, que corre igual en el cliente y en el servidor— garantiza que
         // ningún layout, ni el de hoy ni el que se dibuje mañana, pueda crear esa
         // situación.
-        foreach (var v in Vecinas(t))
+        foreach (var v in Neighbours8(t))
         {
-            if (v.X < 0 || v.Y < 0 || v.X >= Ancho || v.Y >= Alto)
+            if (v.X < 0 || v.Y < 0 || v.X >= Width || v.Y >= Height)
                 continue;
 
             if (!ruta.Contains(v) && !colocables.Contains(v))
                 colocables.Add(v);
         }
 
-        return new Mapa(Ancho, Alto, new Ruta(Vertices(camino)), colocables);
+        return new Map(Width, Height, new Route(Vertices(camino)), colocables);
     }
 
     /// <summary>Las ocho vecinas de una celda, en orden fijo.</summary>
-    private static IEnumerable<Celda> Vecinas(Celda c)
+    private static IEnumerable<Cell> Neighbours8(Cell c)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
             for (int dx = -1; dx <= 1; dx++)
             {
                 if (dx != 0 || dy != 0)
-                    yield return new Celda(c.X + dx, c.Y + dy);
+                    yield return new Cell(c.X + dx, c.Y + dy);
             }
         }
     }
@@ -113,22 +113,22 @@ public static class LayoutAscii
     /// bifurcación —y un enemigo que avanza por una distancia escalar no tiene
     /// cómo estar en dos ramas—; <b>cero</b> antes de la Torre es un corte.
     /// </remarks>
-    private static List<Celda>? Trazar(HashSet<Celda> ruta, Celda entrada, Celda torre)
+    private static List<Cell>? Trace(HashSet<Cell> ruta, Cell entrada, Cell torre)
     {
-        var camino = new List<Celda> { entrada };
-        var visitadas = new HashSet<Celda> { entrada };
+        var camino = new List<Cell> { entrada };
+        var visitadas = new HashSet<Cell> { entrada };
         var actual = entrada;
 
         // Techo por las dudas: un camino no puede tener más celdas que el campo, y
         // sin el tope un dato raro colgaría la carga en vez de fallar.
-        int tope = Ancho * Alto;
+        int tope = Width * Height;
 
         while (actual != torre && camino.Count <= tope)
         {
-            Celda? siguiente = null;
+            Cell? siguiente = null;
             int cuantos = 0;
 
-            foreach (var v in Vecinos(actual))
+            foreach (var v in Neighbours4(actual))
             {
                 if (visitadas.Contains(v) || !ruta.Contains(v))
                     continue;
@@ -157,9 +157,9 @@ public static class LayoutAscii
     /// eso es trabajo de más en cada consulta de posición, que ocurre una vez por
     /// enemigo por tick.
     /// </remarks>
-    private static List<Celda> Vertices(List<Celda> camino)
+    private static List<Cell> Vertices(List<Cell> camino)
     {
-        var vertices = new List<Celda> { camino[0] };
+        var vertices = new List<Cell> { camino[0] };
 
         for (int i = 1; i < camino.Count - 1; i++)
         {
@@ -176,11 +176,11 @@ public static class LayoutAscii
         return vertices;
     }
 
-    private static IEnumerable<Celda> Vecinos(Celda c)
+    private static IEnumerable<Cell> Neighbours4(Cell c)
     {
-        if (c.X > 0) yield return new Celda(c.X - 1, c.Y);
-        if (c.Y > 0) yield return new Celda(c.X, c.Y - 1);
-        if (c.X < Ancho - 1) yield return new Celda(c.X + 1, c.Y);
-        if (c.Y < Alto - 1) yield return new Celda(c.X, c.Y + 1);
+        if (c.X > 0) yield return new Cell(c.X - 1, c.Y);
+        if (c.Y > 0) yield return new Cell(c.X, c.Y - 1);
+        if (c.X < Width - 1) yield return new Cell(c.X + 1, c.Y);
+        if (c.Y < Height - 1) yield return new Cell(c.X, c.Y + 1);
     }
 }

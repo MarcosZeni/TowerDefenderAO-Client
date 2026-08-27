@@ -32,9 +32,9 @@ public partial class EditorLayouts : Node2D
     {
         Bloqueado = 0,
         Colocable = 1,
-        Ruta = 2,
+        Route = 2,
         Entrada = 3,
-        Torre = 4,
+        Tower = 4,
     }
 
     /// <summary>
@@ -54,18 +54,18 @@ public partial class EditorLayouts : Node2D
     /// de 64. Hay que bajarlos acá, y con eso se caen los tres layouts escritos a
     /// mano en <c>Layouts.cs</c>, que tienen coordenadas de 30×16.</para>
     /// </remarks>
-    private const int Ancho = 20;
+    private const int Width = 20;
 
-    private const int Alto = 11;
+    private const int Height = 11;
 
-    private const int Celda = 96;
+    private const int Cell = 96;
 
     /// <summary>La grilla pintada. Arranca entera en bloqueado.</summary>
     private Pincel[,] _celdas = new Pincel[1, 1];
 
-    private Pincel _pincel = Pincel.Ruta;
+    private Pincel _pincel = Pincel.Route;
 
-    private Celda? _bajoMouse;
+    private Cell? _bajoMouse;
 
     private bool _pintando;
 
@@ -107,7 +107,7 @@ public partial class EditorLayouts : Node2D
     /// </remarks>
     private void Reiniciar()
     {
-        _celdas = new Pincel[Ancho, Alto];
+        _celdas = new Pincel[Width, Height];
         QueueRedraw();
     }
 
@@ -170,9 +170,9 @@ public partial class EditorLayouts : Node2D
         {
             case Key.Key1: _pincel = Pincel.Bloqueado; break;
             case Key.Key2: _pincel = Pincel.Colocable; break;
-            case Key.Key3: _pincel = Pincel.Ruta; break;
+            case Key.Key3: _pincel = Pincel.Route; break;
             case Key.Key4: _pincel = Pincel.Entrada; break;
-            case Key.Key5: _pincel = Pincel.Torre; break;
+            case Key.Key5: _pincel = Pincel.Tower; break;
 
             case Key.P:
                 _piso = (_piso + 1) % Pisos.Length;
@@ -190,7 +190,7 @@ public partial class EditorLayouts : Node2D
                 break;
 
             case Key.S:
-                Guardar();
+                Store();
                 break;
         }
 
@@ -206,14 +206,14 @@ public partial class EditorLayouts : Node2D
 
         // Entrada y Torre son únicas: pintar una segunda borra la primera. Si no,
         // el trazador encuentra dos arranques y no sabe cuál es.
-        if (valor is Pincel.Entrada or Pincel.Torre)
+        if (valor is Pincel.Entrada or Pincel.Tower)
         {
-            for (int y = 0; y < Alto; y++)
+            for (int y = 0; y < Height; y++)
             {
-                for (int x = 0; x < Ancho; x++)
+                for (int x = 0; x < Width; x++)
                 {
                     if (_celdas[x, y] == valor)
-                        _celdas[x, y] = Pincel.Ruta;
+                        _celdas[x, y] = Pincel.Route;
                 }
             }
         }
@@ -226,7 +226,7 @@ public partial class EditorLayouts : Node2D
         // la ruta o el cuerpo a cuerpo no sirve— y hacerla a mano es pintar dos
         // veces el mismo recorrido. Solo se pisa lo bloqueado: una celda que ya es
         // ruta no se toca, y por eso dos tramos paralelos no se comen entre sí.
-        if (valor is Pincel.Ruta or Pincel.Entrada or Pincel.Torre)
+        if (valor is Pincel.Route or Pincel.Entrada or Pincel.Tower)
             AbrirCostados(c);
 
         QueueRedraw();
@@ -238,7 +238,7 @@ public partial class EditorLayouts : Node2D
     /// diagonal es parte del costado del camino igual, y dejarla bloqueada hace
     /// que las esquinas se vean mordidas.
     /// </remarks>
-    private void AbrirCostados(Celda c)
+    private void AbrirCostados(Cell c)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -247,7 +247,7 @@ public partial class EditorLayouts : Node2D
                 int x = c.X + dx;
                 int y = c.Y + dy;
 
-                if (x < 0 || y < 0 || x >= Ancho || y >= Alto)
+                if (x < 0 || y < 0 || x >= Width || y >= Height)
                     continue;
 
                 if (_celdas[x, y] == Pincel.Bloqueado)
@@ -256,12 +256,12 @@ public partial class EditorLayouts : Node2D
         }
     }
 
-    private Celda? ACelda(Vector2 posicion)
+    private Cell? ACelda(Vector2 posicion)
     {
-        int x = (int)(posicion.X / Celda);
-        int y = (int)(posicion.Y / Celda);
+        int x = (int)(posicion.X / Cell);
+        int y = (int)(posicion.Y / Cell);
 
-        return x >= 0 && y >= 0 && x < Ancho && y < Alto ? new Celda(x, y) : null;
+        return x >= 0 && y >= 0 && x < Width && y < Height ? new Cell(x, y) : null;
     }
 
     // -------------------------------------------------------------------------
@@ -291,19 +291,19 @@ public partial class EditorLayouts : Node2D
     {
         var problemas = new List<string>();
 
-        Celda? entrada = null;
-        Celda? torre = null;
+        Cell? entrada = null;
+        Cell? torre = null;
         int celdasRuta = 0;
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 switch (_celdas[x, y])
                 {
-                    case Pincel.Entrada: entrada = new Celda(x, y); celdasRuta++; break;
-                    case Pincel.Torre: torre = new Celda(x, y); celdasRuta++; break;
-                    case Pincel.Ruta: celdasRuta++; break;
+                    case Pincel.Entrada: entrada = new Cell(x, y); celdasRuta++; break;
+                    case Pincel.Tower: torre = new Cell(x, y); celdasRuta++; break;
+                    case Pincel.Route: celdasRuta++; break;
                 }
             }
         }
@@ -318,7 +318,7 @@ public partial class EditorLayouts : Node2D
 
         if (entrada is { } e && torre is { } t)
         {
-            var camino = Trazar(e, t, out string error);
+            var camino = Trace(e, t, out string error);
 
             if (camino is null)
                 problemas.Add(error);
@@ -332,7 +332,7 @@ public partial class EditorLayouts : Node2D
             }
 
             // La Torre necesita su anillo entero adentro del campo.
-            if (t.X < 2 || t.Y < 2 || t.X >= Ancho - 2 || t.Y >= Alto - 2)
+            if (t.X < 2 || t.Y < 2 || t.X >= Width - 2 || t.Y >= Height - 2)
                 problemas.Add("la Torre está a menos de 2 celdas del borde");
         }
 
@@ -366,24 +366,24 @@ public partial class EditorLayouts : Node2D
     /// decir cuánto avanzó un enemigo. Si hay <b>cero</b> antes de llegar a la
     /// Torre, está cortado.
     /// </remarks>
-    private List<Celda>? Trazar(Celda entrada, Celda torre, out string error)
+    private List<Cell>? Trace(Cell entrada, Cell torre, out string error)
     {
         error = "";
 
-        var camino = new List<Celda> { entrada };
-        var visitadas = new HashSet<Celda> { entrada };
+        var camino = new List<Cell> { entrada };
+        var visitadas = new HashSet<Cell> { entrada };
         var actual = entrada;
 
         while (actual != torre)
         {
-            var siguientes = new List<Celda>();
+            var siguientes = new List<Cell>();
 
-            foreach (var v in Vecinos(actual))
+            foreach (var v in Neighbours(actual))
             {
                 if (visitadas.Contains(v))
                     continue;
 
-                if (_celdas[v.X, v.Y] is Pincel.Ruta or Pincel.Torre)
+                if (_celdas[v.X, v.Y] is Pincel.Route or Pincel.Tower)
                     siguientes.Add(v);
             }
 
@@ -408,28 +408,28 @@ public partial class EditorLayouts : Node2D
     }
 
     /// <summary>Los cuatro vecinos ortogonales. Sin diagonales: no se camina en diagonal.</summary>
-    private IEnumerable<Celda> Vecinos(Celda c)
+    private IEnumerable<Cell> Neighbours(Cell c)
     {
-        if (c.X > 0) yield return new Celda(c.X - 1, c.Y);
-        if (c.Y > 0) yield return new Celda(c.X, c.Y - 1);
-        if (c.X < Ancho - 1) yield return new Celda(c.X + 1, c.Y);
-        if (c.Y < Alto - 1) yield return new Celda(c.X, c.Y + 1);
+        if (c.X > 0) yield return new Cell(c.X - 1, c.Y);
+        if (c.Y > 0) yield return new Cell(c.X, c.Y - 1);
+        if (c.X < Width - 1) yield return new Cell(c.X + 1, c.Y);
+        if (c.Y < Height - 1) yield return new Cell(c.X, c.Y + 1);
     }
 
     private int ContarPegadas()
     {
         int cuantas = 0;
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 if (_celdas[x, y] != Pincel.Colocable)
                     continue;
 
-                foreach (var v in Vecinos(new Celda(x, y)))
+                foreach (var v in Neighbours(new Cell(x, y)))
                 {
-                    if (_celdas[v.X, v.Y] is Pincel.Ruta or Pincel.Entrada or Pincel.Torre)
+                    if (_celdas[v.X, v.Y] is Pincel.Route or Pincel.Entrada or Pincel.Tower)
                     {
                         cuantas++;
                         break;
@@ -442,16 +442,16 @@ public partial class EditorLayouts : Node2D
     }
 
     /// <summary>Las cuatro esquinas de 3x2 celdas donde flota el HUD.</summary>
-    private IEnumerable<Celda> Esquinas()
+    private IEnumerable<Cell> Esquinas()
     {
         for (int dy = 0; dy < 2; dy++)
         {
             for (int dx = 0; dx < 3; dx++)
             {
-                yield return new Celda(dx, dy);
-                yield return new Celda(Ancho - 1 - dx, dy);
-                yield return new Celda(dx, Alto - 1 - dy);
-                yield return new Celda(Ancho - 1 - dx, Alto - 1 - dy);
+                yield return new Cell(dx, dy);
+                yield return new Cell(Width - 1 - dx, dy);
+                yield return new Cell(dx, Height - 1 - dy);
+                yield return new Cell(Width - 1 - dx, Height - 1 - dy);
             }
         }
     }
@@ -472,21 +472,21 @@ public partial class EditorLayouts : Node2D
     /// falso: perder media hora de dibujo porque falta cerrar un tramo sería la
     /// peor forma de perderla.</para>
     /// </remarks>
-    private void Guardar()
+    private void Store()
     {
         var filas = new JsonArray();
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            var fila = new StringBuilder(Ancho);
+            var fila = new StringBuilder(Width);
 
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
                 fila.Append(_celdas[x, y] switch
                 {
                     Pincel.Bloqueado => 'X',
                     Pincel.Colocable => '.',
-                    Pincel.Ruta => '#',
+                    Pincel.Route => '#',
                     Pincel.Entrada => 'E',
                     _ => 'T',
                 });
@@ -499,17 +499,17 @@ public partial class EditorLayouts : Node2D
         {
             ["version"] = 1,
 
-            ["leyenda"] = "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+            ["legend"] = "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
 
-            ["aviso"] = "Lo escribe el editor de layouts (Escenas/EditorLayouts.tscn). " +
+            ["note"] = "Lo escribe el editor de layouts (Escenas/EditorLayouts.tscn). " +
                         "Se puede corregir a mano, pero conviene volver a pasarlo por " +
                         "el editor para que revalide.",
 
-            ["ancho"] = Ancho,
-            ["alto"] = Alto,
-            ["largoRuta"] = _largoRuta,
-            ["valido"] = _valido,
-            ["filas"] = filas,
+            ["width"] = Width,
+            ["height"] = Height,
+            ["routeLength"] = _largoRuta,
+            ["valid"] = _valido,
+            ["rows"] = filas,
         };
 
         string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");
@@ -551,17 +551,17 @@ public partial class EditorLayouts : Node2D
     {
         DibujarPiso();
 
-        for (int y = 0; y < Alto; y++)
+        for (int y = 0; y < Height; y++)
         {
-            for (int x = 0; x < Ancho; x++)
+            for (int x = 0; x < Width; x++)
             {
-                var caja = new Rect2(x * Celda, y * Celda, Celda, Celda);
+                var caja = new Rect2(x * Cell, y * Cell, Cell, Cell);
 
                 var tinte = _celdas[x, y] switch
                 {
                     Pincel.Bloqueado => new Color(0f, 0f, 0f, 0.55f),
                     Pincel.Colocable => new Color(0.25f, 0.85f, 0.45f, 0.22f),
-                    Pincel.Ruta => new Color(0.55f, 0.40f, 0.20f, 0.75f),
+                    Pincel.Route => new Color(0.55f, 0.40f, 0.20f, 0.75f),
                     Pincel.Entrada => new Color(0.95f, 0.85f, 0.20f, 0.85f),
                     _ => new Color(0.30f, 0.55f, 0.95f, 0.85f),
                 };
@@ -574,7 +574,7 @@ public partial class EditorLayouts : Node2D
         if (_bajoMouse is { } c)
         {
             DrawRect(
-                new Rect2(c.X * Celda, c.Y * Celda, Celda, Celda),
+                new Rect2(c.X * Cell, c.Y * Cell, Cell, Cell),
                 Colors.White, filled: false, width: 3f);
         }
 
@@ -597,17 +597,17 @@ public partial class EditorLayouts : Node2D
         if (textura is null)
         {
             DrawRect(
-                new Rect2(0, 0, Ancho * Celda, Alto * Celda),
+                new Rect2(0, 0, Width * Cell, Height * Cell),
                 new Color(0.16f, 0.18f, 0.16f));
 
             return;
         }
 
-        int lado = Celda * 4;
+        int lado = Cell * 4;
 
-        for (int y = 0; y < Alto * Celda; y += lado)
+        for (int y = 0; y < Height * Cell; y += lado)
         {
-            for (int x = 0; x < Ancho * Celda; x += lado)
+            for (int x = 0; x < Width * Cell; x += lado)
                 DrawTextureRect(textura, new Rect2(x, y, lado, lado), tile: false);
         }
     }
@@ -638,7 +638,7 @@ public partial class EditorLayouts : Node2D
         {
             Pincel.Bloqueado => "1 bloqueado",
             Pincel.Colocable => "2 colocable",
-            Pincel.Ruta => "3 ruta",
+            Pincel.Route => "3 ruta",
             Pincel.Entrada => "4 entrada",
             _ => "5 Torre",
         };
@@ -665,7 +665,7 @@ public partial class EditorLayouts : Node2D
             HorizontalAlignment.Left, -1, 18, new Color(0.60f, 0.65f, 0.72f));
 
         DrawString(fuente, new Vector2(16, alto + 118),
-            $"campo {Ancho}x{Alto}, celda {Celda} px — la vista de AO, 220 celdas",
+            $"campo {Width}x{Height}, celda {Cell} px — la vista de AO, 220 celdas",
             HorizontalAlignment.Left, -1, 18, new Color(0.60f, 0.65f, 0.72f));
     }
 }

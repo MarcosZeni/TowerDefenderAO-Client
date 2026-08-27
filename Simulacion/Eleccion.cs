@@ -1,17 +1,17 @@
 namespace TowerOfArgentum.Simulacion;
 
 /// <summary>Qué se está ofreciendo en la pantalla de elección.</summary>
-public enum TipoOpcion
+public enum ChoiceType
 {
     /// <summary>Sumar una clase nueva al roster, en nivel 1.</summary>
-    Contratar = 0,
+    Hire = 0,
 
     /// <summary>Subir de nivel una que ya está: stats y <b>un slot más</b>.</summary>
-    Levelear = 1,
+    LevelUp = 1,
 }
 
 /// <summary>Una de las tres opciones que se ofrecen.</summary>
-public readonly record struct Opcion(TipoOpcion Tipo, Clase Clase, int NivelResultante);
+public readonly record struct Choice(ChoiceType Kind, DefenderClass DefenderClass, int ResultingLevel);
 
 /// <summary>
 /// Arma las 3 opciones de la pantalla de elección.
@@ -24,13 +24,13 @@ public readonly record struct Opcion(TipoOpcion Tipo, Clase Clase, int NivelResu
 /// <para>⚠ <b>Las trabajadoras quedan afuera</b> —leñador, minero, pescador,
 /// herrero, carpintero, sastre—. Este juego es pelear, y ellas no pelean.</para>
 /// </remarks>
-public static class ArmadorEleccion
+public static class ChoiceBuilder
 {
     /// <summary>Las 9 de combate. Es todo el universo de clases del juego.</summary>
-    public static readonly Clase[] Todas =
+    public static readonly DefenderClass[] All =
     [
-        Clase.Mago, Clase.Clerigo, Clase.Guerrero, Clase.Asesino, Clase.Ladron,
-        Clase.Bardo, Clase.Druida, Clase.Paladin, Clase.Cazador,
+        DefenderClass.Mage, DefenderClass.Cleric, DefenderClass.Warrior, DefenderClass.Assassin, DefenderClass.Thief,
+        DefenderClass.Bard, DefenderClass.Druid, DefenderClass.Paladin, DefenderClass.Hunter,
     ];
 
     /// <summary>
@@ -47,9 +47,9 @@ public static class ArmadorEleccion
     /// <para>Perder por una decisión propia es el juego; perder por el sorteo de
     /// la pantalla inicial, antes de tocar nada, es un bug de diseño.</para>
     /// </remarks>
-    public static Opcion[] Inicial(Aleatorio rng, DatosBalance datos)
+    public static Choice[] Initial(Rng rng, BalanceData datos)
     {
-        var salida = new Opcion[3];
+        var salida = new Choice[3];
 
         // ⚠ Las ofensivas —las que no están marcadas «soporte» en clases.json—
         // son las que pegan lo suficiente para sostener solas una defensa.
@@ -57,19 +57,19 @@ public static class ArmadorEleccion
         // le hacen al resto del equipo. Hasta que exista el sistema de soporte no
         // tienen con qué compensar, pero incluso después van a seguir siendo malas
         // SOLAS, que es la situación del arranque.
-        var ofensivas = datos.Clases.Ofensivas();
+        var ofensivas = datos.Classes.Offensive();
 
         // La garantizada sale primero, para que el resto se sortee sin ella.
-        var garantizada = ofensivas[rng.Indice(ofensivas.Length)];
-        salida[0] = new Opcion(TipoOpcion.Contratar, garantizada, 1);
+        var garantizada = ofensivas[rng.Index(ofensivas.Length)];
+        salida[0] = new Choice(ChoiceType.Hire, garantizada, 1);
 
-        var pozo = new List<Clase>(Todas);
+        var pozo = new List<DefenderClass>(All);
         pozo.Remove(garantizada);
 
         for (int i = 1; i < 3; i++)
         {
-            int j = rng.Indice(pozo.Count);
-            salida[i] = new Opcion(TipoOpcion.Contratar, pozo[j], 1);
+            int j = rng.Index(pozo.Count);
+            salida[i] = new Choice(ChoiceType.Hire, pozo[j], 1);
 
             // Se saca del pozo para que no salgan dos veces la misma clase: tres
             // opciones donde dos son iguales es una elección de dos.
@@ -81,7 +81,7 @@ public static class ArmadorEleccion
         // garantía sería visible como "la de arriba es la buena".
         for (int i = salida.Length - 1; i > 0; i--)
         {
-            int j = rng.Rango(0, i + 1);
+            int j = rng.Between(0, i + 1);
             (salida[i], salida[j]) = (salida[j], salida[i]);
         }
 
@@ -101,20 +101,20 @@ public static class ArmadorEleccion
     /// levelear: del 7 en adelante ya no abre slots, así que sería una opción
     /// visiblemente peor que las otras dos y elegir dejaría de tener sentido.</para>
     /// </remarks>
-    public static Opcion[] Siguiente(Roster roster, Aleatorio rng, DatosBalance datos)
+    public static Choice[] Next(Roster roster, Rng rng, BalanceData datos)
     {
-        var candidatas = new List<Opcion>();
+        var candidatas = new List<Choice>();
 
-        foreach (var c in roster.Clases)
+        foreach (var c in roster.Classes)
         {
-            if (c.Nivel < datos.Clases.SlotsPerkPorClase)
-                candidatas.Add(new Opcion(TipoOpcion.Levelear, c.Clase, c.Nivel + 1));
+            if (c.Level < datos.Classes.PerkSlotsPerClass)
+                candidatas.Add(new Choice(ChoiceType.LevelUp, c.DefenderClass, c.Level + 1));
         }
 
-        foreach (var clase in Todas)
+        foreach (var clase in All)
         {
-            if (!roster.Tiene(clase))
-                candidatas.Add(new Opcion(TipoOpcion.Contratar, clase, 1));
+            if (!roster.Has(clase))
+                candidatas.Add(new Choice(ChoiceType.Hire, clase, 1));
         }
 
         // Con el roster completo y todo en nivel 6 no queda nada que ofrecer. Es
@@ -125,11 +125,11 @@ public static class ArmadorEleccion
             return [];
 
         int cuantas = System.Math.Min(3, candidatas.Count);
-        var salida = new Opcion[cuantas];
+        var salida = new Choice[cuantas];
 
         for (int i = 0; i < cuantas; i++)
         {
-            int j = rng.Indice(candidatas.Count);
+            int j = rng.Index(candidatas.Count);
             salida[i] = candidatas[j];
             candidatas.RemoveAt(j);
         }

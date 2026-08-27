@@ -10,17 +10,17 @@ namespace TowerOfArgentum.Simulacion;
 /// <para><b>Las trabajadoras quedan afuera</b> —leñador, minero, pescador,
 /// herrero, carpintero, sastre—: no pelean, y este juego es solo pelear.</para>
 /// </summary>
-public enum Clase
+public enum DefenderClass
 {
-    Mago = 0,
-    Clerigo = 1,
-    Guerrero = 2,
-    Asesino = 3,
-    Ladron = 4,
-    Bardo = 5,
-    Druida = 6,
+    Mage = 0,
+    Cleric = 1,
+    Warrior = 2,
+    Assassin = 3,
+    Thief = 4,
+    Bard = 5,
+    Druid = 6,
     Paladin = 7,
-    Cazador = 8,
+    Hunter = 8,
 }
 
 /// <summary>
@@ -35,7 +35,7 @@ public enum Clase
 /// <para><b>No tiene <c>(x, y)</c>.</b> Tiene <see cref="DistanciaRecorrida"/>,
 /// un solo número. Ver <see cref="Ruta"/>.</para>
 /// </remarks>
-public sealed class Enemigo
+public sealed class Enemy
 {
     /// <summary>
     /// Orden de aparición dentro de la corrida. <b>Nunca se reusa y nunca se
@@ -46,10 +46,10 @@ public sealed class Enemigo
     /// qué orden se resuelven las muertes. Si el orden cambia, la corrida da
     /// distinto y la revalidación acusa de trampa a quien no hizo nada.</para>
     /// </summary>
-    public required int IdSpawn { get; init; }
+    public required int SpawnId { get; init; }
 
     /// <summary>Qué bicho es. Índice en el bestiario de <c>enemigos.json</c>.</summary>
-    public required int TipoId { get; init; }
+    public required int TypeId { get; init; }
 
     /// <summary>
     /// Si es el jefe que cierra un área.
@@ -61,34 +61,34 @@ public sealed class Enemigo
     /// Sin la bandera, ese bicho soltaría un perk de Oro, y <b>el jefe es la única
     /// fuente de Oro</b>.
     /// </remarks>
-    public bool EsJefe { get; init; }
+    public bool IsBoss { get; init; }
 
-    public required int HpMaximo { get; init; }
+    public required int MaxHp { get; init; }
 
     public int Hp { get; set; }
 
     /// <summary>Milésimas de celda por tick.</summary>
-    public required int Velocidad { get; init; }
+    public required int Speed { get; init; }
 
     /// <summary>Daño que le hace a la Torre por golpe.</summary>
-    public required int Dano { get; init; }
+    public required int Damage { get; init; }
 
     /// <summary>Ticks entre golpe y golpe a la Torre.</summary>
-    public required int CadenciaTicks { get; init; }
+    public required int CadenceTicks { get; init; }
 
     /// <summary>Oro que suelta al morir.</summary>
-    public required int Oro { get; init; }
+    public required int Gold { get; init; }
 
     /// <summary>Cuánto avanzó por la ruta, en milésimas de celda.</summary>
-    public long DistanciaRecorrida { get; set; }
+    public long DistanceTravelled { get; set; }
 
     /// <summary>
     /// Ya llegó al final y le está pegando a la Torre. Deja de moverse.
     /// </summary>
-    public bool AtacandoTorre { get; set; }
+    public bool AttackingTower { get; set; }
 
     /// <summary>Ticks que faltan para su próximo golpe a la Torre.</summary>
-    public int CooldownAtaque { get; set; }
+    public int AttackCooldown { get; set; }
 
     /// <summary>
     /// Oro extra que va a soltar, en porcentaje. Lo pone la habilidad Codicia.
@@ -97,7 +97,7 @@ public sealed class Enemigo
     /// Se marca al golpear y se cobra en la fase de muertes, cuando se sabe si el
     /// golpe mató. Cobrarlo al golpear daría oro por pegarle a algo que sobrevive.
     /// </remarks>
-    public int OroExtraPorciento { get; set; }
+    public int ExtraGoldPercent { get; set; }
 
     /// <summary>Cuándo vence la marca de Codicia. La limpia la fase 3.</summary>
     /// <remarks>
@@ -105,7 +105,7 @@ public sealed class Enemigo
     /// arma de Codicia convertía a un tanque en alcancía aunque lo terminara
     /// matando otro, minutos después.
     /// </remarks>
-    public int OroExtraExpiraTick { get; set; }
+    public int ExtraGoldExpiryTick { get; set; }
 
     /// <summary>
     /// Modificadores que le tocaron al spawnear, en puntos porcentuales.
@@ -114,9 +114,9 @@ public sealed class Enemigo
     /// pantalla</b>: un lobo blindado que se ve igual que un lobo normal es una
     /// mecánica invisible.</para>
     /// </summary>
-    public int PerkVidaExtra { get; set; }
+    public int ExtraHealthPerk { get; set; }
 
-    public int PerkVelocidadExtra { get; set; }
+    public int ExtraSpeedPerk { get; set; }
 
     /// <summary>Ralentización activa, en puntos porcentuales POSITIVOS (0-60).</summary>
     /// <remarks>
@@ -126,13 +126,13 @@ public sealed class Enemigo
     /// No apila: prevalece la potencia más fuerte, y cada aplicación refresca
     /// los 90 ticks. La vence la fase 3.
     /// </remarks>
-    public int SlowPorciento { get; set; }
+    public int SlowPercent { get; set; }
 
-    public int SlowExpiraTick { get; set; }
+    public int SlowExpiryTick { get; set; }
 
-    public bool Vivo => Hp > 0;
+    public bool Alive => Hp > 0;
 
-    public int VelocidadEfectiva => Enteros.ConPorcentajes(Velocidad, PerkVelocidadExtra - SlowPorciento);
+    public int EffectiveSpeed => Ints.WithPercents(Speed, ExtraSpeedPerk - SlowPercent);
 }
 
 /// <summary>
@@ -144,16 +144,16 @@ public sealed class Enemigo
 /// <see cref="Clase"/>, que es donde viven el nivel, los perks y el equipo. Dos
 /// cazadores puestos en celdas distintas pegan exactamente igual.
 /// </remarks>
-public sealed class Defensor
+public sealed class Defender
 {
-    public required int IdColocacion { get; init; }
+    public required int PlacementId { get; init; }
 
-    public required Clase Clase { get; init; }
+    public required DefenderClass DefenderClass { get; init; }
 
-    public required Celda Celda { get; init; }
+    public required Cell Cell { get; init; }
 
     /// <summary>Ticks que faltan para poder disparar de nuevo.</summary>
-    public int CooldownRestante { get; set; }
+    public int RemainingCooldown { get; set; }
 
     /// <summary>
     /// Cuántos enemigos mató en la oleada actual. Lo usa la habilidad Sed.
@@ -164,7 +164,7 @@ public sealed class Defensor
     /// real tiene que ser cuánto se puede matar de una vez, no cuánto se lleva
     /// matado.
     /// </remarks>
-    public int MuertesEnLaOleada { get; set; }
+    public int KillsInWave { get; set; }
 
     /// <summary>Golpes que tiró desde que existe. Lo usan los críticos.</summary>
     /// <remarks>
@@ -174,21 +174,21 @@ public sealed class Defensor
     /// según la fase. Cada 7.º ataque DE ESTE defensor es el mismo promedio,
     /// sin la sincronización.
     /// </remarks>
-    public int ContadorGolpes { get; set; }
+    public int HitCounter { get; set; }
 
     /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la
     /// devolución del 50% al venderlo.
     /// </summary>
-    public required int TickColocacion { get; init; }
+    public required int PlacementTick { get; init; }
 }
 
 /// <summary>
 /// Lo que se defiende. Si su HP llega a cero, se terminó la corrida.
 /// </summary>
-public sealed class Torre
+public sealed class Tower
 {
-    public required int HpMaximo { get; init; }
+    public required int MaxHp { get; init; }
 
     /// <summary>Ticks que le faltan para volver a pegar.</summary>
     /// <remarks>
@@ -198,15 +198,15 @@ public sealed class Torre
     /// la oleada para siempre y la corrida se vuelve una derrota en cámara
     /// lenta. Pega parejo y despacio: es una red de seguridad, no un defensor.
     /// </remarks>
-    public int CooldownAtaque { get; set; }
+    public int AttackCooldown { get; set; }
 
     public int Hp { get; set; }
 
-    public required Celda Celda { get; init; }
+    public required Cell Cell { get; init; }
 
-    public bool EnPie => Hp > 0;
+    public bool Standing => Hp > 0;
 
-    public void Recibir(int dano)
+    public void Receive(int dano)
     {
         Hp -= dano;
         if (Hp < 0) Hp = 0;

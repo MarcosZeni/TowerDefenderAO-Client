@@ -36,14 +36,14 @@ public static class Balance
     /// dentro de cada área: la dificultad sigue subiendo, pero atada a lo que el
     /// área vende.</para>
     /// </remarks>
-    public static RecetaOleada RecetaDe(int oleada, DatosBalance datos)
+    public static WaveRecipe RecipeOf(int oleada, BalanceData datos)
     {
-        var c = datos.Curvas;
-        int area = datos.Areas.DeOleada(oleada);
-        int presupuesto = c.Presupuesto.SinTope(oleada);
+        var c = datos.Curves;
+        int area = datos.Areas.OfWave(oleada);
+        int presupuesto = c.Budget.Uncapped(oleada);
 
-        var permitidos = PermitidosDe(area, datos);
-        int tope = TopePorPool(oleada, area, permitidos, datos);
+        var permitidos = AllowedIn(area, datos);
+        int tope = PoolCap(oleada, area, permitidos, datos);
 
         if (tope >= 0 && tope < presupuesto)
             presupuesto = tope;
@@ -53,18 +53,18 @@ public static class Balance
         // un jugador — que es lo que hace que fusionar sea una decisión.
         int jefe = -1;
 
-        if (datos.Areas.TieneJefe(oleada))
-            jefe = datos.JefeDe(area)?.Id ?? -1;
+        if (datos.Areas.HasBoss(oleada))
+            jefe = datos.BossOf(area)?.Id ?? -1;
 
-        return new RecetaOleada
+        return new WaveRecipe
         {
-            Numero = oleada,
-            Presupuesto = presupuesto,
-            Permitidos = permitidos,
-            JefeTipoId = jefe,
-            ChancePerkNpc = c.PorOleada.ChancePerkNpc(oleada),
-            IntervaloSpawnTicks = c.PorOleada.IntervaloSpawn(oleada),
-            BonusOro = c.PorOleada.BonusOroLimpiar.En(oleada),
+            Number = oleada,
+            Budget = presupuesto,
+            Allowed = permitidos,
+            BossTypeId = jefe,
+            NpcPerkChance = c.PorOleada.NpcPerkChance(oleada),
+            SpawnIntervalTicks = c.PorOleada.IntervaloSpawn(oleada),
+            BonusOro = c.PorOleada.ClearGoldBonus.En(oleada),
         };
     }
 
@@ -73,15 +73,15 @@ public static class Balance
     /// pool de esa área. Devuelve <c>-1</c> si el pool no tiene ningún bicho
     /// comprable, y entonces no hay tope que aplicar.
     /// </summary>
-    private static int TopePorPool(
-        int oleada, int area, (int TipoId, int Peso)[] permitidos, DatosBalance datos)
+    private static int PoolCap(
+        int oleada, int area, (int TypeId, int Weight)[] permitidos, BalanceData datos)
     {
         long sumaPesoCosto = 0;
         long sumaPeso = 0;
 
         foreach (var (tipoId, peso) in permitidos)
         {
-            int costo = ArmadorOleadas.Costo(tipoId, datos);
+            int costo = WaveBuilder.Cost(tipoId, datos);
 
             if (costo == int.MaxValue)
                 continue;
@@ -93,18 +93,18 @@ public static class Balance
         if (sumaPeso <= 0)
             return -1;
 
-        var p = datos.Curvas.Presupuesto;
+        var p = datos.Curves.Budget;
 
-        int primera = datos.Areas.PrimeraOleadaDe(area);
-        int oleadasDelArea = datos.Areas.UltimaOleadaDe(area) - primera + 1;
+        int primera = datos.Areas.FirstWaveOf(area);
+        int oleadasDelArea = datos.Areas.LastWaveOf(area) - primera + 1;
         int w = oleada - primera + 1;
-        int rampa = p.CapEquivalenteMax - p.CapEquivalenteMin;
+        int rampa = p.EquivalentCapMax - p.EquivalentCapMin;
 
         // Sube lineal de min a max dentro del área, con redondeo a mitad para
         // arriba y sin punto flotante (la simulación es entera; JUGABILIDAD.md §4).
         int capEq = oleadasDelArea <= 1
-            ? p.CapEquivalenteMax
-            : p.CapEquivalenteMin + ((((w - 1) * rampa * 2) + (oleadasDelArea - 1)) / (2 * (oleadasDelArea - 1)));
+            ? p.EquivalentCapMax
+            : p.EquivalentCapMin + ((((w - 1) * rampa * 2) + (oleadasDelArea - 1)) / (2 * (oleadasDelArea - 1)));
 
         long tope = sumaPesoCosto * capEq / sumaPeso;
 
@@ -123,18 +123,18 @@ public static class Balance
     /// <para>Los del área anterior pesan menos, así que el área nueva domina la
     /// composición sin que la vieja desaparezca de golpe.</para>
     /// </remarks>
-    private static (int TipoId, int Peso)[] PermitidosDe(int area, DatosBalance datos)
+    private static (int TypeId, int Weight)[] AllowedIn(int area, BalanceData datos)
     {
-        var actual = datos.DeArea(area);
-        var anterior = area > 1 ? datos.DeArea(area - 1) : [];
+        var actual = datos.InArea(area);
+        var anterior = area > 1 ? datos.InArea(area - 1) : [];
 
         var lista = new List<(int, int)>(actual.Count + anterior.Count);
 
         foreach (var e in actual)
-            lista.Add((e.Id, datos.Curvas.Oleada.PesoAreaActual));
+            lista.Add((e.Id, datos.Curves.Wave.CurrentAreaWeight));
 
         foreach (var e in anterior)
-            lista.Add((e.Id, datos.Curvas.Oleada.PesoAreaAnterior));
+            lista.Add((e.Id, datos.Curves.Wave.PreviousAreaWeight));
 
         // ⚠ Sin bestiario no hay oleada posible. Antes acá había un lobo
         // provisional escrito en el código; ahora que los datos son obligatorios,
@@ -142,7 +142,7 @@ public static class Balance
         // bicho inventado que hace que la corrida parezca funcionar.
         if (lista.Count == 0)
         {
-            throw new DatosInvalidosException(
+            throw new InvalidBalanceDataException(
                 $"el área {area} no tiene ningún enemigo en enemigos.json. " +
                 "Corré el importador:  --importar-npcs");
         }

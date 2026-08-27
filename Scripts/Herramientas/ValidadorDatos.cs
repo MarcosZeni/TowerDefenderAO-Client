@@ -69,37 +69,37 @@ public static class ValidadorDatos
     /// el juego ni abre; lo que solo es raro sale por acá como aviso y se juega
     /// igual.</para>
     /// </remarks>
-    private static void ValidarTablas(DatosBalance datos, List<string> problemas, List<string> avisos)
+    private static void ValidarTablas(BalanceData datos, List<string> problemas, List<string> avisos)
     {
         // Toda clase del enum tiene que estar en clases.json: si falta una, el
         // juego funciona hasta que la elección la ofrece y ahí tira.
-        foreach (var clase in ArmadorEleccion.Todas)
+        foreach (var clase in ChoiceBuilder.All)
         {
             try
             {
-                datos.Clases.De(clase);
+                datos.Classes.De(clase);
             }
-            catch (DatosInvalidosException)
+            catch (InvalidBalanceDataException)
             {
                 problemas.Add($"clases.json no define «{clase}», y la elección la puede ofrecer");
             }
         }
 
         avisos.Add(
-            $"clases: {datos.Clases.Todas.Count} · {datos.Clases.Ofensivas().Length} ofensivas · " +
-            $"nivel máximo {datos.Clases.SlotsPerkPorClase} (+{datos.Clases.ExtraDanoPorNivel}% daño por nivel)");
+            $"clases: {datos.Classes.All.Count} · {datos.Classes.Offensive().Length} ofensivas · " +
+            $"nivel máximo {datos.Classes.PerkSlotsPerClass} (+{datos.Classes.ExtraDamagePerLevel}% daño por nivel)");
 
         // ⚠ El truncamiento entero se come mejoras enteras cuando el daño base es
         // chico. Es la anomalía P0 de la propuesta V2 y no es un error de datos,
         // pero es invisible: el jugador gasta oro en algo que no hace nada.
-        foreach (var c in datos.Clases.Todas)
+        foreach (var c in datos.Classes.All)
         {
             int mudos = 0;
 
-            for (int nivel = 2; nivel <= datos.Clases.SlotsPerkPorClase; nivel++)
+            for (int nivel = 2; nivel <= datos.Classes.PerkSlotsPerClass; nivel++)
             {
-                int anterior = Enteros.ConPorcentajes(c.Dano, (nivel - 2) * datos.Clases.ExtraDanoPorNivel);
-                int actual = Enteros.ConPorcentajes(c.Dano, (nivel - 1) * datos.Clases.ExtraDanoPorNivel);
+                int anterior = Ints.WithPercents(c.Damage, (nivel - 2) * datos.Classes.ExtraDamagePerLevel);
+                int actual = Ints.WithPercents(c.Damage, (nivel - 1) * datos.Classes.ExtraDamagePerLevel);
 
                 if (actual == anterior)
                     mudos++;
@@ -108,48 +108,48 @@ public static class ValidadorDatos
             if (mudos > 0)
             {
                 avisos.Add(
-                    $"{c.Clase}: daño base {c.Dano}, {mudos} de {datos.Clases.SlotsPerkPorClase - 1} niveles " +
+                    $"{c.DefenderClass}: daño base {c.Damage}, {mudos} de {datos.Classes.PerkSlotsPerClass - 1} niveles " +
                     "NO suben nada por truncamiento entero");
             }
         }
 
         // Lo mismo con los perks numéricos: un perk que no mueve el número en
         // ninguna clase es un slot y un drop gastados en nada.
-        foreach (var p in datos.Perks.Todos)
+        foreach (var p in datos.Perks.All)
         {
-            if (p.Efecto is not (EfectoPerk.Dano or EfectoPerk.Alcance))
+            if (p.Effect is not (PerkEffect.Damage or PerkEffect.Range))
                 continue;
 
             int sirveEn = 0;
 
-            foreach (var c in datos.Clases.Todas)
+            foreach (var c in datos.Classes.All)
             {
-                if (!p.SirveA(c.Clase))
+                if (!p.WorksFor(c.DefenderClass))
                     continue;
 
-                int baseValor = p.Efecto == EfectoPerk.Dano ? c.Dano : c.AlcanceCeldas;
+                int baseValor = p.Effect == PerkEffect.Damage ? c.Damage : c.RangeCells;
 
-                if (Enteros.ConPorcentajes(baseValor, p.Magnitud) > baseValor)
+                if (Ints.WithPercents(baseValor, p.Magnitude) > baseValor)
                     sirveEn++;
             }
 
             if (sirveEn == 0)
-                problemas.Add($"el perk «{p.Nombre}» (+{p.Magnitud}%) no cambia el número en NINGUNA clase: trunca a cero");
+                problemas.Add($"el perk «{p.Key}» (+{p.Magnitude}%) no cambia el número en NINGUNA clase: trunca a cero");
         }
 
         // El jefe final tiene que existir, o la corrida no se puede ganar.
-        int ultima = datos.Curvas.Corrida.CantidadAreas;
-        var jefeFinal = datos.JefeDe(ultima);
+        int ultima = datos.Curves.RunCurve.AreaCount;
+        var jefeFinal = datos.BossOf(ultima);
 
         if (jefeFinal is null)
             problemas.Add($"el área {ultima} no tiene jefe: la corrida no se puede terminar");
         else
-            avisos.Add($"jefe final: «{jefeFinal.Nombre}» ({jefeFinal.Hp} HP) en la oleada {datos.Curvas.Corrida.OleadasPorCorrida}");
+            avisos.Add($"jefe final: «{jefeFinal.Name}» ({jefeFinal.Hp} HP) en la oleada {datos.Curves.RunCurve.WavesPerRun}");
     }
 
-    private static void ValidarBestiario(DatosBalance datos, List<string> problemas, List<string> avisos)
+    private static void ValidarBestiario(BalanceData datos, List<string> problemas, List<string> avisos)
     {
-        if (datos.Enemigos.Count == 0)
+        if (datos.Enemies.Count == 0)
         {
             problemas.Add("el bestiario está vacío: corré --importar-npcs");
             return;
@@ -169,20 +169,20 @@ public static class ValidadorDatos
         // El sprite compartido con stats DISTINTOS sí se acepta, pero tiene que
         // verse distinto: si no, el jugador ve dos lobos iguales y uno tiene el
         // triple de vida.
-        var porCuerpo = new Dictionary<int, List<DatoEnemigo>>();
+        var porCuerpo = new Dictionary<int, List<EnemyData>>();
 
-        foreach (var e in datos.Enemigos)
+        foreach (var e in datos.Enemies)
         {
-            var firma = (e.Body, e.Hp, e.DanoMin, e.DanoMax, e.Velocidad, e.CadenciaTicks);
+            var firma = (e.Body, e.Hp, e.MinDamage, e.MaxDamage, e.Speed, e.CadenceTicks);
 
             if (firmas.TryGetValue(firma, out string? gemelo))
             {
-                problemas.Add($"{e.Nombre} y {gemelo} son el mismo bicho: " +
+                problemas.Add($"{e.Name} y {gemelo} son el mismo bicho: " +
                               $"cuerpo {e.Body} y los mismos números");
             }
             else
             {
-                firmas[firma] = e.Nombre;
+                firmas[firma] = e.Name;
             }
 
             if (!porCuerpo.TryGetValue(e.Body, out var delCuerpo))
@@ -193,34 +193,34 @@ public static class ValidadorDatos
 
             delCuerpo.Add(e);
 
-            if (e.EscalaVisual is < 100 or > 200)
+            if (e.VisualScale is < 100 or > 200)
             {
-                problemas.Add($"{e.Nombre} tiene escalaVisual {e.EscalaVisual}, " +
+                problemas.Add($"{e.Name} tiene escalaVisual {e.VisualScale}, " +
                               $"fuera de 100..200");
             }
 
             if (!ids.Add(e.Id))
-                problemas.Add($"id de enemigo repetido: {e.Id} ({e.Nombre})");
+                problemas.Add($"id de enemigo repetido: {e.Id} ({e.Name})");
 
             if (e.Hp <= 0)
-                problemas.Add($"{e.Nombre} tiene {e.Hp} HP");
+                problemas.Add($"{e.Name} tiene {e.Hp} HP");
 
-            if (e.Velocidad <= 0)
-                problemas.Add($"{e.Nombre} tiene velocidad {e.Velocidad}: no se movería nunca");
+            if (e.Speed <= 0)
+                problemas.Add($"{e.Name} tiene velocidad {e.Speed}: no se movería nunca");
 
-            if (e.CadenciaTicks <= 0)
-                problemas.Add($"{e.Nombre} tiene cadencia {e.CadenciaTicks}: pegaría infinitas veces por tick");
+            if (e.CadenceTicks <= 0)
+                problemas.Add($"{e.Name} tiene cadencia {e.CadenceTicks}: pegaría infinitas veces por tick");
 
-            if (e.DanoMax < e.DanoMin)
-                problemas.Add($"{e.Nombre} tiene danoMax {e.DanoMax} < danoMin {e.DanoMin}");
+            if (e.MaxDamage < e.MinDamage)
+                problemas.Add($"{e.Name} tiene danoMax {e.MaxDamage} < danoMin {e.MinDamage}");
 
             if (e.Area is < 1 or > 8)
-                problemas.Add($"{e.Nombre} está en el área {e.Area}, fuera de 1..8");
+                problemas.Add($"{e.Name} está en el área {e.Area}, fuera de 1..8");
 
             // Un enemigo más rápido que una celda por tick se teletransporta:
             // puede saltear el alcance de un defensor sin que llegue a dispararle.
-            if (e.Velocidad >= Enteros.MilesimasPorCelda)
-                problemas.Add($"{e.Nombre} va a {e.Velocidad} milésimas/tick: cruza una celda entera por tick");
+            if (e.Speed >= Ints.ThousandthsPerCell)
+                problemas.Add($"{e.Name} va a {e.Speed} milésimas/tick: cruza una celda entera por tick");
         }
 
         // ⚠ Que falte el arte es un AVISO, no un problema.
@@ -234,11 +234,11 @@ public static class ValidadorDatos
         int sinArte = 0;
         int conArte = 0;
 
-        foreach (var e in datos.Enemigos)
+        foreach (var e in datos.Enemies)
         {
-            if (e.Grafico.Length == 0)
+            if (e.Graphic.Length == 0)
             {
-                problemas.Add($"{e.Nombre} no tiene clave de gráfico: corré --importar-npcs");
+                problemas.Add($"{e.Name} no tiene clave de gráfico: corré --importar-npcs");
                 continue;
             }
 
@@ -246,7 +246,7 @@ public static class ValidadorDatos
 
             foreach (string d in direcciones)
             {
-                if (CargadorGraficos.Datos($"{e.Grafico}.{d}") is not null)
+                if (CargadorGraficos.Datos($"{e.Graphic}.{d}") is not null)
                     tiene++;
             }
 
@@ -263,14 +263,14 @@ public static class ValidadorDatos
             // juego y no arte que falta.
             if (tiene < 4)
             {
-                problemas.Add($"{e.Nombre} tiene {tiene} de 4 direcciones " +
-                              $"(«{e.Grafico}»): se borraría al doblar");
+                problemas.Add($"{e.Name} tiene {tiene} de 4 direcciones " +
+                              $"(«{e.Graphic}»): se borraría al doblar");
             }
         }
 
         if (sinArte > 0)
         {
-            avisos.Add($"{conArte} de {datos.Enemigos.Count} enemigos tienen sprite; " +
+            avisos.Add($"{conArte} de {datos.Enemies.Count} enemigos tienen sprite; " +
                        $"a {sinArte} les falta");
         }
 
@@ -284,10 +284,10 @@ public static class ValidadorDatos
 
             foreach (var e in delCuerpo)
             {
-                if (!escalas.Add(e.EscalaVisual))
+                if (!escalas.Add(e.VisualScale))
                 {
-                    problemas.Add($"{e.Nombre} comparte el cuerpo {cuerpo} y el tamaño " +
-                                  $"{e.EscalaVisual}% con otro: se verían iguales");
+                    problemas.Add($"{e.Name} comparte el cuerpo {cuerpo} y el tamaño " +
+                                  $"{e.VisualScale}% con otro: se verían iguales");
                 }
             }
         }
@@ -296,14 +296,14 @@ public static class ValidadorDatos
         // de hacer trabajo: todas las corridas de esa área se parecen.
         for (int a = 1; a <= 8; a++)
         {
-            int cuantos = datos.DeArea(a).Count;
+            int cuantos = datos.InArea(a).Count;
 
             if (cuantos == 0)
                 problemas.Add($"el área {a} no tiene ningún enemigo");
             else if (cuantos < 3)
                 avisos.Add($"el área {a} tiene solo {cuantos} enemigo(s): poca variedad");
 
-            if (datos.JefeDe(a) is null && cuantos > 0)
+            if (datos.BossOf(a) is null && cuantos > 0)
                 problemas.Add($"el área {a} no tiene jefe");
         }
     }
@@ -325,7 +325,7 @@ public static class ValidadorDatos
         string[] direcciones = ["norte", "este", "oeste", "sur"];
         int piezas = 0;
 
-        foreach (Clase clase in System.Enum.GetValues<Clase>())
+        foreach (DefenderClass clase in System.Enum.GetValues<DefenderClass>())
         {
             for (int tier = 1; tier <= 3; tier++)
             {
@@ -338,7 +338,7 @@ public static class ValidadorDatos
                     continue;
                 }
 
-                foreach (string clave in new[] { a.Cuerpo, a.Cabeza, a.Arma })
+                foreach (string clave in new[] { a.Body, a.Head, a.Weapon })
                 {
                     if (clave.Length == 0)
                     {
@@ -358,9 +358,9 @@ public static class ValidadorDatos
                 // Un cuerpo sin offset de cabeza deja la cabeza a los pies. El
                 // único que puede ser cero de verdad es el X, que casi siempre lo
                 // es: los cuerpos están centrados.
-                if (a.CabezaOffset.Y == 0)
+                if (a.HeadOffset.Y == 0)
                 {
-                    problemas.Add($"{clase} tier {tier}: el cuerpo «{a.Cuerpo}» no trae " +
+                    problemas.Add($"{clase} tier {tier}: el cuerpo «{a.Body}» no trae " +
                                   $"offset de cabeza, quedaría a los pies");
                 }
             }
@@ -374,80 +374,80 @@ public static class ValidadorDatos
         var ids = new HashSet<int>();
         int oros = 0, unicos = 0;
 
-        foreach (var p in CargadorDatos.Actual.Perks.Todos)
+        foreach (var p in CargadorDatos.Actual.Perks.All)
         {
             if (!ids.Add(p.Id))
-                problemas.Add($"id de perk repetido: {p.Id} ({p.Nombre})");
+                problemas.Add($"id de perk repetido: {p.Id} ({p.Key})");
 
-            if (p.MaxApilado <= 0)
-                problemas.Add($"el perk {p.Nombre} tiene maxApilado {p.MaxApilado}: no se podría equipar");
+            if (p.MaxStacked <= 0)
+                problemas.Add($"el perk {p.Key} tiene maxApilado {p.MaxStacked}: no se podría equipar");
 
             // ⚠ La regla de apilado sale del tier: apilable si es un número,
             // único si es un comportamiento. Un Oro con maxApilado > 1 diría
             // "Ricochet dos veces", que no quiere decir nada.
-            if (p.Tier is TierPerk.Oro or TierPerk.Unico && p.MaxApilado != 1)
-                problemas.Add($"{p.Nombre} es {p.Tier} y apila {p.MaxApilado}: los comportamientos no se apilan");
+            if (p.Tier is PerkTier.Gold or PerkTier.Unique && p.MaxStacked != 1)
+                problemas.Add($"{p.Key} es {p.Tier} y apila {p.MaxStacked}: los comportamientos no se apilan");
 
-            if (p.Tier == TierPerk.Unico)
+            if (p.Tier == PerkTier.Unique)
             {
                 unicos++;
 
                 // Un Único es LA habilidad de una clase. Compartido entre varias
                 // deja de ser único y pisa el lugar de los Oro.
-                if (p.Clases.Length != 1)
-                    problemas.Add($"{p.Nombre} es Único y sirve a {p.Clases.Length} clases: tiene que ser una");
+                if (p.Classes.Length != 1)
+                    problemas.Add($"{p.Key} es Único y sirve a {p.Classes.Length} clases: tiene que ser una");
             }
 
-            if (p.Tier == TierPerk.Oro)
+            if (p.Tier == PerkTier.Gold)
             {
                 oros++;
 
-                if (p.Clases.Length == 0)
-                    avisos.Add($"{p.Nombre} es Oro y sirve a todas las clases: se esperaban 2-3");
+                if (p.Classes.Length == 0)
+                    avisos.Add($"{p.Key} es Gold y sirve a todas las clases: se esperaban 2-3");
             }
 
-            if (p.Tier is TierPerk.Bronce or TierPerk.Plata && p.Magnitud <= 0)
-                problemas.Add($"{p.Nombre} es {p.Tier} y no suma nada: los números tienen que sumar");
+            if (p.Tier is PerkTier.Bronze or PerkTier.Silver && p.Magnitude <= 0)
+                problemas.Add($"{p.Key} es {p.Tier} y no suma nada: los números tienen que sumar");
         }
 
         if (oros < 2)
             problemas.Add($"hay {oros} perk(s) de Oro: la fusión necesita al menos dos para combinar");
 
-        avisos.Add($"catálogo: {CargadorDatos.Actual.Perks.Todos.Count} perks ({oros} Oro, {unicos} Único)");
+        avisos.Add($"catálogo: {CargadorDatos.Actual.Perks.All.Count} perks ({oros} Gold, {unicos} Único)");
     }
 
     private static void ValidarPlanos(List<string> problemas)
     {
         bool hayInicial = false;
 
-        foreach (var plano in CargadorDatos.Actual.Planos.Todos)
+        foreach (var plano in CargadorDatos.Actual.Blueprints.All)
         {
-            if (plano.Inicial)
+            if (plano.Initial)
                 hayInicial = true;
 
-            foreach (int id in new[] { plano.OroA, plano.OroB })
+            foreach (int id in new[] { plano.GoldA, plano.GoldB })
             {
-                if (id < 0 || id >= CargadorDatos.Actual.Perks.Todos.Count)
+                if (id < 0 || id >= CargadorDatos.Actual.Perks.All.Count)
                 {
-                    problemas.Add($"el plano {plano.Nombre} referencia el perk {id}, que no existe");
+                    problemas.Add($"el plano {plano.Key} referencia el perk {id}, que no existe");
                     continue;
                 }
 
-                if (CargadorDatos.Actual.Perks.Por(id).Tier != TierPerk.Oro)
-                    problemas.Add($"el plano {plano.Nombre} usa el perk {id}, que no es de Oro");
+                if (CargadorDatos.Actual.Perks.Get(id).Tier != PerkTier.Gold)
+                    problemas.Add($"el plano {plano.Key} usa el perk {id}, que no es de Oro");
             }
 
-            if (plano.UnicoResultante < 0 || plano.UnicoResultante >= CargadorDatos.Actual.Perks.Todos.Count)
+            if (plano.ResultingUnique < 0 || plano.ResultingUnique >= CargadorDatos.Actual.Perks.All.Count)
             {
-                problemas.Add($"el plano {plano.Nombre} produce el perk {plano.UnicoResultante}, que no existe");
+                problemas.Add($"el plano {plano.Key} produce el perk {plano.ResultingUnique}, que no existe");
             }
-            else if (CargadorDatos.Actual.Perks.Por(plano.UnicoResultante).Tier != TierPerk.Unico)
+            else if (CargadorDatos.Actual.Perks.Get(plano.ResultingUnique).Tier != PerkTier.Unique)
             {
-                problemas.Add($"el plano {plano.Nombre} produce un perk que no es Único");
+                problemas.Add($"el plano {plano.Key} produce un perk que no es Único");
             }
 
-            if (plano.OroA == plano.OroB)
-                problemas.Add($"el plano {plano.Nombre} pide dos veces el mismo Oro");
+            if (plano.GoldA == plano.GoldB)
+                problemas.Add($"el plano {plano.Key} pide dos veces el mismo Gold");
         }
 
         // Sin al menos una receta conocida, un jugador nuevo nunca ve un Único y
@@ -486,11 +486,11 @@ public static class ValidadorDatos
             int colocables = 0;
             int pegadasALaRuta = 0;
 
-            for (int y = 0; y < mapa.Alto; y++)
+            for (int y = 0; y < mapa.Height; y++)
             {
-                for (int x = 0; x < mapa.Ancho; x++)
+                for (int x = 0; x < mapa.Width; x++)
                 {
-                    var c = new Celda(x, y);
+                    var c = new Cell(x, y);
 
                     if (!mapa.EsColocable(c))
                         continue;
@@ -521,7 +521,7 @@ public static class ValidadorDatos
             // Queda un piso bajo para atajar el layout degenerado —una ruta de
             // cinco celdas donde nadie llega a disparar— y el largo parejo entre
             // layouts lo chequea --validar-layouts, que es donde importa.
-            long celdas = mapa.Ruta.Largo / Enteros.MilesimasPorCelda;
+            long celdas = mapa.Route.Length / Ints.ThousandthsPerCell;
 
             if (celdas < 20)
                 problemas.Add($"layout {i}: la ruta mide {celdas} celdas, muy corta");
@@ -531,13 +531,13 @@ public static class ValidadorDatos
         }
     }
 
-    private static bool AUnaCeldaDeLaRuta(Mapa mapa, Celda celda)
+    private static bool AUnaCeldaDeLaRuta(Map mapa, Cell celda)
     {
-        var ruta = mapa.Ruta;
+        var ruta = mapa.Route;
 
-        for (long d = 0; d <= ruta.Largo; d += Enteros.MilesimasPorCelda / 2)
+        for (long d = 0; d <= ruta.Length; d += Ints.ThousandthsPerCell / 2)
         {
-            var c = ruta.CeldaEn(d);
+            var c = ruta.CellAt(d);
 
             if (System.Math.Abs(c.X - celda.X) <= 1 && System.Math.Abs(c.Y - celda.Y) <= 1)
                 return true;
@@ -546,32 +546,32 @@ public static class ValidadorDatos
         return false;
     }
 
-    private static void ValidarCurvas(DatosBalance datos, List<string> problemas, List<string> avisos)
+    private static void ValidarCurvas(BalanceData datos, List<string> problemas, List<string> avisos)
     {
-        var rng = new Aleatorio(1);
+        var rng = new Rng(1);
         int npcsOleada1 = 0;
         int npcsOleada100 = 0;
 
-        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida; oleada++)
+        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curves.RunCurve.WavesPerRun; oleada++)
         {
-            var receta = Balance.RecetaDe(oleada, datos);
+            var receta = Balance.RecipeOf(oleada, datos);
 
-            if (receta.Presupuesto <= 0)
-                problemas.Add($"la oleada {oleada} tiene presupuesto {receta.Presupuesto}");
+            if (receta.Budget <= 0)
+                problemas.Add($"la oleada {oleada} tiene presupuesto {receta.Budget}");
 
-            if (receta.Permitidos.Length == 0)
+            if (receta.Allowed.Length == 0)
                 problemas.Add($"la oleada {oleada} no tiene enemigos permitidos");
 
-            if (receta.IntervaloSpawnTicks <= 0)
-                problemas.Add($"la oleada {oleada} tiene intervalo de spawn {receta.IntervaloSpawnTicks}");
+            if (receta.SpawnIntervalTicks <= 0)
+                problemas.Add($"la oleada {oleada} tiene intervalo de spawn {receta.SpawnIntervalTicks}");
 
-            var armada = ArmadorOleadas.Armar(receta, rng, datos);
+            var armada = WaveBuilder.Armar(receta, rng, datos);
 
             if (armada.Npcs.Count == 0)
                 problemas.Add($"la oleada {oleada} no compró ningún enemigo: se pasaría sola");
 
             if (oleada == 1) npcsOleada1 = armada.Npcs.Count;
-            if (oleada == CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida) npcsOleada100 = armada.Npcs.Count;
+            if (oleada == CargadorDatos.Actual.Curves.RunCurve.WavesPerRun) npcsOleada100 = armada.Npcs.Count;
 
             // Una oleada larguísima no es difícil: es larga. El tope de compra
             // existe justamente para eso, así que si esto salta, el tope no está
@@ -583,15 +583,15 @@ public static class ValidadorDatos
         // Las ocho oleadas de jefe son las únicas que sueltan Oro. Si el reparto
         // de áreas cambiara y quedaran menos, la fusión se volvería inalcanzable.
         int conJefe = 0;
-        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida; oleada++)
-            if (CargadorDatos.Actual.Areas.TieneJefe(oleada))
+        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curves.RunCurve.WavesPerRun; oleada++)
+            if (CargadorDatos.Actual.Areas.HasBoss(oleada))
                 conJefe++;
 
-        if (conJefe != CargadorDatos.Actual.Curvas.Corrida.CantidadAreas)
-            problemas.Add($"hay {conJefe} oleadas con jefe y {CargadorDatos.Actual.Curvas.Corrida.CantidadAreas} áreas: tiene que haber una por área");
+        if (conJefe != CargadorDatos.Actual.Curves.RunCurve.AreaCount)
+            problemas.Add($"hay {conJefe} oleadas con jefe y {CargadorDatos.Actual.Curves.RunCurve.AreaCount} áreas: tiene que haber una por área");
 
-        if (!CargadorDatos.Actual.Areas.TieneJefe(CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida))
-            problemas.Add($"la oleada {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida} no tiene jefe: es como se gana la corrida");
+        if (!CargadorDatos.Actual.Areas.HasBoss(CargadorDatos.Actual.Curves.RunCurve.WavesPerRun))
+            problemas.Add($"la oleada {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun} no tiene jefe: es como se gana la corrida");
 
         avisos.Add($"curva: oleada 1 trae {npcsOleada1} enemigos, la 100 trae {npcsOleada100}");
     }

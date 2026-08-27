@@ -32,9 +32,9 @@ public static class Layouts
     /// <para>La constante no significa nada: solo tiene que ser fija y distinta de
     /// las otras.</para>
     /// </remarks>
-    public static Aleatorio RngDeMapa(ulong seed) => new(seed ^ 0x1A5E5EEDUL);
+    public static Rng MapRng(ulong seed) => new(seed ^ 0x1A5E5EEDUL);
 
     /// <summary>El mapa que le toca a una corrida.</summary>
-    public static Mapa Elegir(ulong seed, DatosBalance datos)
-        => datos.LayoutElegido(RngDeMapa(seed));
+    public static Map Choose(ulong seed, BalanceData datos)
+        => datos.ChosenLayout(MapRng(seed));
 }

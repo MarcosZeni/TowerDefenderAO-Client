@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "leyenda": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
-  "aviso": "Lo escribe el editor de layouts (Escenas/EditorLayouts.tscn). Se puede corregir a mano, pero conviene volver a pasarlo por el editor para que revalide.",
-  "ancho": 20,
-  "alto": 11,
-  "largoRuta": 28,
-  "valido": true,
-  "filas": [
+  "legend": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+  "note": "Lo escribe el editor de layouts (Escenas/EditorLayouts.tscn). Se puede corregir a mano, pero conviene volver a pasarlo por el editor para que revalide.",
+  "width": 20,
+  "height": 11,
+  "routeLength": 28,
+  "valid": true,
+  "rows": [
     "XXXXXXXXXXXXXXXXXXXX",
     "XE#.XXXXXX.......XXX",
     "X.#.XXXXXX.######TXX",

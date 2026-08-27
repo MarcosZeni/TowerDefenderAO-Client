@@ -9,10 +9,10 @@ namespace TowerOfArgentum;
 
 /// <summary>Con qué se dibuja una clase en un tier: cuerpo, arma y cabeza.</summary>
 /// <remarks>
-/// <see cref="CabezaOffset"/> va en <b>píxeles x4</b>, igual que todo lo que sale
+/// <see cref="HeadOffset"/> va en <b>píxeles x4</b>, igual que todo lo que sale
 /// del índice de gráficos. Quien dibuja lo escala junto con el sprite.
 /// </remarks>
-public sealed record Apariencia(string Cuerpo, string Arma, string Cabeza, Vector2I CabezaOffset);
+public sealed record Apariencia(string Body, string Weapon, string Head, Vector2I HeadOffset);
 
 /// <summary>
 /// Lee <c>Datos\apariencia.json</c>: clase + tier → claves de gráfico.
@@ -29,7 +29,7 @@ public sealed record Apariencia(string Cuerpo, string Arma, string Cabeza, Vecto
 /// </remarks>
 public static class CargadorApariencia
 {
-    private const string Ruta = "res://Datos/apariencia.json";
+    private const string Route = "res://Datos/apariencia.json";
 
     private static readonly Dictionary<string, ClaseJson> _porClase =
         new(System.StringComparer.OrdinalIgnoreCase);
@@ -41,7 +41,7 @@ public static class CargadorApariencia
     /// </summary>
     /// <param name="tier">1, 2 o 3. Sale del nivel de la clase, no de un ítem.</param>
     /// <returns><c>null</c> si falta el archivo o esa clase no está.</returns>
-    public static Apariencia? De(Clase clase, int tier)
+    public static Apariencia? De(DefenderClass clase, int tier)
     {
         Cargar();
 
@@ -59,10 +59,10 @@ public static class CargadorApariencia
         var t = c.Tiers[i];
 
         return new Apariencia(
-            t.Cuerpo ?? "",
-            t.Arma ?? "",
-            c.Cabeza ?? "",
-            new Vector2I(t.CabezaOffsetX, t.CabezaOffsetY));
+            t.Body ?? "",
+            t.Weapon ?? "",
+            c.Head ?? "",
+            new Vector2I(t.HeadOffsetX, t.HeadOffsetY));
     }
 
     private static void Cargar()
@@ -72,11 +72,11 @@ public static class CargadorApariencia
 
         _cargado = true;
 
-        using var f = ArchivoGodot.Open(Ruta, ArchivoGodot.ModeFlags.Read);
+        using var f = ArchivoGodot.Open(Route, ArchivoGodot.ModeFlags.Read);
 
         if (f is null)
         {
-            GD.PushWarning($"No se pudo leer {Ruta}. Los defensores se dibujan con primitivas.");
+            GD.PushWarning($"No se pudo leer {Route}. Los defensores se dibujan con primitivas.");
             return;
         }
 
@@ -89,17 +89,17 @@ public static class CargadorApariencia
         }
         catch (JsonException e)
         {
-            GD.PushError($"{Ruta} no es JSON válido: {e.Message}");
+            GD.PushError($"{Route} no es JSON válido: {e.Message}");
             return;
         }
 
-        if (archivo?.Clases is null)
+        if (archivo?.Classes is null)
             return;
 
-        foreach (var c in archivo.Clases)
+        foreach (var c in archivo.Classes)
         {
-            if (c.Clase is { Length: > 0 })
-                _porClase[c.Clase] = c;
+            if (c.Class is { Length: > 0 })
+                _porClase[c.Class] = c;
         }
 
         GD.Print($"Apariencia: {_porClase.Count} clases");
@@ -108,24 +108,24 @@ public static class CargadorApariencia
     private sealed class ArchivoJson
     {
         public int Version { get; set; }
-        public List<ClaseJson>? Clases { get; set; }
+        public List<ClaseJson>? Classes { get; set; }
     }
 
     private sealed class ClaseJson
     {
-        public string? Clase { get; set; }
-        public string? Cabeza { get; set; }
+        public string? Class { get; set; }
+        public string? Head { get; set; }
         public List<TierJson>? Tiers { get; set; }
     }
 
     private sealed class TierJson
     {
-        public string? Cuerpo { get; set; }
-        public string? Arma { get; set; }
+        public string? Body { get; set; }
+        public string? Weapon { get; set; }
 
         /// <summary>Dónde va la cabeza respecto del apoyo del cuerpo, en píxeles x4.</summary>
-        public int CabezaOffsetX { get; set; }
+        public int HeadOffsetX { get; set; }
 
-        public int CabezaOffsetY { get; set; }
+        public int HeadOffsetY { get; set; }
     }
 }

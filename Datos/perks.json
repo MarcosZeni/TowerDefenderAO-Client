@@ -3,17 +3,23 @@
   //  El catálogo de perks.
   //
   //  LA LÍNEA QUE DIVIDE TODO PASA ENTRE PLATA Y ORO:
-  //    bronce, plata  -> NÚMEROS. Cualquier clase, se apilan.
-  //    oro, unico     -> COMPORTAMIENTOS. No se apilan.
+  //    bronze, silver  -> NÚMEROS. Cualquier clase, se apilan.
+  //    gold, unique    -> COMPORTAMIENTOS. No se apilan.
   //
   //  De ahí sale la regla de apilado sin pensarla perk por perk: "Ricochet dos
   //  veces" no quiere decir nada, "+100 de daño dos veces" sí. Y de ahí sale
-  //  también por qué un bronce puede decir 100 y un único 50 sin que esté mal:
+  //  también por qué un bronze puede decir 100 y un unique 50 sin que esté mal:
   //  no se comparan en el mismo eje.
   //
   //  ⚠ EL JEFE ES LA ÚNICA FUENTE DE ORO. Ocho por corrida.
   //  ⚠ LOS ÚNICOS NO CAEN Y NO SE COMPRAN: SE FUSIONAN (ver planos.json).
-  //    Que un único aparezca en una tirada de drop es un bug de datos.
+  //    Que un unique aparezca en una tirada de drop es un bug de datos.
+  //
+  //  ⚠ ACÁ NO HAY NOMBRES PARA MOSTRAR. Cada perk tiene una "key" estable y su
+  //  nombre vive en Datos\lang\<idioma>.json como «perk.<key>.name». Tener el
+  //  nombre acá lo ataba a un solo idioma y además lo volvía frágil: un renombre
+  //  masivo de identificadores pisó «Escarcha» y la dejó en «Frost» dentro de
+  //  los datos, que es exactamente el bug que esta separación hace imposible.
   //
   //  ⚠ Entra al hash de /run/start. Tocar un número acá es TEMPORADA NUEVA.
   // ---------------------------------------------------------------------------
@@ -21,75 +27,79 @@
 
   // Cuántas copias del mismo perk entran en una clase. Es la regla de arriba
   // hecha número: apilable si es un número, único si es un comportamiento.
-  "maxApiladoPorTier": { "bronce": 3, "plata": 2, "oro": 1, "unico": 1 },
+  "maxStackedPerTier": { "bronze": 3, "silver": 2, "gold": 1, "unique": 1 },
 
   // ⚠ El "id" se escribe A MANO y no sale de la posición en la lista.
   //
-  // La mochila, el log de acciones y las recetas de fusión guardan ids. Si el id
-  // fuera posicional, insertar un perk en el medio correría todos los de abajo y
-  // una corrida guardada se cargaría con otros perks equipados. Para agregar uno
-  // nuevo: usar el próximo id libre y NO reordenar la lista.
+  // La mochila y el log de acciones guardan ids. Si el id fuera posicional,
+  // insertar un perk en el medio correría todos los de abajo y una corrida
+  // guardada se cargaría con otros perks equipados. Para agregar uno nuevo: usar
+  // el próximo id libre y NO reordenar la lista.
   //
-  // "efecto" válidos: Dano, Cadencia, Alcance (números) · Ricochet, Splash,
-  // Ralentiza, GolpeCritico, Veneno, Penetrante (comportamientos de oro) ·
-  // Perforacion, OndaDeFrio, IraDeDios, Apocalipsis, TerribleHambre,
-  // TormentaDivina (comportamientos de único).
+  // La "key" es la otra identidad, la que usan planos.json y los archivos de
+  // idioma. Va en minúscula, sin acentos y sin espacios, y NO SE CAMBIA NUNCA:
+  // cambiarla deja el nombre sin traducción y la receta sin ingrediente.
   //
-  // "clases" vacío o ausente = sirve a las nueve.
-  // "magnitud" está en puntos porcentuales.
+  // "effect" válidos: Damage, Cadence, Range (números) · Ricochet, Splash, Slow,
+  // CriticalHit, Poison, Piercing (comportamientos de gold) · Perforation,
+  // FrostWave, WrathOfGod, Apocalypse, TerribleHunger, DivineStorm
+  // (comportamientos de unique).
+  //
+  // "classes" vacío o ausente = sirve a las nueve.
+  // "magnitude" está en puntos porcentuales.
   "perks": [
-    // --- Bronce: números chicos, para las nueve clases -----------------------
-    { "id":  0, "nombre": "Filo",           "tier": "bronce", "efecto": "Dano",     "magnitud": 15 },
-    { "id":  1, "nombre": "Pulso",          "tier": "bronce", "efecto": "Cadencia", "magnitud": 12 },
-    { "id":  2, "nombre": "Vista",          "tier": "bronce", "efecto": "Alcance",  "magnitud": 20 },
-    { "id":  3, "nombre": "Temple",         "tier": "bronce", "efecto": "Dano",     "magnitud": 10 },
-    { "id":  4, "nombre": "Reflejos",       "tier": "bronce", "efecto": "Cadencia", "magnitud":  8 },
-    { "id":  5, "nombre": "Puntería",       "tier": "bronce", "efecto": "Alcance",  "magnitud": 15 },
-    { "id":  6, "nombre": "Empuñadura",     "tier": "bronce", "efecto": "Dano",     "magnitud": 12 },
-    { "id":  7, "nombre": "Muñeca",         "tier": "bronce", "efecto": "Cadencia", "magnitud": 10 },
+    // --- Bronze: números chicos, para las nueve clases -----------------------
+    { "id":  0, "key": "filo",       "tier": "bronze", "effect": "Damage",  "magnitude": 15 },
+    { "id":  1, "key": "pulso",      "tier": "bronze", "effect": "Cadence", "magnitude": 12 },
+    { "id":  2, "key": "vista",      "tier": "bronze", "effect": "Range",   "magnitude": 20 },
+    { "id":  3, "key": "temple",     "tier": "bronze", "effect": "Damage",  "magnitude": 10 },
+    { "id":  4, "key": "reflejos",   "tier": "bronze", "effect": "Cadence", "magnitude":  8 },
+    { "id":  5, "key": "punteria",   "tier": "bronze", "effect": "Range",   "magnitude": 15 },
+    { "id":  6, "key": "empunadura", "tier": "bronze", "effect": "Damage",  "magnitude": 12 },
+    { "id":  7, "key": "muneca",     "tier": "bronze", "effect": "Cadence", "magnitude": 10 },
 
-    // --- Plata: más grandes --------------------------------------------------
-    // ⚠ Halcón y Ojo de Águila HOY NO HACEN NADA en las clases de alcance 2
+    // --- Silver: más grandes -------------------------------------------------
+    // ⚠ halcon y ojoDeAguila HOY NO HACEN NADA en las clases de alcance 2
     // (2 × 1,40 = 2,8 → 2 por truncamiento entero). Es la anomalía P0 de la
     // propuesta V2: se arregla escalando el alcance interno ×1000, no subiendo
     // estas magnitudes.
-    { "id":  8, "nombre": "Furia",          "tier": "plata",  "efecto": "Dano",     "magnitud": 35 },
-    { "id":  9, "nombre": "Celeridad",      "tier": "plata",  "efecto": "Cadencia", "magnitud": 25 },
-    { "id": 10, "nombre": "Halcón",         "tier": "plata",  "efecto": "Alcance",  "magnitud": 40 },
-    { "id": 11, "nombre": "Saña",           "tier": "plata",  "efecto": "Dano",     "magnitud": 30 },
-    { "id": 12, "nombre": "Frenesí",        "tier": "plata",  "efecto": "Cadencia", "magnitud": 22 },
-    { "id": 13, "nombre": "Ojo de Águila",  "tier": "plata",  "efecto": "Alcance",  "magnitud": 35 },
-    { "id": 14, "nombre": "Ira",            "tier": "plata",  "efecto": "Dano",     "magnitud": 28 },
-    { "id": 15, "nombre": "Vendaval",       "tier": "plata",  "efecto": "Cadencia", "magnitud": 20 },
+    { "id":  8, "key": "furia",       "tier": "silver", "effect": "Damage",  "magnitude": 35 },
+    { "id":  9, "key": "celeridad",   "tier": "silver", "effect": "Cadence", "magnitude": 25 },
+    { "id": 10, "key": "halcon",      "tier": "silver", "effect": "Range",   "magnitude": 40 },
+    { "id": 11, "key": "sana",        "tier": "silver", "effect": "Damage",  "magnitude": 30 },
+    { "id": 12, "key": "frenesi",     "tier": "silver", "effect": "Cadence", "magnitude": 22 },
+    { "id": 13, "key": "ojoDeAguila", "tier": "silver", "effect": "Range",   "magnitude": 35 },
+    { "id": 14, "key": "ira",         "tier": "silver", "effect": "Damage",  "magnitude": 28 },
+    { "id": 15, "key": "vendaval",    "tier": "silver", "effect": "Cadence", "magnitude": 20 },
 
-    // --- Oro: comportamiento, compartido por 2-3 clases ----------------------
-    // Que un oro sirva para dos o tres clases es lo que hace escribible el
+    // --- Gold: comportamiento, compartido por 2-3 clases ---------------------
+    // Que un gold sirva para dos o tres clases es lo que hace escribible el
     // catálogo: con todo exclusivo harían falta entre 50 y 90 definiciones.
     //
     // Los parámetros que NO son la magnitud —cuántos rebotes, cuántos
     // secundarios, qué radio— viven en combate.json, agrupados por efecto.
-    { "id": 16, "nombre": "Ricochet",          "tier": "oro", "efecto": "Ricochet",     "magnitud":  55, "clases": ["Cazador", "Asesino"] },
-    { "id": 17, "nombre": "Onda Expansiva",    "tier": "oro", "efecto": "Splash",       "magnitud":  35, "clases": ["Paladin", "Guerrero", "Mago"] },
-    { "id": 18, "nombre": "Escarcha",          "tier": "oro", "efecto": "Ralentiza",    "magnitud":  25, "clases": ["Mago", "Druida", "Clerigo"] },
-    { "id": 19, "nombre": "Golpe Certero",     "tier": "oro", "efecto": "GolpeCritico", "magnitud": 125, "clases": ["Asesino", "Ladron", "Cazador"] },
-    { "id": 20, "nombre": "Descarga Eléctrica","tier": "oro", "efecto": "Ricochet",     "magnitud":  50, "clases": ["Mago", "Bardo"] },
-    { "id": 21, "nombre": "Tormenta de Fuego", "tier": "oro", "efecto": "Splash",       "magnitud":  55, "clases": ["Druida", "Bardo"] },
-    { "id": 22, "nombre": "Envenenar",         "tier": "oro", "efecto": "Veneno",       "magnitud":  40, "clases": ["Asesino", "Druida"] },
-    { "id": 23, "nombre": "Torpeza",           "tier": "oro", "efecto": "Ralentiza",    "magnitud":  30, "clases": ["Bardo", "Ladron"] },
-    { "id": 24, "nombre": "Dardo Mágico",      "tier": "oro", "efecto": "Penetrante",   "magnitud": 120, "clases": ["Mago", "Clerigo"] },
-    { "id": 25, "nombre": "Misil Mágico",      "tier": "oro", "efecto": "Splash",       "magnitud":  50, "clases": ["Mago", "Paladin"] },
+    { "id": 16, "key": "ricochet",          "tier": "gold", "effect": "Ricochet",    "magnitude":  55, "classes": ["Hunter", "Assassin"] },
+    { "id": 17, "key": "ondaExpansiva",     "tier": "gold", "effect": "Splash",      "magnitude":  35, "classes": ["Paladin", "Warrior", "Mage"] },
+    { "id": 18, "key": "escarcha",          "tier": "gold", "effect": "Slow",        "magnitude":  25, "classes": ["Mage", "Druid", "Cleric"] },
+    { "id": 19, "key": "golpeCertero",      "tier": "gold", "effect": "CriticalHit", "magnitude": 125, "classes": ["Assassin", "Thief", "Hunter"] },
+    { "id": 20, "key": "descargaElectrica", "tier": "gold", "effect": "Ricochet",    "magnitude":  50, "classes": ["Mage", "Bard"] },
+    { "id": 21, "key": "tormentaDeFuego",   "tier": "gold", "effect": "Splash",      "magnitude":  55, "classes": ["Druid", "Bard"] },
+    { "id": 22, "key": "envenenar",         "tier": "gold", "effect": "Poison",      "magnitude":  40, "classes": ["Assassin", "Druid"] },
+    { "id": 23, "key": "torpeza",           "tier": "gold", "effect": "Slow",        "magnitude":  30, "classes": ["Bard", "Thief"] },
+    { "id": 24, "key": "dardoMagico",       "tier": "gold", "effect": "Piercing",    "magnitude": 120, "classes": ["Mage", "Cleric"] },
+    { "id": 25, "key": "misilMagico",       "tier": "gold", "effect": "Splash",      "magnitude":  50, "classes": ["Mage", "Paladin"] },
 
-    // --- Único: NO caen, NO se compran. Se fusionan, y ocupan UN SOLO slot ---
+    // --- Unique: NO caen, NO se compran. Se fusionan, y ocupan UN SOLO slot --
     // El slot liberado es la mitad del premio. Los nombres salen de los 41
-    // hechizos reales de Dat\Hechizos.dat de Austral.
-    { "id": 26, "nombre": "Perforación",             "tier": "unico", "efecto": "Perforacion",    "magnitud":  90, "clases": ["Cazador"] },
-    { "id": 27, "nombre": "Onda de Frío",            "tier": "unico", "efecto": "OndaDeFrio",     "magnitud":  80, "clases": ["Mago"] },
-    { "id": 28, "nombre": "Ira de Dios",             "tier": "unico", "efecto": "IraDeDios",      "magnitud": 170, "clases": ["Paladin"] },
-    { "id": 29, "nombre": "Apocalipsis",             "tier": "unico", "efecto": "Apocalipsis",    "magnitud":  75, "clases": ["Asesino"] },
-    { "id": 30, "nombre": "Terrible Hambre de Igôr", "tier": "unico", "efecto": "TerribleHambre", "magnitud":  55, "clases": ["Druida"] },
-    { "id": 31, "nombre": "Tormenta Divina",         "tier": "unico", "efecto": "TormentaDivina", "magnitud":  95, "clases": ["Clerigo"] },
-    { "id": 32, "nombre": "Ceguera",                 "tier": "unico", "efecto": "Ralentiza",      "magnitud":  60, "clases": ["Bardo"] },
-    { "id": 33, "nombre": "Fuerza",                  "tier": "unico", "efecto": "GolpeCritico",   "magnitud": 260, "clases": ["Guerrero"] },
-    { "id": 34, "nombre": "Invisibilidad",           "tier": "unico", "efecto": "Penetrante",     "magnitud": 200, "clases": ["Ladron"] }
+    // hechizos reales de Dat\Hechizos.dat de Austral, y viven en lang\.
+    { "id": 26, "key": "perforacion",    "tier": "unique", "effect": "Perforation",    "magnitude":  90, "classes": ["Hunter"] },
+    { "id": 27, "key": "ondaDeFrio",     "tier": "unique", "effect": "FrostWave",      "magnitude":  80, "classes": ["Mage"] },
+    { "id": 28, "key": "iraDeDios",      "tier": "unique", "effect": "WrathOfGod",     "magnitude": 170, "classes": ["Paladin"] },
+    { "id": 29, "key": "apocalipsis",    "tier": "unique", "effect": "Apocalypse",     "magnitude":  75, "classes": ["Assassin"] },
+    { "id": 30, "key": "terribleHambre", "tier": "unique", "effect": "TerribleHunger", "magnitude":  55, "classes": ["Druid"] },
+    { "id": 31, "key": "tormentaDivina", "tier": "unique", "effect": "DivineStorm",    "magnitude":  95, "classes": ["Cleric"] },
+    { "id": 32, "key": "ceguera",        "tier": "unique", "effect": "Slow",           "magnitude":  60, "classes": ["Bard"] },
+    { "id": 33, "key": "fuerza",         "tier": "unique", "effect": "CriticalHit",    "magnitude": 260, "classes": ["Warrior"] },
+    { "id": 34, "key": "invisibilidad",  "tier": "unique", "effect": "Piercing",       "magnitude": 200, "classes": ["Thief"] }
   ]
 }

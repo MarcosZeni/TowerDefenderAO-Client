@@ -95,7 +95,7 @@ public static class CorredorHeadless
                     return true;
 
                 case "--presupuesto-arte":
-                    InspectorGraficos.Presupuesto();
+                    InspectorGraficos.Budget();
                     return true;
 
                 case "--traer-piso":
@@ -213,7 +213,7 @@ public static class CorredorHeadless
 
                 case "--traza":
                     ulong semilla = (i + 1 < args.Length && ulong.TryParse(args[i + 1], out ulong s)) ? s : 1;
-                    Trazar(semilla);
+                    Trace(semilla);
                     return true;
 
                 case "--balance":
@@ -254,31 +254,31 @@ public static class CorredorHeadless
 
             bool igual =
                 a.Ticks == b.Ticks &&
-                a.Oleada == b.Oleada &&
+                a.Wave == b.Wave &&
                 a.HpTorre == b.HpTorre &&
-                a.Oro == b.Oro;
+                a.Gold == b.Gold;
 
             if (igual)
             {
-                GD.Print($"  ✓ seed {seed,-12}  {a.Ticks,7} ticks · oleada {a.Oleada,3} · " +
-                         $"torre {a.HpTorre,5} · oro {a.Oro}");
+                GD.Print($"  ✓ seed {seed,-12}  {a.Ticks,7} ticks · oleada {a.Wave,3} · " +
+                         $"torre {a.HpTorre,5} · oro {a.Gold}");
             }
             else
             {
                 fallas++;
                 GD.PrintErr($"  ✗ seed {seed} DIVERGE");
-                GD.PrintErr($"      pasada 1: {a.Ticks} ticks · oleada {a.Oleada} · torre {a.HpTorre} · oro {a.Oro}");
-                GD.PrintErr($"      pasada 2: {b.Ticks} ticks · oleada {b.Oleada} · torre {b.HpTorre} · oro {b.Oro}");
+                GD.PrintErr($"      pasada 1: {a.Ticks} ticks · oleada {a.Wave} · torre {a.HpTorre} · oro {a.Gold}");
+                GD.PrintErr($"      pasada 2: {b.Ticks} ticks · oleada {b.Wave} · torre {b.HpTorre} · oro {b.Gold}");
             }
         }
 
         // Segunda prueba: que dos seeds distintas den corridas distintas. Un
         // generador roto que devuelve siempre el mismo número pasaría la prueba
         // de arriba con honores.
-        var x = Correr(7, new LogAcciones());
-        var y = Correr(8, new LogAcciones());
+        var x = Correr(7, new ActionLog());
+        var y = Correr(8, new ActionLog());
 
-        if (x.Ticks == y.Ticks && x.HpTorre == y.HpTorre && x.Oro == y.Oro)
+        if (x.Ticks == y.Ticks && x.HpTorre == y.HpTorre && x.Gold == y.Gold)
         {
             fallas++;
             GD.PrintErr("  ✗ dos seeds distintas dieron corridas idénticas: el RNG no está sembrando");
@@ -313,24 +313,24 @@ public static class CorredorHeadless
         const ulong seed = 20260825;
 
         // Primera pasada: se juega y se acumula el log.
-        var original = new LogAcciones();
+        var original = new ActionLog();
         var a = Correr(seed, original);
 
-        byte[] blob = LogBinario.Escribir(original);
-        var recuperado = LogBinario.Leer(blob);
+        byte[] blob = BinaryLog.Escribir(original);
+        var recuperado = BinaryLog.Leer(blob);
 
-        if (recuperado.Cantidad != original.Cantidad)
+        if (recuperado.Count != original.Count)
         {
-            GD.PrintErr($"  ✗ el log perdió acciones: {original.Cantidad} → {recuperado.Cantidad}");
+            GD.PrintErr($"  ✗ el log perdió acciones: {original.Count} → {recuperado.Count}");
             return 1;
         }
 
-        for (int i = 0; i < original.Cantidad; i++)
+        for (int i = 0; i < original.Count; i++)
         {
-            if (original.Todas[i] != recuperado.Todas[i])
+            if (original.All[i] != recuperado.All[i])
             {
                 GD.PrintErr($"  ✗ la acción {i} cambió al serializar: " +
-                            $"{original.Todas[i]} → {recuperado.Todas[i]}");
+                            $"{original.All[i]} → {recuperado.All[i]}");
                 return 1;
             }
         }
@@ -338,12 +338,12 @@ public static class CorredorHeadless
         // Segunda pasada: se re-simula con el log recuperado y SIN política. Si el
         // resultado coincide, el log solo alcanza para reproducir la corrida — que
         // es la premisa entera del anticheat.
-        var partida = new Partida(seed, Layouts.Elegir(seed, CargadorDatos.Actual), recuperado, CargadorDatos.Actual);
+        var partida = new Run(seed, Layouts.Choose(seed, CargadorDatos.Actual), recuperado, CargadorDatos.Actual);
         partida.Empezar();
 
-        while (partida.Estado == EstadoPartida.EnCurso && partida.Tick < TechoTicks)
+        while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
-            partida.Avanzar();
+            partida.Advance();
 
             // El log se agotó con la corrida esperando al jugador. Sin este corte
             // el bucle gira para siempre: en pausa el tick no avanza.
@@ -353,22 +353,22 @@ public static class CorredorHeadless
 
         bool igual =
             partida.Tick == a.Ticks &&
-            partida.Oleada == a.Oleada &&
-            partida.Torre.Hp == a.HpTorre &&
-            partida.Oro == a.Oro;
+            partida.Wave == a.Wave &&
+            partida.Tower.Hp == a.HpTorre &&
+            partida.Gold == a.Gold;
 
         if (!igual)
         {
             GD.PrintErr("  ✗ re-simular el log guardado da otra corrida");
-            GD.PrintErr($"      jugada    : {a.Ticks} ticks · oleada {a.Oleada} · torre {a.HpTorre} · oro {a.Oro}");
-            GD.PrintErr($"      re-simulada: {partida.Tick} ticks · oleada {partida.Oleada} · " +
-                        $"torre {partida.Torre.Hp} · oro {partida.Oro}");
+            GD.PrintErr($"      jugada    : {a.Ticks} ticks · oleada {a.Wave} · torre {a.HpTorre} · oro {a.Gold}");
+            GD.PrintErr($"      re-simulada: {partida.Tick} ticks · oleada {partida.Wave} · " +
+                        $"torre {partida.Tower.Hp} · oro {partida.Gold}");
             return 1;
         }
 
-        int bytesPorAccion = original.Cantidad == 0 ? 0 : blob.Length / original.Cantidad;
+        int bytesPorAccion = original.Count == 0 ? 0 : blob.Length / original.Count;
 
-        GD.Print($"  ✓ log re-simula idéntico · {original.Cantidad} acciones en " +
+        GD.Print($"  ✓ log re-simula idéntico · {original.Count} acciones en " +
                  $"{blob.Length} bytes ({bytesPorAccion} B/acción)");
 
         return 0;
@@ -394,18 +394,18 @@ public static class CorredorHeadless
             ulong seed = (ulong)(i + 1) * 2_654_435_761UL;
             var r = Correr(seed, ConAcciones(seed));
 
-            suma += r.Oleada;
-            if (r.Oleada < peor) peor = r.Oleada;
-            if (r.Oleada > mejor) mejor = r.Oleada;
+            suma += r.Wave;
+            if (r.Wave < peor) peor = r.Wave;
+            if (r.Wave > mejor) mejor = r.Wave;
 
-            GD.Print($"  seed {seed,-22} oleada {r.Oleada,3} · {r.Ticks,7} ticks · " +
-                     $"{r.Defensores,2} def · {r.ClasesRoster} clases · mochila {r.Mochila,2} · {r.Estado}");
+            GD.Print($"  seed {seed,-22} oleada {r.Wave,3} · {r.Ticks,7} ticks · " +
+                     $"{r.Defenders,2} def · {r.ClasesRoster} clases · mochila {r.Backpack,2} · {r.State}");
         }
 
         GD.Print($"── oleada:  peor {peor} · media {suma / corridas} · mejor {mejor} ──");
     }
 
-    internal readonly record struct Resultado(int Ticks, int Oleada, int HpTorre, int Oro, EstadoPartida Estado, int Defensores, int ClasesRoster, int Mochila);
+    internal readonly record struct Resultado(int Ticks, int Wave, int HpTorre, int Gold, RunState State, int Defenders, int ClasesRoster, int Backpack);
 
     /// <summary>
     /// Corre una sola corrida contando lo que pasa adentro.
@@ -415,25 +415,25 @@ public static class CorredorHeadless
     /// conclusión equivocada y medirlo dio la correcta. El agregado del corredor
     /// dice <i>hasta dónde llegó</i>; esto dice <b>por qué</b>.
     /// </remarks>
-    private static void Trazar(ulong seed)
+    private static void Trace(ulong seed)
     {
         var datos = CargadorDatos.Actual;
-        var log = new LogAcciones();
-        var partida = new Partida(seed, Layouts.Elegir(seed, datos), log, datos);
+        var log = new ActionLog();
+        var partida = new Run(seed, Layouts.Choose(seed, datos), log, datos);
         partida.Empezar();
 
-        var pendientes = new Queue<(int Tick, Celda Celda)>(ColocacionesPlaneadas(seed, partida.Mapa));
+        var pendientes = new Queue<(int Tick, Cell Cell)>(ColocacionesPlaneadas(seed, partida.Map));
 
         GD.Print($"── Traza · seed {seed} ────────────────────────────");
-        GD.Print($"  ruta: {partida.Ruta.Largo / Enteros.MilesimasPorCelda} celdas");
+        GD.Print($"  ruta: {partida.Route.Length / Ints.ThousandthsPerCell} celdas");
 
         int oleadaAnterior = 0;
         int ultimoAviso = 0;
 
-        while (partida.Estado == EstadoPartida.EnCurso && partida.Tick < TechoTicks)
+        while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
-            if (partida.EsperandoEleccion)
-                log.Agregar(Accion.Elegir(partida.TickDeAccion, MejorOpcion(partida)));
+            if (partida.WaitingForChoice)
+                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -446,16 +446,16 @@ public static class CorredorHeadless
             // hasta que `Avanzar` aplique la acción, así que dos colocaciones en
             // la misma vuelta se decidirían con el oro viejo. Como el reloj está
             // congelado, las vueltas de más no cuestan ticks.
-            if (partida.EsperandoInicioDeOleada)
+            if (partida.WaitingForWaveStart)
             {
                 if (!ColocarUnoEnPreparacion(partida, log, pendientes))
                 {
-                    log.Agregar(new Accion(
-                        partida.TickDeAccion, TipoAccion.AdelantarOleada, 0, 0, 0));
+                    log.Agregar(new PlayerAction(
+                        partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
                 }
 
                 EquiparLoQuePueda(partida, log);
-                partida.Avanzar();
+                partida.Advance();
                 continue;
             }
 
@@ -469,23 +469,23 @@ public static class CorredorHeadless
 
                     if (clase is not null && partida.PuedePoner(clase.Value, celda))
                     {
-                        log.Agregar(Accion.Poner(partida.TickDeAccion, clase.Value, celda));
+                        log.Agregar(PlayerAction.Place(partida.TickDeAccion, clase.Value, celda));
                         pendientes.Dequeue();
                     }
                 }
             }
 
             EquiparLoQuePueda(partida, log);
-            partida.Avanzar();
+            partida.Advance();
 
-            if (partida.Oleada != oleadaAnterior)
+            if (partida.Wave != oleadaAnterior)
             {
-                oleadaAnterior = partida.Oleada;
+                oleadaAnterior = partida.Wave;
                 ultimoAviso = partida.Tick;
 
-                GD.Print($"  ol {partida.Oleada,3} · t {partida.Tick,7} · " +
-                         $"torre {partida.Torre.Hp,5} · oro {partida.Oro,6} · " +
-                         $"{partida.Defensores.Count,2} def · {partida.Enemigos.Count,3} vivos");
+                GD.Print($"  ol {partida.Wave,3} · t {partida.Tick,7} · " +
+                         $"torre {partida.Tower.Hp,5} · oro {partida.Gold,6} · " +
+                         $"{partida.Defenders.Count,2} def · {partida.Enemies.Count,3} vivos");
             }
 
             // Si una oleada se estira mucho, se dice qué hay en pantalla. Es el
@@ -496,26 +496,26 @@ public static class CorredorHeadless
                 ultimoAviso = partida.Tick;
 
                 var clases = new System.Text.StringBuilder();
-                foreach (var f in partida.Roster.Clases)
-                    clases.Append(CultureInfo.InvariantCulture, $"{f.Clase}(nv{f.Nivel}) ");
+                foreach (var f in partida.Roster.Classes)
+                    clases.Append(CultureInfo.InvariantCulture, $"{f.DefenderClass}(nv{f.Level}) ");
 
-                GD.Print($"     ↳ atascado en ol {partida.Oleada} · t {partida.Tick} · " +
-                         $"torre {partida.Torre.Hp} · {partida.Enemigos.Count} vivos · " +
+                GD.Print($"     ↳ atascado en ol {partida.Wave} · t {partida.Tick} · " +
+                         $"torre {partida.Tower.Hp} · {partida.Enemies.Count} vivos · " +
                          $"roster: {clases}");
 
-                if (partida.Enemigos.Count > 0)
+                if (partida.Enemies.Count > 0)
                 {
-                    var e = partida.Enemigos[0];
-                    var d = datos.Por(e.TipoId);
+                    var e = partida.Enemies[0];
+                    var d = datos.Get(e.TypeId);
 
-                    GD.Print($"        primero: {d?.Nombre} {e.Hp}/{e.HpMaximo} HP · " +
-                             $"vel {e.VelocidadEfectiva} · dist {e.DistanciaRecorrida / 1000} celdas" +
-                             (e.AtacandoTorre ? " · PEGANDO LA TORRE" : ""));
+                    GD.Print($"        primero: {d?.Name} {e.Hp}/{e.MaxHp} HP · " +
+                             $"vel {e.EffectiveSpeed} · dist {e.DistanceTravelled / 1000} celdas" +
+                             (e.AttackingTower ? " · PEGANDO LA TORRE" : ""));
                 }
             }
         }
 
-        GD.Print($"── fin: {partida.Estado} en ol {partida.Oleada}, t {partida.Tick} ──");
+        GD.Print($"── fin: {partida.State} en ol {partida.Wave}, t {partida.Tick} ──");
     }
 
     /// <summary>
@@ -531,7 +531,7 @@ public static class CorredorHeadless
     /// siendo re-simulable: el servidor puede tomar ese log y reproducirlo sin
     /// saber nada de esta política.</para>
     /// </remarks>
-    private static Resultado Correr(ulong seed, LogAcciones log)
+    private static Resultado Correr(ulong seed, ActionLog log)
         => Correr(seed, log, null, null);
 
     /// <summary>
@@ -544,21 +544,21 @@ public static class CorredorHeadless
     /// jugarlos.
     /// </remarks>
     internal static Resultado Correr(
-        ulong seed, LogAcciones log, Mapa? mapa, IEnumerable<(int Tick, Celda Celda)>? plan)
+        ulong seed, ActionLog log, Map? mapa, IEnumerable<(int Tick, Cell Cell)>? plan)
     {
-        var partida = new Partida(seed, mapa ?? Layouts.Elegir(seed, CargadorDatos.Actual), log, CargadorDatos.Actual);
+        var partida = new Run(seed, mapa ?? Layouts.Choose(seed, CargadorDatos.Actual), log, CargadorDatos.Actual);
         partida.Empezar();
 
-        var pendientes = new Queue<(int Tick, Celda Celda)>(
-            plan ?? ColocacionesPlaneadas(seed, partida.Mapa));
+        var pendientes = new Queue<(int Tick, Cell Cell)>(
+            plan ?? ColocacionesPlaneadas(seed, partida.Map));
 
-        while (partida.Estado == EstadoPartida.EnCurso && partida.Tick < TechoTicks)
+        while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
             // Elegir siempre la primera opción. Es una política mala a propósito:
             // mide el piso del juego, no el techo. Una política que elige bien
             // diría cuán alto se puede llegar, y las dos cotas hacen falta.
-            if (partida.EsperandoEleccion)
-                log.Agregar(Accion.Elegir(partida.TickDeAccion, MejorOpcion(partida)));
+            if (partida.WaitingForChoice)
+                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -571,16 +571,16 @@ public static class CorredorHeadless
             // hasta que `Avanzar` aplique la acción, así que dos colocaciones en
             // la misma vuelta se decidirían las dos con el oro viejo. Como el
             // reloj está congelado, las vueltas de más no cuestan ticks.
-            if (partida.EsperandoInicioDeOleada)
+            if (partida.WaitingForWaveStart)
             {
                 if (!ColocarUnoEnPreparacion(partida, log, pendientes))
                 {
-                    log.Agregar(new Accion(
-                        partida.TickDeAccion, TipoAccion.AdelantarOleada, 0, 0, 0));
+                    log.Agregar(new PlayerAction(
+                        partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
                 }
 
                 EquiparLoQuePueda(partida, log);
-                partida.Avanzar();
+                partida.Advance();
                 continue;
             }
 
@@ -602,7 +602,7 @@ public static class CorredorHeadless
 
                     if (clase is not null && partida.PuedePoner(clase.Value, celda))
                     {
-                        log.Agregar(Accion.Poner(partida.TickDeAccion, clase.Value, celda));
+                        log.Agregar(PlayerAction.Place(partida.TickDeAccion, clase.Value, celda));
                         pendientes.Dequeue();
                     }
                 }
@@ -612,12 +612,12 @@ public static class CorredorHeadless
             // se junten sin usarse.
             EquiparLoQuePueda(partida, log);
 
-            partida.Avanzar();
+            partida.Advance();
         }
 
         return new Resultado(
-            partida.Tick, partida.Oleada, partida.Torre.Hp, partida.Oro, partida.Estado,
-            partida.Defensores.Count, partida.Roster.Clases.Count, partida.Mochila.Ocupados);
+            partida.Tick, partida.Wave, partida.Tower.Hp, partida.Gold, partida.State,
+            partida.Defenders.Count, partida.Roster.Classes.Count, partida.Backpack.Ocupados);
     }
 
     /// <summary>
@@ -635,24 +635,24 @@ public static class CorredorHeadless
     /// pero es lo que haría cualquiera mirando la pantalla, que es exactamente lo
     /// que tiene que medir esto.</para>
     /// </remarks>
-    private static int MejorOpcion(Partida partida)
+    private static int MejorOpcion(Run partida)
     {
-        var opciones = partida.OpcionesAbiertas;
+        var opciones = partida.OpenChoices;
         int mejor = 0;
         int mejorPuntaje = int.MinValue;
 
         for (int i = 0; i < opciones.Length; i++)
         {
-            var stats = CargadorDatos.Actual.StatsDe(opciones[i].Clase);
+            var stats = CargadorDatos.Actual.StatsOf(opciones[i].DefenderClass);
 
             // Daño por cien ticks, para que la cadencia pese tanto como el golpe.
-            int puntaje = stats.Dano * 100 / System.Math.Max(1, stats.CadenciaTicks);
+            int puntaje = stats.Damage * 100 / System.Math.Max(1, stats.CadenceTicks);
 
             // El alcance multiplica: un defensor con más alcance dispara a más
             // enemigos durante más tiempo.
-            puntaje = puntaje * (100 + (stats.AlcanceCeldas * 15)) / 100;
+            puntaje = puntaje * (100 + (stats.RangeCells * 15)) / 100;
 
-            if (opciones[i].Tipo == TipoOpcion.Levelear)
+            if (opciones[i].Kind == ChoiceType.LevelUp)
                 puntaje = puntaje * 130 / 100;
 
             if (puntaje > mejorPuntaje)
@@ -673,18 +673,18 @@ public static class CorredorHeadless
     /// política tonta que se entiende de un vistazo mide mejor el piso del juego
     /// que una lista de reglas que nadie sabe si son buenas.
     /// </remarks>
-    private static Clase? ClaseMasCara(Partida partida)
+    private static DefenderClass? ClaseMasCara(Run partida)
     {
-        Clase? mejor = null;
+        DefenderClass? mejor = null;
         int mejorCosto = -1;
 
-        foreach (var ficha in partida.Roster.Clases)
+        foreach (var ficha in partida.Roster.Classes)
         {
-            int costo = CargadorDatos.Actual.StatsDe(ficha.Clase).Costo;
+            int costo = CargadorDatos.Actual.StatsOf(ficha.DefenderClass).Cost;
 
-            if (costo > mejorCosto && costo <= partida.Oro)
+            if (costo > mejorCosto && costo <= partida.Gold)
             {
-                mejor = ficha.Clase;
+                mejor = ficha.DefenderClass;
                 mejorCosto = costo;
             }
         }
@@ -692,23 +692,23 @@ public static class CorredorHeadless
         return mejor;
     }
 
-    private static void EquiparLoQuePueda(Partida partida, LogAcciones log)
+    private static void EquiparLoQuePueda(Run partida, ActionLog log)
     {
-        var cosas = partida.Mochila.Cosas;
+        var cosas = partida.Backpack.Items;
 
         for (int i = 0; i < cosas.Count; i++)
         {
-            if (cosas[i].Tipo != TipoCosa.Perk)
+            if (cosas[i].Kind != ItemType.Perk)
                 continue;
 
-            var def = CargadorDatos.Actual.Perks.Por(cosas[i].Id);
+            var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
 
-            foreach (var ficha in partida.Roster.Clases)
+            foreach (var ficha in partida.Roster.Classes)
             {
-                if (ficha.TieneSlotLibre && def.SirveA(ficha.Clase))
+                if (ficha.HasFreeSlot && def.WorksFor(ficha.DefenderClass))
                 {
-                    log.Agregar(new Accion(
-                        partida.TickDeAccion, TipoAccion.EquiparPerk, i, (int)ficha.Clase, 0));
+                    log.Agregar(new PlayerAction(
+                        partida.TickDeAccion, ActionType.EquipPerk, i, (int)ficha.DefenderClass, 0));
                     return;
                 }
             }
@@ -725,7 +725,7 @@ public static class CorredorHeadless
     /// —perks, equipo, tienda— esta política se vuelve más rica, y ahí el
     /// corredor empieza a servir para balancear de verdad.
     /// </remarks>
-    private static LogAcciones ConAcciones(ulong seed) => new();
+    private static ActionLog ConAcciones(ulong seed) => new();
 
     /// <summary>
     /// Dónde va a querer poner defensores la política, y a partir de qué tick.
@@ -746,14 +746,14 @@ public static class CorredorHeadless
     /// <para>La clase queda sin decidir acá: se resuelve al momento de poner,
     /// contra el roster que haya tocado.</para>
     /// </remarks>
-    private static List<(int Tick, Celda Celda)> ColocacionesPlaneadas(ulong seed, Mapa mapa)
+    private static List<(int Tick, Cell Cell)> ColocacionesPlaneadas(ulong seed, Map mapa)
     {
-        var rng = new Aleatorio(seed ^ 0xA5A5_5A5AUL);
+        var rng = new Rng(seed ^ 0xA5A5_5A5AUL);
 
-        var plan = new List<(int, Celda)>();
-        var usadas = new HashSet<Celda>();
+        var plan = new List<(int, Cell)>();
+        var usadas = new HashSet<Cell>();
 
-        long paso = 3 * Enteros.MilesimasPorCelda;
+        long paso = 3 * Ints.ThousandthsPerCell;
 
         // ⚠ DESDE LA TORRE hacia la entrada, no al revés.
         //
@@ -763,20 +763,20 @@ public static class CorredorHeadless
         // nunca, el bono no llega, y la corrida muere ahí (medido: seeds clavadas
         // 27.000 ticks en la oleada 1). Puestas al final, la Torre queda cubierta
         // desde la primera ficha, que es lo que hace cualquier humano.
-        for (long d = mapa.Ruta.Largo; d >= 0; d -= paso)
+        for (long d = mapa.Route.Length; d >= 0; d -= paso)
         {
-            var enRuta = mapa.Ruta.CeldaEn(d);
+            var enRuta = mapa.Route.CellAt(d);
 
             foreach (var v in Alrededor(enRuta))
             {
-                if (!mapa.EnGrilla(v) || !mapa.EsColocable(v) || !usadas.Add(v))
+                if (!mapa.InGrid(v) || !mapa.EsColocable(v) || !usadas.Add(v))
                     continue;
 
                 // Un poco de ruido en el momento para que dos seeds no pongan
                 // exactamente en los mismos ticks.
-                int retraso = rng.Rango(0, Enteros.SegundosATicks(4));
+                int retraso = rng.Between(0, Ints.SecondsToTicks(4));
 
-                plan.Add((plan.Count * Enteros.SegundosATicks(8) + retraso, v));
+                plan.Add((plan.Count * Ints.SecondsToTicks(8) + retraso, v));
                 break;
             }
         }
@@ -785,14 +785,14 @@ public static class CorredorHeadless
     }
 
     /// <summary>Los ocho vecinos, para buscar dónde poner al lado del camino.</summary>
-    private static IEnumerable<Celda> Alrededor(Celda c)
+    private static IEnumerable<Cell> Alrededor(Cell c)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
             for (int dx = -1; dx <= 1; dx++)
             {
                 if (dx != 0 || dy != 0)
-                    yield return new Celda(c.X + dx, c.Y + dy);
+                    yield return new Cell(c.X + dx, c.Y + dy);
             }
         }
     }
@@ -813,7 +813,7 @@ public static class CorredorHeadless
     /// </remarks>
     private static void ProbarGuardadoEnPreparacion()
     {
-        GD.Print("── Guardar en la pantalla de preparación ──────────");
+        GD.Print("── Store en la pantalla de preparación ──────────");
 
         ulong[] seeds = [1, 42, 20260825, 999_999_937];
         int fallas = 0;
@@ -823,25 +823,25 @@ public static class CorredorHeadless
         foreach (ulong seed in seeds)
         {
             var datos = CargadorDatos.Actual;
-            var mapa = Layouts.Elegir(seed, datos);
+            var mapa = Layouts.Choose(seed, datos);
 
             // Se juega hasta que la simulación abra la preparación por TERCERA
             // vez: la primera es antes de la oleada 1 y no prueba gran cosa.
-            var log = new LogAcciones();
-            var partida = new Partida(seed, mapa, log, datos);
+            var log = new ActionLog();
+            var partida = new Run(seed, mapa, log, datos);
             partida.Empezar();
 
             int aperturas = 0;
             bool yaContada = false;
-            var pendientes = new Queue<(int Tick, Celda Celda)>(
+            var pendientes = new Queue<(int Tick, Cell Cell)>(
                 ColocacionesPlaneadas(seed, mapa));
 
-            while (partida.Estado == EstadoPartida.EnCurso && partida.Tick < TechoTicks)
+            while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
             {
-                if (partida.EsperandoEleccion)
-                    log.Agregar(Accion.Elegir(partida.TickDeAccion, MejorOpcion(partida)));
+                if (partida.WaitingForChoice)
+                    log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
 
-                if (partida.EsperandoInicioDeOleada)
+                if (partida.WaitingForWaveStart)
                 {
                     // La misma política que el resto: se usa la preparación para
                     // poner, y recién cuando no queda nada se arranca. Contar la
@@ -857,11 +857,11 @@ public static class CorredorHeadless
 
                     if (!ColocarUnoEnPreparacion(partida, log, pendientes))
                     {
-                        log.Agregar(new Accion(
-                            partida.TickDeAccion, TipoAccion.AdelantarOleada, 0, 0, 0));
+                        log.Agregar(new PlayerAction(
+                            partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
                     }
 
-                    partida.Avanzar();
+                    partida.Advance();
                     continue;
                 }
 
@@ -877,13 +877,13 @@ public static class CorredorHeadless
 
                         if (clase is not null && partida.PuedePoner(clase.Value, celda))
                         {
-                            log.Agregar(Accion.Poner(partida.TickDeAccion, clase.Value, celda));
+                            log.Agregar(PlayerAction.Place(partida.TickDeAccion, clase.Value, celda));
                             pendientes.Dequeue();
                         }
                     }
                 }
 
-                partida.Avanzar();
+                partida.Advance();
             }
 
             if (aperturas < 3)
@@ -892,22 +892,22 @@ public static class CorredorHeadless
                 // llegar a la tercera preparación. Es el problema de balance, y
                 // contarlo acá escondería si el guardado anda o no.
                 saltadas++;
-                GD.Print($"  · seed {seed,-12} murió en la oleada {partida.Oleada}, " +
+                GD.Print($"  · seed {seed,-12} murió en la oleada {partida.Wave}, " +
                          "no llegó a la tercera preparación");
                 continue;
             }
 
             // El guardado real es seed + log serializado. Se hace el viaje entero.
-            var recuperado = LogBinario.Leer(LogBinario.Escribir(log));
+            var recuperado = BinaryLog.Leer(BinaryLog.Escribir(log));
 
-            var retomada = new Partida(seed, Layouts.Elegir(seed, datos), recuperado, datos);
+            var retomada = new Run(seed, Layouts.Choose(seed, datos), recuperado, datos);
             retomada.Empezar();
 
             int vueltas = 0;
 
-            while (retomada.Estado == EstadoPartida.EnCurso && retomada.Tick < TechoTicks)
+            while (retomada.State == RunState.InProgress && retomada.Tick < TechoTicks)
             {
-                retomada.Avanzar();
+                retomada.Advance();
                 vueltas++;
 
                 if (retomada.EsperaAlJugador)
@@ -916,17 +916,17 @@ public static class CorredorHeadless
 
             bool igual =
                 retomada.Tick == partida.Tick &&
-                retomada.Oleada == partida.Oleada &&
-                retomada.Oro == partida.Oro &&
-                retomada.Defensores.Count == partida.Defensores.Count &&
-                retomada.Torre.Hp == partida.Torre.Hp &&
-                retomada.EsperandoInicioDeOleada;
+                retomada.Wave == partida.Wave &&
+                retomada.Gold == partida.Gold &&
+                retomada.Defenders.Count == partida.Defenders.Count &&
+                retomada.Tower.Hp == partida.Tower.Hp &&
+                retomada.WaitingForWaveStart;
 
             if (igual)
             {
                 probadas++;
-                GD.Print($"  ✓ seed {seed,-12} tick {partida.Tick,6} · oleada {partida.Oleada,3} · " +
-                         $"oro {partida.Oro,6} · {partida.Defensores.Count,2} def · " +
+                GD.Print($"  ✓ seed {seed,-12} tick {partida.Tick,6} · oleada {partida.Wave,3} · " +
+                         $"oro {partida.Gold,6} · {partida.Defenders.Count,2} def · " +
                          $"retomó en {vueltas} vueltas, esperando el botón");
             }
             else
@@ -935,10 +935,10 @@ public static class CorredorHeadless
 
                 GD.PrintErr($"  ✗ seed {seed}: retomó distinto — " +
                             $"tick {retomada.Tick}/{partida.Tick} · " +
-                            $"oleada {retomada.Oleada}/{partida.Oleada} · " +
-                            $"oro {retomada.Oro}/{partida.Oro} · " +
-                            $"def {retomada.Defensores.Count}/{partida.Defensores.Count} · " +
-                            $"esperando={retomada.EsperandoInicioDeOleada}");
+                            $"oleada {retomada.Wave}/{partida.Wave} · " +
+                            $"oro {retomada.Gold}/{partida.Gold} · " +
+                            $"def {retomada.Defenders.Count}/{partida.Defenders.Count} · " +
+                            $"esperando={retomada.WaitingForWaveStart}");
             }
         }
 
@@ -964,7 +964,7 @@ public static class CorredorHeadless
     /// queda en la preparación para siempre, porque el reloj no avanza.</para>
     /// </remarks>
     private static bool ColocarUnoEnPreparacion(
-        Partida partida, LogAcciones log, Queue<(int Tick, Celda Celda)> pendientes)
+        Run partida, ActionLog log, Queue<(int Tick, Cell Cell)> pendientes)
     {
         if (pendientes.Count == 0)
             return false;
@@ -977,7 +977,7 @@ public static class CorredorHeadless
         if (clase is null || !partida.PuedePoner(clase.Value, celda))
             return false;
 
-        log.Agregar(Accion.Poner(partida.TickDeAccion, clase.Value, celda));
+        log.Agregar(PlayerAction.Place(partida.TickDeAccion, clase.Value, celda));
         pendientes.Dequeue();
 
         return true;

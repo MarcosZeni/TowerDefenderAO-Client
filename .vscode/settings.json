@@ -13,9 +13,15 @@
   // abre a veces desde la raíz `TowerDefender\` y a veces desde `Client\`. Esta
   // copia es la que se versiona —la raíz no es un repo—.
   //
-  // ⚠ El glob NO incluye `Datos/layouts/`. Esos los escribe el editor de
-  // layouts, no una persona, y se leen con el parser estricto.
+  // ⚠ Hacen falta las DOS líneas: en VS Code el `*` no cruza barras, así que
+  // `Datos/*.json` NO alcanza a `Datos/lang/es.json`. Cada subcarpeta que lleve
+  // JSON con comentarios necesita su propia entrada.
+  //
+  // ⚠ `Datos/layouts/` queda afuera a propósito: esos los escribe
+  // `EditorLayouts.tscn`, que reescribe el archivo entero y borraría cualquier
+  // comentario que alguien les agregue a mano.
   "files.associations": {
-    "**/Datos/*.json": "jsonc"
+    "**/Datos/*.json": "jsonc",
+    "**/Datos/lang/*.json": "jsonc"
   }
 }

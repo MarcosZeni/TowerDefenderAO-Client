@@ -13,7 +13,7 @@ namespace TowerOfArgentum.Simulacion;
 /// <para>Cada área tiene <b>3 layouts</b> y la seed elige cuál toca, así que dos
 /// corridas no recorren lo mismo (OLEADAS.md).</para>
 /// </remarks>
-public sealed class Mapa
+public sealed class Map
 {
     /// <summary>
     /// Cuántas celdas alrededor de la Torre quedan siempre habilitadas.
@@ -27,11 +27,11 @@ public sealed class Mapa
 
     private readonly bool[] _colocable;
 
-    public Mapa(int ancho, int alto, Ruta ruta, IEnumerable<Celda> zonasColocacion)
+    public Map(int ancho, int alto, Route ruta, IEnumerable<Cell> zonasColocacion)
     {
-        Ancho = ancho;
-        Alto = alto;
-        Ruta = ruta;
+        Width = ancho;
+        Height = alto;
+        Route = ruta;
 
         _colocable = new bool[ancho * alto];
 
@@ -39,7 +39,7 @@ public sealed class Mapa
         // enemigo que llegue ahí puede volverse imposible de alcanzar. Se avisa en
         // vez de fallar: es un problema de diseño del layout, y el layout puede
         // estar a medio hacer.
-        var fin = ruta.Final;
+        var fin = ruta.End;
 
         if (fin.X < RadioDefensaTorre || fin.X >= ancho - RadioDefensaTorre ||
             fin.Y < RadioDefensaTorre || fin.Y >= alto - RadioDefensaTorre)
@@ -49,8 +49,8 @@ public sealed class Mapa
 
         foreach (var c in zonasColocacion)
         {
-            if (EnGrilla(c))
-                _colocable[Indice(c)] = true;
+            if (InGrid(c))
+                _colocable[Index(c)] = true;
         }
 
         // ⚠ El anillo alrededor de la Torre SIEMPRE es colocable, lo liste el
@@ -72,10 +72,10 @@ public sealed class Mapa
         {
             for (int dx = -RadioDefensaTorre; dx <= RadioDefensaTorre; dx++)
             {
-                var c = new Celda(ruta.Final.X + dx, ruta.Final.Y + dy);
+                var c = new Cell(ruta.End.X + dx, ruta.End.Y + dy);
 
-                if (EnGrilla(c))
-                    _colocable[Indice(c)] = true;
+                if (InGrid(c))
+                    _colocable[Index(c)] = true;
             }
         }
 
@@ -85,19 +85,19 @@ public sealed class Mapa
         // camino— y el síntoma sería un defensor tapando el paso, que en este
         // juego no significa nada porque los enemigos no esquivan: siguen la
         // ruta y punto.
-        for (long d = 0; d <= ruta.Largo; d += Enteros.MilesimasPorCelda / 2)
+        for (long d = 0; d <= ruta.Length; d += Ints.ThousandthsPerCell / 2)
         {
-            var c = ruta.CeldaEn(d);
-            if (EnGrilla(c))
-                _colocable[Indice(c)] = false;
+            var c = ruta.CellAt(d);
+            if (InGrid(c))
+                _colocable[Index(c)] = false;
         }
     }
 
-    public int Ancho { get; }
+    public int Width { get; }
 
-    public int Alto { get; }
+    public int Height { get; }
 
-    public Ruta Ruta { get; }
+    public Route Route { get; }
 
     /// <summary>
     /// La Torre quedó tan cerca de un borde que su anillo de defensa está
@@ -105,10 +105,10 @@ public sealed class Mapa
     /// </summary>
     public bool CeldasDeDefensaCortadas { get; }
 
-    public bool EnGrilla(Celda c) => c.X >= 0 && c.X < Ancho && c.Y >= 0 && c.Y < Alto;
+    public bool InGrid(Cell c) => c.X >= 0 && c.X < Width && c.Y >= 0 && c.Y < Height;
 
     /// <summary>¿Se puede poner un defensor acá?</summary>
-    public bool EsColocable(Celda c) => EnGrilla(c) && _colocable[Indice(c)];
+    public bool EsColocable(Cell c) => InGrid(c) && _colocable[Index(c)];
 
-    private int Indice(Celda c) => (c.Y * Ancho) + c.X;
+    private int Index(Cell c) => (c.Y * Width) + c.X;
 }

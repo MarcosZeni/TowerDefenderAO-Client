@@ -119,7 +119,7 @@ public static class PisoHorneado
     private static Texture2D? _horneado;
     private static int _areaHorneada;
     private static ulong _seedHorneada;
-    private static Mapa? _mapaHorneado;
+    private static Map? _mapaHorneado;
 
     /// <summary>
     /// El suelo de un área con su camino, horneado. Una vez por área y corrida.
@@ -128,7 +128,7 @@ public static class PisoHorneado
     /// <c>null</c> si falta el arte. Quien dibuja sigue adelante sin piso, que es
     /// lo que pasaba antes de que existiera esto.
     /// </returns>
-    public static Texture2D? Para(int area, ulong seed, Mapa? mapa = null)
+    public static Texture2D? Para(int area, ulong seed, Map? mapa = null)
     {
         if (_horneado is not null
             && _areaHorneada == area
@@ -160,10 +160,10 @@ public static class PisoHorneado
     /// <summary>
     /// El suelo de un área, como imagen. Para la herramienta que lo saca a PNG.
     /// </summary>
-    public static Image? Imagen(int area, ulong seed, Mapa? mapa = null)
+    public static Image? Imagen(int area, ulong seed, Map? mapa = null)
         => Pintar(area, seed, mapa);
 
-    private static Image? Pintar(int area, ulong seed, Mapa? mapa)
+    private static Image? Pintar(int area, ulong seed, Map? mapa)
     {
         var suelo = Tejer(Bloques(area), seed, area);
 
@@ -204,7 +204,7 @@ public static class PisoHorneado
         // La veta entra a la semilla para que dos áreas con la misma paleta —el
         // pasto de la 1 y el de la 2— no salgan pintadas idénticas, y para que el
         // camino no repita el mismo sorteo que el suelo de abajo.
-        var rng = new Aleatorio(seed ^ SemillaDePiso ^ ((ulong)veta * 0x9E3779B97F4A7C15UL));
+        var rng = new Rng(seed ^ SemillaDePiso ^ ((ulong)veta * 0x9E3779B97F4A7C15UL));
 
         int paso = bloques[0].GetWidth();
         int pasoAlto = bloques[0].GetHeight();
@@ -218,7 +218,7 @@ public static class PisoHorneado
 
             for (int x = -desfase; x < Escala.LienzoAncho; x += paso)
             {
-                var bloque = bloques[rng.Indice(bloques.Count)];
+                var bloque = bloques[rng.Index(bloques.Count)];
 
                 // La columna trabada arranca antes del borde: se recorta por
                 // izquierda. Y el lienzo no es múltiplo del bloque —1920 / 512 da
@@ -254,20 +254,20 @@ public static class PisoHorneado
     /// en diagonal —si algún día hay uno— pasan por celdas que ningún vértice
     /// nombra.</para>
     /// </remarks>
-    private static Image Mascara(Mapa mapa)
+    private static Image Mascara(Map mapa)
     {
         const int PorCelda = 2;
 
         var chica = Image.CreateEmpty(
-            mapa.Ancho * PorCelda, mapa.Alto * PorCelda, false, Image.Format.L8);
+            mapa.Width * PorCelda, mapa.Height * PorCelda, false, Image.Format.L8);
 
         var blanco = new Color(1, 1, 1);
 
         // Medio paso de celda: más fino no agrega nada —la casilla de la máscara
         // mide media celda— y más grueso se saltea esquinas.
-        for (long d = 0; d <= mapa.Ruta.Largo; d += Enteros.MilesimasPorCelda / 2)
+        for (long d = 0; d <= mapa.Route.Length; d += Ints.ThousandthsPerCell / 2)
         {
-            var celda = mapa.Ruta.CeldaEn(d);
+            var celda = mapa.Route.CellAt(d);
 
             for (int j = 0; j < PorCelda; j++)
             {
@@ -471,7 +471,7 @@ public static class PisoHorneado
                 hojas[datos.FileNum] = hoja;
             }
 
-            var region = new Rect2I(datos.X, datos.Y, datos.Ancho, datos.Alto);
+            var region = new Rect2I(datos.X, datos.Y, datos.Width, datos.Height);
 
             for (int giro = 0; giro < 4; giro++)
             {

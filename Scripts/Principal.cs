@@ -36,6 +36,7 @@ public partial class Principal : Node2D
 
         Resolucion.AplicarGuardada();
         Configuracion.Cargar();
+        Loc.Cargar(Configuracion.Idioma);
         Diagnostico();
 
         _capaMenu = new CanvasLayer { Name = "CapaMenu", Layer = 5 };
@@ -66,7 +67,7 @@ public partial class Principal : Node2D
 
         var juego = _corrida?.GetNodeOrNull<Juego>("Juego");
 
-        if (juego?.Partida is { Estado: EstadoPartida.EnCurso })
+        if (juego?.Run is { State: RunState.InProgress })
             juego.GuardarCorrida();
     }
 
@@ -96,7 +97,7 @@ public partial class Principal : Node2D
         GD.Print($"  Godot   : {Engine.GetVersionInfo()["string"]}");
         GD.Print($"  .NET    : {System.Environment.Version}");
         GD.Print($"  Lienzo  : {lienzo.X} x {lienzo.Y}");
-        GD.Print($"  Celda   : {Escala.LadoCelda} px  ·  campo {Escala.CeldasAncho} x {Escala.CeldasAlto}");
+        GD.Print($"  Cell   : {Escala.LadoCelda} px  ·  campo {Escala.CeldasAncho} x {Escala.CeldasAlto}");
         GD.Print("───────────────────────────────────────────────────");
 
         if (!Mathf.IsEqualApprox(lienzo.X, Escala.LienzoAncho) ||
@@ -132,16 +133,16 @@ public partial class Principal : Node2D
         AddChild(_corrida);
     }
 
-    private Node2D ArmarCorrida(long runId, ulong seed, (Partida Partida, LogAcciones Log)? retomada = null)
+    private Node2D ArmarCorrida(long runId, ulong seed, (Run Run, ActionLog Log)? retomada = null)
     {
-        var raiz = new Node2D { Name = "Corrida" };
+        var raiz = new Node2D { Name = "RunCurve" };
 
         var juego = new Juego { Name = "Juego" };
         juego.Configurar(seed, runId);
 
         // Retomar va ANTES de AddChild: _Ready tiene que ver la partida puesta.
         if (retomada is { } r)
-            juego.Retomar(r.Partida, r.Log, seed, runId);
+            juego.Retomar(r.Run, r.Log, seed, runId);
 
         raiz.AddChild(juego);
 
@@ -156,9 +157,9 @@ public partial class Principal : Node2D
         var capaModal = new CanvasLayer { Name = "CapaModal", Layer = 20 };
         raiz.AddChild(capaModal);
 
-        var mochila = new PantallaMochila(juego) { Name = "Mochila" };
+        var mochila = new PantallaMochila(juego) { Name = "Backpack" };
         capaModal.AddChild(mochila);
-        juego.Mochila = mochila;
+        juego.Backpack = mochila;
 
         capaModal.AddChild(new PantallaFinDeCorrida(juego) { Name = "FinDeCorrida" });
 
@@ -199,7 +200,7 @@ public partial class Principal : Node2D
         // Escape vuelve al menú solo si la corrida terminó. En el medio, salir
         // sería perder horas de juego por una tecla al lado de la que se quiso
         // apretar; para eso está el guardado.
-        if (juego?.Partida is not null && juego.Partida.Estado != EstadoPartida.EnCurso)
+        if (juego?.Run is not null && juego.Run.State != RunState.InProgress)
             VolverAlMenu();
     }
 

@@ -43,7 +43,7 @@ public static class Guardado
     /// <c>%APPDATA%</c>, y una build instalada en Archivos de Programa no puede
     /// escribir en su propia carpeta.
     /// </summary>
-    private const string Ruta = "user://corrida.guardada";
+    private const string Route = "user://corrida.guardada";
 
     /// <summary>
     /// v2 agrega el <b>tick del momento de guardar</b>. La v1 re-simulaba hasta
@@ -53,22 +53,22 @@ public static class Guardado
     /// </summary>
     private const byte Version = 2;
 
-    public static bool Existe() => ArchivoGodot.FileExists(Ruta);
+    public static bool Existe() => ArchivoGodot.FileExists(Route);
 
     public static void Borrar()
     {
         if (Existe())
-            DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(Ruta));
+            DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(Route));
     }
 
     /// <summary>Escribe la corrida en curso, parada en <paramref name="tick"/>.</summary>
-    public static bool Guardar(ulong seed, long runId, LogAcciones log, int tick)
+    public static bool Store(ulong seed, long runId, ActionLog log, int tick)
     {
-        using var f = ArchivoGodot.Open(Ruta, ArchivoGodot.ModeFlags.Write);
+        using var f = ArchivoGodot.Open(Route, ArchivoGodot.ModeFlags.Write);
 
         if (f is null)
         {
-            GD.PushWarning($"No se pudo escribir {Ruta}: {ArchivoGodot.GetOpenError()}");
+            GD.PushWarning($"No se pudo escribir {Route}: {ArchivoGodot.GetOpenError()}");
             return false;
         }
 
@@ -85,7 +85,7 @@ public static class Guardado
         // el cierre haya caído en medio de una oleada.
         f.Store32((uint)tick);
 
-        byte[] blob = LogBinario.Escribir(log);
+        byte[] blob = BinaryLog.Escribir(log);
         f.Store32((uint)blob.Length);
         f.StoreBuffer(blob);
 
@@ -102,9 +102,9 @@ public static class Guardado
     /// hacerlo en un hilo aparte —no cachear estado, que es lo que traería de
     /// vuelta todos los problemas que este diseño evita.
     /// </remarks>
-    public static (Partida? Partida, LogAcciones? Log, ulong Seed, long RunId) Cargar()
+    public static (Run? Run, ActionLog? Log, ulong Seed, long RunId) Cargar()
     {
-        using var f = ArchivoGodot.Open(Ruta, ArchivoGodot.ModeFlags.Read);
+        using var f = ArchivoGodot.Open(Route, ArchivoGodot.ModeFlags.Read);
 
         if (f is null)
             return (null, null, 0, 0);
@@ -127,23 +127,23 @@ public static class Guardado
         uint largo = f.Get32();
         byte[] blob = f.GetBuffer((long)largo);
 
-        var log = LogBinario.Leer(blob);
+        var log = BinaryLog.Leer(blob);
 
         // El mapa sale de la seed, igual que en una corrida nueva: guardarlo
         // sería guardar algo que la seed ya determina.
-        var mapa = Layouts.Elegir(seed, CargadorDatos.Actual);
+        var mapa = Layouts.Choose(seed, CargadorDatos.Actual);
 
         // Acá pasa todo: se re-simula desde cero con el mismo log y la misma seed.
         //
         // ⚠ Con los MISMOS datos de balance. La v1 pasaba `datos: null` y la
         // re-simulación corría con los números de fábrica en vez de con los de
         // Datos\*.json — un guardado hecho jugando no se reproducía igual.
-        var partida = new Partida(seed, mapa, log, CargadorDatos.Actual);
+        var partida = new Run(seed, mapa, log, CargadorDatos.Actual);
         partida.Empezar();
 
         // Hasta el tick guardado, y ni uno más: correr de largo seguiría la
         // simulación sin el jugador.
-        while (partida.Estado == EstadoPartida.EnCurso)
+        while (partida.State == RunState.InProgress)
         {
             // La corrida quedó en una pausa sin acciones pendientes —la pantalla
             // de preparación, casi siempre—. Acá el tick está congelado, así que
@@ -151,14 +151,14 @@ public static class Guardado
             if (partida.EsperaAlJugador)
                 break;
 
-            if (!partida.EnPausa && partida.Tick >= tick)
+            if (!partida.Paused && partida.Tick >= tick)
                 break;
 
-            partida.Avanzar();
+            partida.Advance();
         }
 
-        GD.Print($"Corrida retomada · seed {seed} · run {runId} · " +
-                 $"tick {partida.Tick} · oleada {partida.Oleada}");
+        GD.Print($"RunCurve retomada · seed {seed} · run {runId} · " +
+                 $"tick {partida.Tick} · oleada {partida.Wave}");
 
         return (partida, log, seed, runId);
     }

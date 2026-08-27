@@ -13,36 +13,36 @@ namespace TowerOfArgentum.Simulacion;
 /// <para>Lo que el servidor <b>no</b> puede regenerar es lo que decidió una
 /// persona. Eso, y solo eso, es lo que va acá.</para>
 /// </remarks>
-public enum TipoAccion
+public enum ActionType
 {
     /// <summary>Poner un defensor de una clase en una celda.</summary>
-    Poner = 0,
+    Place = 0,
 
     /// <summary>Vender un defensor puesto. Devuelve el 50%.</summary>
-    Vender = 1,
+    Sell = 1,
 
     /// <summary>Elegir una de las 3 opciones de la pantalla de elección.</summary>
-    Elegir = 2,
+    Choose = 2,
 
     /// <summary>Equipar un perk de la mochila en un slot de una clase.</summary>
-    EquiparPerk = 3,
+    EquipPerk = 3,
 
     /// <summary>
     /// Sacar un perk equipado. <b>Lo destruye</b>: no vuelve a la mochila.
     /// </summary>
-    SacarPerk = 4,
+    RemovePerk = 4,
 
     /// <summary>Equipar una pieza de equipo en una clase.</summary>
-    Equipar = 5,
+    Equip = 5,
 
     /// <summary>Vender una pieza de equipo. El equipo sí se vende.</summary>
-    VenderEquipo = 6,
+    SellGear = 6,
 
     /// <summary>Comprar algo en la tienda de la corrida.</summary>
-    Comprar = 7,
+    Buy = 7,
 
     /// <summary>Fusionar dos perks de Oro en un Único, con un plano aprendido.</summary>
-    Fusionar = 8,
+    Fuse = 8,
 
     /// <summary>
     /// Llamar la próxima oleada antes de tiempo.
@@ -50,13 +50,13 @@ public enum TipoAccion
     /// <para>Existe por el ranking: sin esto el desempate por <c>ticks</c> no
     /// mide nada, porque todos los que ganan tardan lo mismo.</para>
     /// </summary>
-    AdelantarOleada = 9,
+    CallNextWave = 9,
 
     /// <summary>
     /// Tirar algo de la mochila para hacer lugar. Es una decisión —cuál se
     /// pierde— así que va al log.
     /// </summary>
-    Descartar = 10,
+    Discard = 10,
 }
 
 /// <summary>
@@ -69,15 +69,15 @@ public enum TipoAccion
 /// más lindo de leer y mucho peor de serializar: el log tiene tope de tamaño y
 /// esto se escribe decenas de miles de veces por corrida.
 /// </remarks>
-public readonly record struct Accion(int Tick, TipoAccion Tipo, int A, int B, int C)
+public readonly record struct PlayerAction(int Tick, ActionType Kind, int A, int B, int C)
 {
     /// <summary>Poner: A = clase, B = celda X, C = celda Y.</summary>
-    public static Accion Poner(int tick, Clase clase, Celda celda)
-        => new(tick, TipoAccion.Poner, (int)clase, celda.X, celda.Y);
+    public static PlayerAction Place(int tick, DefenderClass clase, Cell celda)
+        => new(tick, ActionType.Place, (int)clase, celda.X, celda.Y);
 
     /// <summary>Vender: A = idColocacion del defensor.</summary>
-    public static Accion Vender(int tick, int idColocacion)
-        => new(tick, TipoAccion.Vender, idColocacion, 0, 0);
+    public static PlayerAction Sell(int tick, int idColocacion)
+        => new(tick, ActionType.Sell, idColocacion, 0, 0);
 
     /// <summary>
     /// Elegir: A = cuál de las 3 opciones (0, 1 o 2).
@@ -86,12 +86,12 @@ public readonly record struct Accion(int Tick, TipoAccion Tipo, int A, int B, in
     /// una lo regenera el servidor de la seed; si se guardara el contenido, un
     /// cliente modificado podría reclamar que le ofrecieron algo mejor.</para>
     /// </summary>
-    public static Accion Elegir(int tick, int opcion)
-        => new(tick, TipoAccion.Elegir, opcion, 0, 0);
+    public static PlayerAction Choose(int tick, int opcion)
+        => new(tick, ActionType.Choose, opcion, 0, 0);
 
     /// <summary>Adelantar oleada. Sin parámetros: el cuándo ya es el tick.</summary>
-    public static Accion AdelantarOleada(int tick)
-        => new(tick, TipoAccion.AdelantarOleada, 0, 0, 0);
+    public static PlayerAction CallNextWave(int tick)
+        => new(tick, ActionType.CallNextWave, 0, 0, 0);
 }
 
 /// <summary>
@@ -105,19 +105,19 @@ public readonly record struct Accion(int Tick, TipoAccion Tipo, int A, int B, in
 /// desincronizado del código — si el save carga, es porque el código lo reprodujo
 /// exactamente.</para>
 /// </remarks>
-public sealed class LogAcciones
+public sealed class ActionLog
 {
-    private readonly List<Accion> _acciones = [];
+    private readonly List<PlayerAction> _acciones = [];
 
-    public IReadOnlyList<Accion> Todas => _acciones;
+    public IReadOnlyList<PlayerAction> All => _acciones;
 
-    public int Cantidad => _acciones.Count;
+    public int Count => _acciones.Count;
 
     /// <summary>
     /// Agrega una acción. <b>El orden de inserción es el orden de aplicación</b>
     /// cuando dos caen en el mismo tick (JUGABILIDAD.md §4.4).
     /// </summary>
-    public void Agregar(Accion accion) => _acciones.Add(accion);
+    public void Agregar(PlayerAction accion) => _acciones.Add(accion);
 
     /// <summary>
     /// Las acciones de un tick, en el orden en que se registraron.
@@ -129,7 +129,7 @@ public sealed class LogAcciones
     /// peligroso — un sort inestable cambiaría el orden de dos acciones del
     /// mismo tick, y con él el resultado de la corrida.
     /// </remarks>
-    public int AplicarDesde(int desde, int tick, Action<Accion> aplicar)
+    public int AplicarDesde(int desde, int tick, Action<PlayerAction> aplicar)
     {
         int i = desde;
         while (i < _acciones.Count && _acciones[i].Tick == tick)

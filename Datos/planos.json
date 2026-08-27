@@ -16,28 +16,31 @@
   // ---------------------------------------------------------------------------
   "version": 1,
 
-  // Se referencian POR NOMBRE y no por id: un id pegado a mano quedaría
-  // apuntando a otro perk en cuanto alguien agregue uno, y el síntoma sería una
-  // fusión que produce algo que no es. Los nombres tienen que existir tal cual
-  // en perks.json —el validador (--validar) lo verifica.
+  // Se referencian por la "key" de perks.json y NO por id: un id pegado a mano
+  // quedaría apuntando a otro perk en cuanto alguien agregue uno, y el síntoma
+  // sería una fusión que produce algo que no es. Tampoco por nombre, que ahora
+  // vive en los archivos de idioma y cambia con el idioma.
   //
-  // "oroA" y "oroB" tienen que ser de tier oro; "nombre" es a la vez el nombre
-  // del plano y el del único que produce, así que tiene que ser un tier unico.
-  // El orden de oroA/oroB no importa al fusionar.
+  // El nombre del plano que ve el jugador es el del único que produce:
+  // «perk.<key>.name» en Datos\lang\.
   //
-  // "inicial": true = se sabe sin comprar nada.
+  // "goldA" y "goldB" tienen que ser de tier gold; "key" tiene que ser un tier
+  // unique. El orden de goldA/goldB no importa al fusionar — el validador
+  // (--validar) chequea las tres cosas.
+  //
+  // "initial": true = se sabe sin comprar nada.
   // ⚠ Tiene que haber AL MENOS UNA inicial. Sin eso un jugador nuevo nunca ve un
   // Único y la fusión —la salida de los Oro repetidos— le resulta invisible
   // hasta que gasta oro en algo que no entiende para qué sirve.
-  "planos": [
-    { "nombre": "Perforación",             "oroA": "Ricochet",          "oroB": "Golpe Certero",     "inicial": true  },
-    { "nombre": "Onda de Frío",            "oroA": "Escarcha",          "oroB": "Onda Expansiva",    "inicial": false },
-    { "nombre": "Ira de Dios",             "oroA": "Onda Expansiva",    "oroB": "Misil Mágico",      "inicial": false },
-    { "nombre": "Apocalipsis",             "oroA": "Ricochet",          "oroB": "Envenenar",         "inicial": false },
-    { "nombre": "Terrible Hambre de Igôr", "oroA": "Envenenar",         "oroB": "Escarcha",          "inicial": false },
-    { "nombre": "Tormenta Divina",         "oroA": "Tormenta de Fuego", "oroB": "Dardo Mágico",      "inicial": false },
-    { "nombre": "Ceguera",                 "oroA": "Torpeza",           "oroB": "Descarga Eléctrica","inicial": false },
-    { "nombre": "Fuerza",                  "oroA": "Golpe Certero",     "oroB": "Onda Expansiva",    "inicial": false },
-    { "nombre": "Invisibilidad",           "oroA": "Torpeza",           "oroB": "Golpe Certero",     "inicial": false }
+  "blueprints": [
+    { "key": "perforacion",    "goldA": "ricochet",        "goldB": "golpeCertero",      "initial": true  },
+    { "key": "ondaDeFrio",     "goldA": "escarcha",        "goldB": "ondaExpansiva",     "initial": false },
+    { "key": "iraDeDios",      "goldA": "ondaExpansiva",   "goldB": "misilMagico",       "initial": false },
+    { "key": "apocalipsis",    "goldA": "ricochet",        "goldB": "envenenar",         "initial": false },
+    { "key": "terribleHambre", "goldA": "envenenar",       "goldB": "escarcha",          "initial": false },
+    { "key": "tormentaDivina", "goldA": "tormentaDeFuego", "goldB": "dardoMagico",       "initial": false },
+    { "key": "ceguera",        "goldA": "torpeza",         "goldB": "descargaElectrica", "initial": false },
+    { "key": "fuerza",         "goldA": "golpeCertero",    "goldB": "ondaExpansiva",     "initial": false },
+    { "key": "invisibilidad",  "goldA": "torpeza",         "goldB": "golpeCertero",      "initial": false }
   ]
 }

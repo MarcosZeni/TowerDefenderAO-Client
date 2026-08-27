@@ -11,16 +11,16 @@ namespace TowerOfArgentum.Simulacion;
 /// pregunta ni se abre, y no hay deriva acumulada a lo largo de los ~216.000
 /// ticks de una corrida larga.</para>
 /// </summary>
-public static class Enteros
+public static class Ints
 {
     /// <summary>Ticks por segundo. Fijo y congelado (JUGABILIDAD.md §4.1).</summary>
-    public const int TicksPorSegundo = 30;
+    public const int TicksPerSecond = 30;
 
     /// <summary>
     /// Milésimas de celda por celda. La posición de un enemigo en la ruta es un
     /// <c>long</c> en esta unidad, así que mover es una suma y nada más.
     /// </summary>
-    public const int MilesimasPorCelda = 1000;
+    public const int ThousandthsPerCell = 1000;
 
     /// <summary>
     /// Aplica una lista de modificadores porcentuales a un valor base.
@@ -42,7 +42,7 @@ public static class Enteros
     /// aporta <c>15</c>, no <c>115</c>: acá se suman los extras y el 100 base lo
     /// pone este método.
     /// </param>
-    public static int ConPorcentajes(int baseValor, params ReadOnlySpan<int> porcentajesExtra)
+    public static int WithPercents(int baseValor, params ReadOnlySpan<int> porcentajesExtra)
     {
         int total = 100;
         foreach (int p in porcentajesExtra)
@@ -53,7 +53,7 @@ public static class Enteros
         if (total < 0)
             total = 0;
 
-        return MultiplicarPorcentaje(baseValor, total);
+        return MultiplyPercent(baseValor, total);
     }
 
     /// <summary>
@@ -67,10 +67,10 @@ public static class Enteros
     /// silencio— así que el bug aparecería como un enemigo que se cura al
     /// recibir un golpe muy fuerte.
     /// </remarks>
-    public static int MultiplicarPorcentaje(int valor, int porcentaje)
+    public static int MultiplyPercent(int valor, int porcentaje)
     {
         long resultado = (long)valor * porcentaje / 100;
-        return Recortar(resultado);
+        return Trim(resultado);
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public static class Enteros
     /// extremos. Se prefiere un número absurdo pero acotado a uno que cambió de
     /// signo.
     /// </summary>
-    public static int Recortar(long v)
+    public static int Trim(long v)
     {
         if (v > int.MaxValue) return int.MaxValue;
         if (v < int.MinValue) return int.MinValue;
@@ -86,7 +86,7 @@ public static class Enteros
     }
 
     /// <summary>Deja <paramref name="v"/> adentro de <c>[min, max]</c>.</summary>
-    public static int Limitar(int v, int min, int max)
+    public static int Clamp(int v, int min, int max)
     {
         if (v < min) return min;
         if (v > max) return max;
@@ -102,7 +102,7 @@ public static class Enteros
     /// también al cuadrado, y así la operación es una resta, dos multiplicaciones
     /// y una suma — todo exacto, sin decimales y sin depender de la libm.
     /// </remarks>
-    public static long DistanciaCuadrado(int ax, int ay, int bx, int by)
+    public static long SquaredDistance(int ax, int ay, int bx, int by)
     {
         long dx = ax - bx;
         long dy = ay - by;
@@ -110,12 +110,12 @@ public static class Enteros
     }
 
     /// <summary>Convierte segundos a ticks.</summary>
-    public static int SegundosATicks(int segundos) => segundos * TicksPorSegundo;
+    public static int SecondsToTicks(int segundos) => segundos * TicksPerSecond;
 
     /// <summary>
     /// Convierte décimas de segundo a ticks. A 30 Hz una décima son 3 ticks
     /// exactos, así que los cooldowns se pueden escribir en los JSON de balance
     /// en una unidad que se lee, sin perder precisión.
     /// </summary>
-    public static int DecimasATicks(int decimas) => decimas * TicksPorSegundo / 10;
+    public static int DecimasATicks(int decimas) => decimas * TicksPerSecond / 10;
 }

@@ -7,7 +7,7 @@ using Godot;
 namespace TowerOfArgentum.Herramientas;
 
 /// <summary>Un objeto de <c>OBJ.DAT</c>, con lo que hace falta para traer su arte.</summary>
-public sealed record ObjetoAo(int Id, string Nombre, int GrhIndex, int Tipo, int Anim, int NumRopaje);
+public sealed record ObjetoAo(int Id, string Name, int GrhIndex, int Kind, int Anim, int NumRopaje);
 
 /// <summary>
 /// Mira la cadena <c>objeto → grh → frames[] → fileNum</c> sin copiar nada.
@@ -83,7 +83,7 @@ public static class InspectorGraficos
                 continue;
             }
 
-            if (e.FileNum <= 0 || e.Ancho <= 0 || e.Alto <= 0)
+            if (e.FileNum <= 0 || e.Width <= 0 || e.Height <= 0)
                 regionesRotas++;
 
             maxFileNum = System.Math.Max(maxFileNum, e.FileNum);
@@ -119,7 +119,7 @@ public static class InspectorGraficos
             return 1;
         }
 
-        bool ok = e.FileNum == fileNum && e.X == x && e.Y == y && e.Ancho == ancho && e.Alto == alto;
+        bool ok = e.FileNum == fileNum && e.X == x && e.Y == y && e.Width == ancho && e.Height == alto;
 
         if (ok)
         {
@@ -128,7 +128,7 @@ public static class InspectorGraficos
         }
 
         GD.PrintErr($"  ✗ grh {grh}: se esperaba hoja {fileNum} ({x},{y}) {ancho}x{alto}, " +
-                    $"salió hoja {e.FileNum} ({e.X},{e.Y}) {e.Ancho}x{e.Alto}");
+                    $"salió hoja {e.FileNum} ({e.X},{e.Y}) {e.Width}x{e.Height}");
 
         return 1;
     }
@@ -157,7 +157,7 @@ public static class InspectorGraficos
 
         // --- Armas.dat, contra el valor leído a mano ---
         var armas = LectorIndices.LeerArmas();
-        GD.Print($"  {armas.Count} armas en Armas.dat");
+        GD.Print($"  {armas.Count} armas en Weapons.dat");
 
         if (armas.TryGetValue(27, out var arma27))
         {
@@ -373,7 +373,7 @@ public static class InspectorGraficos
 
         if (e.EsAnimacion)
         {
-            GD.Print($"  animación de {e.NumFrames} cuadros · velocidad {e.Velocidad}");
+            GD.Print($"  animación de {e.NumFrames} cuadros · velocidad {e.Speed}");
 
             foreach (var cuadro in LectorGraficosInd.Cuadros(indice, grh))
                 Describir(cuadro);
@@ -391,8 +391,8 @@ public static class InspectorGraficos
         // ⚠ Las dos escalas se muestran juntas a propósito: el .ind está en 1x y
         // las hojas son x4. Confundirlas recorta la esquina del sprite.
         GD.Print($"    grh {e.Grh,6} → hoja {e.FileNum,5} · " +
-                 $"1x ({e.X},{e.Y}) {e.Ancho}x{e.Alto} · " +
-                 $"x4 ({e.X * k},{e.Y * k}) {e.Ancho * k}x{e.Alto * k}   {EstadoHoja(e.FileNum)}");
+                 $"1x ({e.X},{e.Y}) {e.Width}x{e.Height} · " +
+                 $"x4 ({e.X * k},{e.Y * k}) {e.Width * k}x{e.Height * k}   {EstadoHoja(e.FileNum)}");
     }
 
     /// <summary>Si la hoja existe en la fuente, y cuánto pesa.</summary>
@@ -452,7 +452,7 @@ public static class InspectorGraficos
             {
                 salida[id] = new ObjetoAo(
                     id,
-                    Texto(campos, "Name"),
+                    Text(campos, "Name"),
                     Entero(campos, "GrhIndex"),
 
                     // ⚠ En OBJ.DAT la clave aparece como "Objtype" Y como
@@ -510,8 +510,8 @@ public static class InspectorGraficos
             return;
         }
 
-        GD.Print($"  {o.Nombre}");
-        GD.Print($"  tipo {o.Tipo} · grhIndex {o.GrhIndex} · anim {o.Anim} · ropaje {o.NumRopaje}");
+        GD.Print($"  {o.Name}");
+        GD.Print($"  tipo {o.Kind} · grhIndex {o.GrhIndex} · anim {o.Anim} · ropaje {o.NumRopaje}");
         GD.Print("  ícono:");
 
         foreach (var cuadro in LectorGraficosInd.Cuadros(indice, o.GrhIndex))
@@ -523,7 +523,7 @@ public static class InspectorGraficos
     // -------------------------------------------------------------------------
 
     /// <summary>Lo que equipa una clase en los tres tiers.</summary>
-    public sealed record TiersDeClase(string Clase, int[] Arma, int[] Armadura, int[] Casco, int[] Escudo);
+    public sealed record TiersDeClase(string DefenderClass, int[] Weapon, int[] Armadura, int[] Casco, int[] Escudo);
 
     /// <summary>
     /// Lee los tiers de <c>Bots.dat</c>.
@@ -549,8 +549,8 @@ public static class InspectorGraficos
 
         string[] deCombate =
         [
-            "Mago", "Clerigo", "Guerrero", "Asesino", "Ladron",
-            "Bardo", "Druida", "Paladin", "Cazador",
+            "Mage", "Cleric", "Warrior", "Assassin", "Thief",
+            "Bard", "Druid", "Paladin", "Hunter",
         ];
 
         string clase = "";
@@ -607,7 +607,7 @@ public static class InspectorGraficos
             ? n
             : 0;
 
-    private static string Texto(Dictionary<string, string> campos, string clave)
+    private static string Text(Dictionary<string, string> campos, string clave)
         => campos.TryGetValue(clave, out string? v) ? v : "";
 
     /// <summary>Parsea <c>625-624-623</c> en tres enteros.</summary>
@@ -641,9 +641,9 @@ public static class InspectorGraficos
 
         foreach (var t in tiers)
         {
-            GD.Print($"\n  {t.Clase}");
+            GD.Print($"\n  {t.DefenderClass}");
 
-            Fila("arma", t.Arma, objetos, indice, hojas);
+            Fila("arma", t.Weapon, objetos, indice, hojas);
             Fila("armadura", t.Armadura, objetos, indice, hojas);
         }
 
@@ -694,7 +694,7 @@ public static class InspectorGraficos
                 hojas.Add(region.FileNum);
 
             texto.Append(CultureInfo.InvariantCulture,
-                $"  [{id}] {o.Nombre} (grh {o.GrhIndex} → hoja {region?.FileNum.ToString(CultureInfo.InvariantCulture) ?? "?"})");
+                $"  [{id}] {o.Name} (grh {o.GrhIndex} → hoja {region?.FileNum.ToString(CultureInfo.InvariantCulture) ?? "?"})");
         }
 
         GD.Print(texto.ToString());
@@ -708,7 +708,7 @@ public static class InspectorGraficos
     /// arma viven en la misma hoja, así que traerlas cuesta lo mismo que traer
     /// una. El número que importa para el presupuesto de arte es este.
     /// </remarks>
-    public static void Presupuesto()
+    public static void Budget()
     {
         var tiers = LeerTiers();
         var objetos = LeerObjetos();
@@ -717,7 +717,7 @@ public static class InspectorGraficos
         var cuerpos = LectorIndices.LeerCuerpos();
         var cabezas = LectorIndices.LeerCabezas();
 
-        GD.Print("── Presupuesto de arte para las 9 clases ──────────");
+        GD.Print("── Budget de arte para las 9 clases ──────────");
 
         var hojasIconos = new SortedSet<int>();
         var hojasAnimArma = new SortedSet<int>();
@@ -727,7 +727,7 @@ public static class InspectorGraficos
 
         foreach (var t in tiers)
         {
-            foreach (int id in t.Arma)
+            foreach (int id in t.Weapon)
             {
                 if (id == 0 || !objetos.TryGetValue(id, out var o))
                     continue;
@@ -874,7 +874,7 @@ public static class InspectorGraficos
         var cuerpos = LectorIndices.LeerCuerpos();
         var enemigos = LeerEnemigos();
 
-        GD.Print("── Presupuesto de arte del bestiario ──────────────");
+        GD.Print("── Budget de arte del bestiario ──────────────");
 
         var hojas = new SortedSet<int>();
         var bodies = new SortedSet<int>();
@@ -890,7 +890,7 @@ public static class InspectorGraficos
 
             if (!cuerpos.TryGetValue(e.Body, out var cuerpo))
             {
-                sinCuerpo.Add($"{e.Nombre} (body {e.Body})");
+                sinCuerpo.Add($"{e.Name} (body {e.Body})");
                 continue;
             }
 
@@ -918,7 +918,7 @@ public static class InspectorGraficos
             }
 
             if (!alguna)
-                sinRegion.Add($"{e.Nombre} (body {e.Body})");
+                sinRegion.Add($"{e.Name} (body {e.Body})");
         }
 
         foreach (var (area, deArea) in porArea)
@@ -1065,7 +1065,7 @@ public static class InspectorGraficos
 
             foreach (var (grh, e) in graficos)
             {
-                if (e.EsAnimacion || e.FileNum != hoja || e.Ancho != 32 || e.Alto != 32)
+                if (e.EsAnimacion || e.FileNum != hoja || e.Width != 32 || e.Height != 32)
                     continue;
 
                 xs.Add(e.X);
@@ -1140,13 +1140,13 @@ public static class InspectorGraficos
 
             foreach (var (_, e) in graficos)
             {
-                if (e.EsAnimacion || e.FileNum != hoja || e.Ancho != 32 || e.Alto != 32)
+                if (e.EsAnimacion || e.FileNum != hoja || e.Width != 32 || e.Height != 32)
                     continue;
 
                 minX = System.Math.Min(minX, e.X);
                 minY = System.Math.Min(minY, e.Y);
-                maxX = System.Math.Max(maxX, e.X + e.Ancho);
-                maxY = System.Math.Max(maxY, e.Y + e.Alto);
+                maxX = System.Math.Max(maxX, e.X + e.Width);
+                maxY = System.Math.Max(maxY, e.Y + e.Height);
                 cuantos++;
             }
 
@@ -1226,7 +1226,7 @@ public static class InspectorGraficos
         {
             var e = graficos[grh];
 
-            if (e.EsAnimacion || e.Ancho != 32 || e.Alto != 32)
+            if (e.EsAnimacion || e.Width != 32 || e.Height != 32)
                 continue;
 
             if (!hojas.Contains(e.FileNum))
@@ -1291,7 +1291,7 @@ public static class InspectorGraficos
                 var t = tiles[i];
                 int k = LectorGraficosInd.Escala;
 
-                var region = new Rect2I(t.X * k, t.Y * k, t.Ancho * k, t.Alto * k);
+                var region = new Rect2I(t.X * k, t.Y * k, t.Width * k, t.Height * k);
 
                 if (region.Position.X < 0 || region.Position.Y < 0
                     || region.End.X > imagen.GetWidth() || region.End.Y > imagen.GetHeight())
@@ -1327,7 +1327,7 @@ public static class InspectorGraficos
 
         foreach (var (_, e) in graficos)
         {
-            if (!e.EsAnimacion && e.Ancho == 32 && e.Alto == 32)
+            if (!e.EsAnimacion && e.Width == 32 && e.Height == 32)
             {
                 deTile.TryGetValue(e.FileNum, out int d);
                 deTile[e.FileNum] = d + 1;
@@ -1437,11 +1437,11 @@ public static class InspectorGraficos
             // ningún tile: encontraba los bloques 4×4.
             const int lado = 32;
 
-            var clave = (e.Ancho, e.Alto);
+            var clave = (e.Width, e.Height);
             tamanos.TryGetValue(clave, out int c);
             tamanos[clave] = c + 1;
 
-            if (e.Ancho == lado && e.Alto == lado)
+            if (e.Width == lado && e.Height == lado)
             {
                 deTile.TryGetValue(e.FileNum, out int d);
                 deTile[e.FileNum] = d + 1;
@@ -1464,7 +1464,7 @@ public static class InspectorGraficos
         }
 
         // Las hojas donde MANDAN los tiles.
-        var candidatas = new List<(int Hoja, int Tiles, int Total, long Peso)>();
+        var candidatas = new List<(int Hoja, int Tiles, int Total, long Weight)>();
 
         foreach (var (hoja, cuantosTiles) in deTile)
         {
@@ -1485,8 +1485,8 @@ public static class InspectorGraficos
 
         foreach (var c in candidatas)
         {
-            GD.Print($"    {c.Hoja,5}   {c.Tiles,5}   {c.Total,7}   {c.Peso / 1024,6} KB");
-            suma += c.Peso;
+            GD.Print($"    {c.Hoja,5}   {c.Tiles,5}   {c.Total,7}   {c.Weight / 1024,6} KB");
+            suma += c.Weight;
         }
 
         GD.Print($"\n  suman {suma / 1024} KB");
@@ -1494,4 +1494,4 @@ public static class InspectorGraficos
 }
 
 /// <summary>Lo que el pipeline de arte necesita de un enemigo.</summary>
-public sealed record EnemigoArte(int Id, string Nombre, int Area, int Body, string Grafico);
+public sealed record EnemigoArte(int Id, string Name, int Area, int Body, string Graphic);

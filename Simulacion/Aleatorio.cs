@@ -15,7 +15,7 @@ namespace TowerOfArgentum.Simulacion;
 /// efecto de partículas. Un segundo generador escondido en algún lado es
 /// exactamente el bug que hace fallar la revalidación sin dejar rastro.</para>
 /// </summary>
-public sealed class Aleatorio
+public sealed class Rng
 {
     private ulong _s0;
     private ulong _s1;
@@ -30,7 +30,7 @@ public sealed class Aleatorio
     /// varios valores pobres antes de mezclarse bien. splitmix64 resuelve las
     /// dos cosas en dos líneas.
     /// </remarks>
-    public Aleatorio(ulong seed)
+    public Rng(ulong seed)
     {
         _s0 = SplitMix64(ref seed);
         _s1 = SplitMix64(ref seed);
@@ -52,7 +52,7 @@ public sealed class Aleatorio
     }
 
     /// <summary>Siguiente número crudo de 64 bits.</summary>
-    public ulong Siguiente()
+    public ulong Next()
     {
         ulong s1 = _s0;
         ulong s0 = _s1;
@@ -76,13 +76,13 @@ public sealed class Aleatorio
     /// Además el módulo es una división, que es de las operaciones más caras que
     /// hay, y esto se llama muchísimo.
     /// </remarks>
-    public int Rango(int minInclusivo, int maxExclusivo)
+    public int Between(int minInclusivo, int maxExclusivo)
     {
         if (maxExclusivo <= minInclusivo)
             return minInclusivo;
 
         ulong ancho = (ulong)(maxExclusivo - minInclusivo);
-        ulong producto = MultiplicarAlto(Siguiente(), ancho);
+        ulong producto = MultiplicarAlto(Next(), ancho);
 
         return minInclusivo + (int)producto;
     }
@@ -96,11 +96,11 @@ public sealed class Aleatorio
     /// <summary>
     /// <c>true</c> con probabilidad <paramref name="porcentaje"/> sobre 100.
     /// </summary>
-    public bool Ocurre(int porcentaje)
+    public bool Happens(int porcentaje)
     {
         if (porcentaje <= 0) return false;
         if (porcentaje >= 100) return true;
-        return Rango(0, 100) < porcentaje;
+        return Between(0, 100) < porcentaje;
     }
 
     /// <summary>
@@ -113,11 +113,11 @@ public sealed class Aleatorio
     {
         if (porMil <= 0) return false;
         if (porMil >= 1000) return true;
-        return Rango(0, 1000) < porMil;
+        return Between(0, 1000) < porMil;
     }
 
     /// <summary>
     /// Un elemento al azar de la lista, devuelto por índice.
     /// </summary>
-    public int Indice(int cantidad) => cantidad <= 0 ? -1 : Rango(0, cantidad);
+    public int Index(int cantidad) => cantidad <= 0 ? -1 : Between(0, cantidad);
 }

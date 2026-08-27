@@ -27,7 +27,7 @@ public static class MuestrearPiso
         if (soloArea >= 1 && soloArea <= 8)
         {
             var sola = PisoHorneado.Imagen(
-                soloArea, seed, Simulacion.Layouts.Elegir(seed, CargadorDatos.Actual));
+                soloArea, seed, Simulacion.Layouts.Choose(seed, CargadorDatos.Actual));
 
             if (sola is null)
             {
@@ -57,7 +57,7 @@ public static class MuestrearPiso
 
         // El mismo layout en las ocho: lo que se compara acá es la paleta y el
         // camino, no la forma de la ruta.
-        var mapa = Simulacion.Layouts.Elegir(seed, CargadorDatos.Actual);
+        var mapa = Simulacion.Layouts.Choose(seed, CargadorDatos.Actual);
 
         for (int area = 1; area <= 8; area++)
         {

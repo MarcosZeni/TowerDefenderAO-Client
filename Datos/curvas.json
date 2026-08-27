@@ -11,7 +11,7 @@
 
   // --- La Torre --------------------------------------------------------------
   //
-  // ⚠ "Torre" NO es la unidad que ataca. Es lo que se defiende. La unidad que
+  // ⚠ "Tower" NO es la unidad que ataca. Es lo que se defiende. La unidad que
   // ataca es un DEFENSOR.
   //
   // ⚠ La Torre SE DEFIENDE SOLA. Un enemigo que llega y se queda pegado a ella,
@@ -24,10 +24,10 @@
   // SEGURIDAD, no un defensor. Si pegara fuerte, no poner nada cerca de la Torre
   // sería una estrategia, y la Torre es lo que se defiende, no con lo que se
   // defiende.
-  "torre": {
-    "hpInicial": 1000,
-    "dano": 20,
-    "cadenciaTicks": 30
+  "tower": {
+    "initialHp": 1000,
+    "damage": 20,
+    "cadenceTicks": 30
   },
 
   // --- La corrida ------------------------------------------------------------
@@ -37,40 +37,40 @@
   // por área: el área es una propiedad de la oleada, no un contador que se
   // reinicia.
   //
-  // "ultimaOleadaPorArea": el reparto de las 100 entre las ocho. No es parejo
+  // "lastWavePerArea": el reparto de las 100 entre las ocho. No es parejo
   // —12 o 13— porque 100 no divide en 8; las áreas del medio se llevan la de
   // más, que es donde el jugador ya entendió el juego y todavía tiene margen
-  // para experimentar. La última tiene que ser igual a oleadasPorCorrida.
+  // para experimentar. La última tiene que ser igual a wavesPerRun.
   //
   // ⚠ Cada oleada de esta lista TRAE JEFE, y el jefe es la única fuente de perks
   // de Oro: exactamente ocho oportunidades por corrida. Eso es lo que hace que
   // matar al jefe valga más que sobrevivirlo, y lo que le pone techo a cuántos
   // Oro puede juntar un jugador — que a su vez es lo que hace que la fusión sea
   // una decisión y no un trámite.
-  "corrida": {
-    "oleadasPorCorrida": 100,
-    "cantidadAreas": 8,
-    "ultimaOleadaPorArea": [12, 24, 37, 50, 62, 75, 87, 100],
-    "oleadasEntreElecciones": 3,
-    "segundosDePreparacion": 30
+  "run": {
+    "wavesPerRun": 100,
+    "areaCount": 8,
+    "lastWavePerArea": [12, 24, 37, 50, 62, 75, 87, 100],
+    "wavesBetweenChoices": 3,
+    "preparationSeconds": 30
   },
 
   // --- Defensores ------------------------------------------------------------
   //
   // ⚠ EL NIVEL ABRE CAPACIDAD, LOS DROPS LA LLENAN.
   //
-  // "lugaresMochila" son compartidos entre perks y armas. "slotsEquipoPorClase"
+  // "backpackSlots" son compartidos entre perks y armas. "gearSlotsPerClass"
   // es UNO, el arma: concentrarlo hace la decisión de equipar nítida —hay un
   // solo lugar, y lo que entra saca lo que estaba— y deja que las armas sean
   // mucho más locas sin desbalancear.
   //
   // ⚠ Sacar un perk ya equipado LO DESTRUYE, no vuelve a la mochila. El equipo
   // sí se vende.
-  "defensores": {
-    "lugaresMochila": 15,
-    "slotsEquipoPorClase": 1,
-    "porcentajeVentaDefensor": 50,
-    "porcentajeVentaArma": 100
+  "defenders": {
+    "backpackSlots": 15,
+    "gearSlotsPerClass": 1,
+    "defenderSellPercent": 50,
+    "weaponSellPercent": 100
   },
 
   // --- Economía --------------------------------------------------------------
@@ -78,22 +78,22 @@
   // ⚠ EL CLIENTE NUNCA MANDA ORO NI PRECIOS. Esto es lo que la simulación usa
   // para derivarlos; el servidor calcula lo mismo al revalidar.
   //
-  // "fichasDeOroInicial": el oro de arranque es este múltiplo del costo de la
+  // "startingGoldTokens": el oro de arranque es este múltiplo del costo de la
   // clase que tocó primero. Antes eran 200 fijos, y eso era una lotería: 200
   // compraban cuatro ladrones o dos cazadores. Atarlo al costo de la clase lo
   // vuelve parejo — siempre alcanza para exactamente dos fichas.
   //
-  // "oroPorEnemigoAdelantado": adelantar la oleada paga por EL RIESGO, que es
+  // "goldPerCalledEnemy": adelantar la oleada paga por EL RIESGO, que es
   // cuántos bichos te quedan encima cuando llamás a la siguiente. El tope existe
   // porque sin él una oleada tardía sin limpiar pagaría más que jugarla bien.
   //
   // ⚠ ADELANTAR OLEADA no es un lujo: sin esa mecánica el desempate del ranking
   // por ticks no mide nada, y la punta de la tabla deja de ser una tabla de
   // velocidad.
-  "economia": {
-    "fichasDeOroInicial": 2,
-    "oroPorEnemigoAdelantado": 12,
-    "topeOroPorAdelantar": 400
+  "economy": {
+    "startingGoldTokens": 2,
+    "goldPerCalledEnemy": 12,
+    "callGoldCap": 400
   },
 
   // --- El presupuesto de la oleada ------------------------------------------
@@ -113,45 +113,45 @@
   // techo. El tope es "lo que cuestan capEq bichos promedio del pool", con capEq
   // subiendo LINEAL de capEquivalenteMin a capEquivalenteMax DENTRO de cada
   // área: la dificultad sigue subiendo, pero atada a lo que el área vende.
-  "presupuesto": {
+  "budget": {
     "base": 35,
-    "cuadratico": 9,
-    "capEquivalenteMin": 50,
-    "capEquivalenteMax": 65
+    "quadratic": 9,
+    "equivalentCapMin": 50,
+    "equivalentCapMax": 65
   },
 
   // --- Las otras curvas por oleada ------------------------------------------
   //
-  // Todas son base + porOleada × n, salvo donde diga otra cosa.
+  // Todas son base + perWave × n, salvo donde diga otra cosa.
   //
-  // ⚠ "presupuestoDropJefe" es LINEAL mientras la del presupuesto de oleada es
+  // ⚠ "bossDropBudget" es LINEAL mientras la del presupuesto de oleada es
   // CUADRÁTICA, y eso es deliberado: si las dos crecieran igual, el jugador iría
   // siempre al mismo ritmo que la dificultad y la corrida no se sentiría más
   // dura nunca. Que la dificultad crezca más rápido que el equipo es lo que hace
   // que la corrida TERMINE — que es el punto de que sean 100 oleadas y no
   // infinitas. La diferencia la cubre el jugador jugando mejor.
   //
-  // "presupuestoItemTienda" es más chico que el del jefe a propósito: lo que se
+  // "shopItemBudget" es más chico que el del jefe a propósito: lo que se
   // compra tiene que ser peor que lo que se gana matando al jefe, o matar al
   // jefe deja de valer la pena.
   //
-  // "bonusOroLimpiar" es la mitad de lo que era: con 20 + n×12 el tablero se
+  // "clearGoldBonus" es la mitad de lo que era: con 20 + n×12 el tablero se
   // llenaba en pocas oleadas y después el oro quedaba suelto sin nada que comprar.
   //
-  // "intervaloSpawn" y "chancePerkNpc" son limitar(base + porOleada×n, min, max)
-  // con porOleada fraccionario escrito como divisor.
-  "curvasPorOleada": {
-    "bonusOroLimpiar":       { "base": 10, "porOleada": 6 },
-    "presupuestoDropJefe":   { "base": 40, "porOleada": 6 },
-    "presupuestoItemTienda": { "base": 30, "porOleada": 5 },
+  // "spawnIntervalTicks" y "npcPerkChance" son limitar(base + perWave×n, min, max)
+  // con perWave fraccionario escrito como divisor.
+  "perWaveCurves": {
+    "clearGoldBonus":       { "base": 10, "perWave": 6 },
+    "bossDropBudget":   { "base": 40, "perWave": 6 },
+    "shopItemBudget": { "base": 30, "perWave": 5 },
 
     // Los spawns se aprietan con las oleadas, así que la presión no crece solo
     // por cantidad sino por concentración. ticks = limitar(base - n/divisor, min, max).
-    "intervaloSpawnTicks":   { "base": 45, "divisor": 3, "min": 8, "max": 45 },
+    "spawnIntervalTicks":   { "base": 45, "divisor": 3, "min": 8, "max": 45 },
 
     // Sube con la corrida: más adelante, más bichos con perk.
     // porcentaje = limitar(n / divisor, min, max).
-    "chancePerkNpc":         { "divisor": 2, "min": 0, "max": 30 }
+    "npcPerkChance":         { "divisor": 2, "min": 0, "max": 30 }
   },
 
   // --- La tienda de la corrida ----------------------------------------------
@@ -167,12 +167,12 @@
   // El Plata cuesta el triple que el Bronce, no el doble, porque además de ser
   // más grande OCUPA UNO DE LOS MISMOS SEIS SLOTS: lo que se paga es el lugar,
   // no solo el número.
-  "tienda": {
-    "perksEnStock": 2,
-    "armasEnStock": 2,
-    "chanceBronce": 65,
-    "precioPerkBronce": { "base":  80, "porOleada":  6 },
-    "precioPerkPlata":  { "base": 240, "porOleada": 18 }
+  "shop": {
+    "perksInStock": 2,
+    "weaponsInStock": 2,
+    "bronzeChance": 65,
+    "bronzePerkPrice": { "base":  80, "perWave":  6 },
+    "silverPerkPrice":  { "base": 240, "perWave": 18 }
   },
 
   // --- Los drops -------------------------------------------------------------
@@ -180,7 +180,7 @@
   // ⚠ El bicho común tira bronce/plata y EL JEFE ES LA ÚNICA FUENTE DE ORO.
   // ⚠ Los Únicos NO CAEN: se fusionan (ver planos.json).
   //
-  // "chanceComun" no sube con la oleada. Lo que sube es la CALIDAD, no la
+  // "commonChance" no sube con la oleada. Lo que sube es la CALIDAD, no la
   // cantidad: más drops tarde solo llenarían la mochila más rápido, y la
   // decisión de qué tirar se volvería constante en vez de puntual.
   //
@@ -188,8 +188,8 @@
   // área. Con 15 lugares de mochila, eso aprieta recién entrando a la segunda
   // área — que es exactamente el ritmo que el diseño quiere.
   "drops": {
-    "chanceComun": 4,
-    "chanceBronce": 70
+    "commonChance": 4,
+    "bronzeChance": 70
   },
 
   // --- Cómo se arma la oleada con ese presupuesto ---------------------------
@@ -207,22 +207,22 @@
   // desfilar con la Torre intacta. Medido: corridas clavadas contra el techo de
   // 700.000 ticks.
   //
-  // "pesoAreaActual" / "pesoAreaAnterior": los bichos de la zona previa siguen
+  // "currentAreaWeight" / "previousAreaWeight": los bichos de la zona previa siguen
   // apareciendo un rato. Suaviza el salto entre áreas —que si no se siente como
   // un muro— y le da al jugador la satisfacción de ver cómo lo que antes lo
   // mataba ahora cae de un golpe. Pesan menos para que el área nueva domine.
   //
-  // "costoNpc": derivado de los stats en vez de escrito a mano por criatura. Si
+  // "npcCost": derivado de los stats en vez de escrito a mano por criatura. Si
   // la fórmula es buena, AGREGAR UN BICHO NUEVO NO OBLIGA A REBALANCEAR NADA. El
   // HP pesa más que el daño porque en un tower defense aguantar es lo que cuesta
   // matar; el daño solo importa si llega a la Torre. La velocidad entra porque
   // un bicho rápido pasa menos tiempo bajo fuego.
-  "oleada": {
+  "wave": {
     "maxNpcs": 60,
-    "pesoAreaActual": 40,
-    "pesoAreaAnterior": 15,
-    "costoNpc": { "divisorHp": 4, "divisorDanoMax": 2, "divisorVelocidad": 8 },
-    "intervaloSpawnPorDefecto": 30
+    "currentAreaWeight": 40,
+    "previousAreaWeight": 15,
+    "npcCost": { "hpDivisor": 4, "maxDamageDivisor": 2, "speedDivisor": 8 },
+    "defaultSpawnInterval": 30
   },
 
   // --- Los perks de los NPCs -------------------------------------------------
@@ -239,22 +239,22 @@
   // viejos (+50% por 12, sin tope) fabricaban muros de HP aleatorios en la mitad
   // de la corrida.
   //
-  // "chanceVidaEnLaTirada": cuando un NPC gana la tirada de perk, este % va a
+  // "healthChanceInRoll": cuando un NPC gana la tirada de perk, este % va a
   // vida y el resto a velocidad.
-  // "chanceVelocidadEnSobrante": al repartir el presupuesto que no entró en NPCs
+  // "speedChanceInLeftover": al repartir el presupuesto que no entró en NPCs
   // nuevos, esta es la probabilidad de que la pasada vaya a velocidad.
   //
   // ⚠ La velocidad tiene techo porque UN BICHO LO BASTANTE RÁPIDO CRUZA EL MAPA
   // ENTRE DOS DISPAROS y no hay defensa que lo toque.
-  "perksNpc": {
-    "costoVida": 20,
-    "costoVelocidad": 15,
-    "escalonVida": 25,
-    "escalonVelocidad": 8,
-    "maxVida": 200,
-    "maxVelocidad": 64,
-    "chanceVidaEnLaTirada": 50,
-    "chanceVelocidadEnSobrante": 25
+  "npcPerks": {
+    "healthCost": 20,
+    "speedCost": 15,
+    "healthStep": 25,
+    "speedStep": 8,
+    "maxHealth": 200,
+    "maxSpeed": 64,
+    "healthChanceInRoll": 50,
+    "speedChanceInLeftover": 25
   },
 
   // --- El jefe ---------------------------------------------------------------
@@ -275,9 +275,9 @@
   // el filtro del importador— se cae al más duro del área, que es lo correcto:
   // mejor un final genérico que una corrida que no se puede terminar.
   // Vacío = siempre el más duro.
-  "jefe": {
-    "divisorVidaExtra": 8,
-    "maxVidaExtra": 150,
-    "nombreJefeFinal": "Dragón Rojo"
+  "boss": {
+    "extraHealthDivisor": 8,
+    "maxExtraHealth": 150,
+    "finalBossName": "Dragón Rojo"
   }
 }

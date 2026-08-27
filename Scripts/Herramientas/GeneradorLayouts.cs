@@ -50,69 +50,69 @@ public static class GeneradorLayouts
     /// PEOR que una plegada de 31, así que lo que importa no es el recorrido sino
     /// cuántas pasadas ve un mismo defensor.
     /// </remarks>
-    private static readonly (string Nombre, Celda[] Vertices)[] Recetas =
+    private static readonly (string Name, Cell[] Vertices)[] Recetas =
     [
         // Serpiente plegada: tres tramos horizontales a dos celdas. Las franjas de
         // en medio cubren dos pasadas cada una.
         ("serpiente", [
-            new Celda(3, 2), new Celda(14, 2), new Celda(14, 4),
-            new Celda(5, 4), new Celda(5, 6), new Celda(13, 6),
+            new Cell(3, 2), new Cell(14, 2), new Cell(14, 4),
+            new Cell(5, 4), new Cell(5, 6), new Cell(13, 6),
         ]),
 
         // Peine: cinco dientes verticales a dos celdas. La forma más densa de
         // todas, y donde un solo alcance largo paga más.
         ("peine", [
-            new Celda(3, 8), new Celda(3, 3), new Celda(5, 3),
-            new Celda(5, 7), new Celda(7, 7), new Celda(7, 3),
-            new Celda(9, 3), new Celda(9, 7), new Celda(11, 7),
-            new Celda(11, 4),
+            new Cell(3, 8), new Cell(3, 3), new Cell(5, 3),
+            new Cell(5, 7), new Cell(7, 7), new Cell(7, 3),
+            new Cell(9, 3), new Cell(9, 7), new Cell(11, 7),
+            new Cell(11, 4),
         ]),
 
         // Espiral hacia adentro, con la Torre casi en el centro: desde el medio se
         // tocan varias vueltas a la vez.
         ("espiral", [
-            new Celda(3, 2), new Celda(13, 2), new Celda(13, 6),
-            new Celda(5, 6), new Celda(5, 4), new Celda(11, 4),
+            new Cell(3, 2), new Cell(13, 2), new Cell(13, 6),
+            new Cell(5, 6), new Cell(5, 4), new Cell(11, 4),
         ]),
 
         // Uve corta: dos pasadas horizontales pegadas. La más simple de leer.
         ("uve", [
-            new Celda(3, 3), new Celda(15, 3), new Celda(15, 5),
-            new Celda(4, 5),
+            new Cell(3, 3), new Cell(15, 3), new Cell(15, 5),
+            new Cell(4, 5),
         ]),
 
         // Zigzag vertical apretado. Le da valor a las columnas del medio, que en
         // las rutas horizontales quedan muertas.
         ("zigzag", [
-            new Celda(3, 3), new Celda(3, 8), new Celda(5, 8),
-            new Celda(5, 3), new Celda(7, 3), new Celda(7, 8),
-            new Celda(9, 8), new Celda(9, 5),
+            new Cell(3, 3), new Cell(3, 8), new Cell(5, 8),
+            new Cell(5, 3), new Cell(7, 3), new Cell(7, 8),
+            new Cell(9, 8), new Cell(9, 5),
         ]),
 
         // Gancho: entra por abajo, sube por la derecha y vuelve plegado al centro.
         ("gancho", [
-            new Celda(4, 8), new Celda(14, 8), new Celda(14, 3),
-            new Celda(6, 3), new Celda(6, 5), new Celda(12, 5),
+            new Cell(4, 8), new Cell(14, 8), new Cell(14, 3),
+            new Cell(6, 3), new Cell(6, 5), new Cell(12, 5),
         ]),
 
         // Doble ese al revés: arranca abajo y sube plegándose.
         ("dobleEse", [
-            new Celda(3, 8), new Celda(12, 8), new Celda(12, 6),
-            new Celda(4, 6), new Celda(4, 4), new Celda(13, 4),
+            new Cell(3, 8), new Cell(12, 8), new Cell(12, 6),
+            new Cell(4, 6), new Cell(4, 4), new Cell(13, 4),
         ]),
 
         // Caracol: vuelta larga por afuera y cierre hacia el medio.
         ("caracol", [
-            new Celda(4, 3), new Celda(14, 3), new Celda(14, 7),
-            new Celda(6, 7), new Celda(6, 5), new Celda(11, 5),
+            new Cell(4, 3), new Cell(14, 3), new Cell(14, 7),
+            new Cell(6, 7), new Cell(6, 5), new Cell(11, 5),
         ]),
 
         // Escalera: baja en escalones y vuelve por abajo de un tirón. La única con
         // una recta larga al final, para que no todas se jueguen igual.
         ("escalera", [
-            new Celda(2, 2), new Celda(6, 2), new Celda(6, 4),
-            new Celda(10, 4), new Celda(10, 6), new Celda(14, 6),
-            new Celda(14, 8), new Celda(5, 8),
+            new Cell(2, 2), new Cell(6, 2), new Cell(6, 4),
+            new Cell(10, 4), new Cell(10, 6), new Cell(14, 6),
+            new Cell(14, 8), new Cell(5, 8),
         ]),
     ];
 
@@ -128,7 +128,7 @@ public static class GeneradorLayouts
         string carpeta = ProjectSettings.GlobalizePath("res://Datos/layouts");
         Directory.CreateDirectory(carpeta);
 
-        GD.Print("── Generar layouts ────────────────────────────────");
+        GD.Print("── Generate layouts ────────────────────────────────");
 
         int escritos = 0;
         int rechazados = 0;
@@ -152,7 +152,7 @@ public static class GeneradorLayouts
             }
 
             string ruta = Path.Combine(carpeta, $"gen-{nombre}.json");
-            mapa.Guardar(ruta);
+            mapa.Store(ruta);
             escritos++;
 
             GD.Print($"  ✓ {nombre,-12} ruta {mapa.LargoRuta,3} celdas · " +
@@ -311,12 +311,12 @@ public static class GeneradorLayouts
                 // que dar lo mismo, o comparar layouts no significa nada.
                 ulong seed = 1000UL + ((ulong)i * 7919UL);
 
-                var r = CorredorHeadless.Correr(seed, new LogAcciones(), mapa, plan);
+                var r = CorredorHeadless.Correr(seed, new ActionLog(), mapa, plan);
 
-                suma += r.Oleada;
-                defensores += r.Defensores;
-                peor = System.Math.Min(peor, r.Oleada);
-                mejor = System.Math.Max(mejor, r.Oleada);
+                suma += r.Wave;
+                defensores += r.Defenders;
+                peor = System.Math.Min(peor, r.Wave);
+                mejor = System.Math.Max(mejor, r.Wave);
             }
 
             int media = suma / System.Math.Max(1, corridas);
@@ -354,23 +354,23 @@ public static class GeneradorLayouts
     /// permite probar cualquier layout: unas coordenadas escritas a mano solo
     /// sirven para el mapa para el que se escribieron.
     /// </remarks>
-    private static Mapa? AMapa(LayoutMapa layout, out List<(int Tick, Celda Celda)> plan)
+    private static Map? AMapa(LayoutMapa layout, out List<(int Tick, Cell Cell)> plan)
     {
         plan = [];
 
-        Celda? entrada = null;
-        Celda? torre = null;
-        var colocables = new List<Celda>();
+        Cell? entrada = null;
+        Cell? torre = null;
+        var colocables = new List<Cell>();
 
-        for (int y = 0; y < LayoutMapa.Alto; y++)
+        for (int y = 0; y < LayoutMapa.Height; y++)
         {
-            for (int x = 0; x < LayoutMapa.Ancho; x++)
+            for (int x = 0; x < LayoutMapa.Width; x++)
             {
                 switch (layout[x, y])
                 {
-                    case CeldaLayout.Entrada: entrada = new Celda(x, y); break;
-                    case CeldaLayout.Torre: torre = new Celda(x, y); break;
-                    case CeldaLayout.Colocable: colocables.Add(new Celda(x, y)); break;
+                    case CeldaLayout.Entrada: entrada = new Cell(x, y); break;
+                    case CeldaLayout.Tower: torre = new Cell(x, y); break;
+                    case CeldaLayout.Colocable: colocables.Add(new Cell(x, y)); break;
                 }
             }
         }
@@ -378,7 +378,7 @@ public static class GeneradorLayouts
         if (entrada is not { } e || torre is not { } t)
             return null;
 
-        var camino = layout.Trazar(e, t, out _);
+        var camino = layout.Trace(e, t, out _);
 
         if (camino is null)
             return null;
@@ -388,7 +388,7 @@ public static class GeneradorLayouts
         // Ruta interpola entre vértices, así que pasarle las 28 celdas del camino
         // le daría 27 tramos de una celda: el mismo recorrido, pero con veintisiete
         // veces más trabajo en cada consulta de posición.
-        var vertices = new List<Celda> { camino[0] };
+        var vertices = new List<Cell> { camino[0] };
 
         for (int i = 1; i < camino.Count - 1; i++)
         {
@@ -403,17 +403,17 @@ public static class GeneradorLayouts
 
         vertices.Add(camino[^1]);
 
-        var mapa = new Mapa(
-            LayoutMapa.Ancho, LayoutMapa.Alto, new Ruta(vertices), colocables);
+        var mapa = new Map(
+            LayoutMapa.Width, LayoutMapa.Height, new Route(vertices), colocables);
 
         // Un lugar cada tres celdas de camino, siempre pegado: cubre el recorrido
         // parejo en vez de amontonar todo en el arranque.
-        var usadas = new HashSet<Celda>();
+        var usadas = new HashSet<Cell>();
         int tick = 60;
 
         for (int i = 0; i < camino.Count; i += 3)
         {
-            foreach (var v in LayoutMapa.Vecinos(camino[i]))
+            foreach (var v in LayoutMapa.Neighbours(camino[i]))
             {
                 if (layout[v.X, v.Y] != CeldaLayout.Colocable || !usadas.Add(v))
                     continue;

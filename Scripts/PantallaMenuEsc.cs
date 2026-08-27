@@ -34,7 +34,7 @@ public partial class PantallaMenuEsc : Control
     /// <summary>El panel de opciones, que este menú abre y esconde.</summary>
     private readonly PantallaOpciones _opciones;
 
-    private const int Ancho = 520;
+    private const int Width = 520;
     private const int AltoBoton = 74;
 
     public PantallaMenuEsc(Juego juego, PantallaOpciones opciones)
@@ -69,19 +69,24 @@ public partial class PantallaMenuEsc : Control
     /// Los botones, de arriba para abajo. El orden es por frecuencia de uso:
     /// lo que más se aprieta, más cerca de donde ya está el mouse.
     /// </summary>
-    private static readonly (string Titulo, string Detalle)[] _botones =
+    /// <remarks>
+    /// Lo que se guarda acá son las <b>claves</b>, no los textos: el idioma se
+    /// puede cambiar desde opciones y esta tabla es estática: si guardara el
+    /// texto ya traducido quedaría congelado en el idioma del arranque.
+    /// </remarks>
+    private static readonly (string ClaveTitulo, string ClaveDetalle)[] _botones =
     [
-        ("SEGUIR JUGANDO", "o ESC de nuevo"),
-        ("OPCIONES", "ventana · sonido · animaciones · teclas"),
-        ("GUARDAR Y SALIR AL MENÚ", "la corrida queda para continuar"),
-        ("GUARDAR Y CERRAR EL JUEGO", "cierra la ventana"),
+        ("ui.pausa.seguir", "ui.pausa.seguir.detalle"),
+        ("ui.pausa.opciones", "ui.pausa.opciones.detalle"),
+        ("ui.pausa.salir", "ui.pausa.salir.detalle"),
+        ("ui.pausa.cerrar", "ui.pausa.cerrar.detalle"),
     ];
 
     private static Rect2 RectBoton(int i)
         => new(
-            (Escala.LienzoAncho - Ancho) / 2f,
+            (Escala.LienzoAncho - Width) / 2f,
             360 + (i * (AltoBoton + 18)),
-            Ancho,
+            Width,
             AltoBoton);
 
     /// <summary>
@@ -90,16 +95,16 @@ public partial class PantallaMenuEsc : Control
     /// </summary>
     public override void _Input(InputEvent evento)
     {
-        var p = _juego.Partida;
+        var p = _juego.Run;
 
-        if (p is null || p.Estado != EstadoPartida.EnCurso)
+        if (p is null || p.State != RunState.InProgress)
             return;
 
         if (evento is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
             // Con la mochila abierta ESC es de ella: la cierra. El menú atiende
             // el ESC siguiente. La elección no cede nunca — es modal de verdad.
-            if (!_abierto && (_juego.Mochila is { Abierta: true } || p.EsperandoEleccion))
+            if (!_abierto && (_juego.Backpack is { Abierta: true } || p.WaitingForChoice))
                 return;
 
             Alternar(!_abierto);
@@ -186,10 +191,9 @@ public partial class PantallaMenuEsc : Control
 
         DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.72f));
 
-        Texto("PAUSA", Escala.LienzoAncho / 2f - 86, 280, 52, new Color(0.95f, 0.95f, 0.92f));
+        TextCentrado(Loc.Get("ui.pausa.titulo"), 280, 52, new Color(0.95f, 0.95f, 0.92f));
 
-        Texto("el reloj está detenido · la corrida se guarda sola al final de cada oleada",
-            Escala.LienzoAncho / 2f - 320, 318, 18, new Color(0.6f, 0.6f, 0.58f));
+        TextCentrado(Loc.Get("ui.pausa.aviso"), 318, 18, new Color(0.6f, 0.6f, 0.58f));
 
         for (int i = 0; i < _botones.Length; i++)
         {
@@ -201,14 +205,28 @@ public partial class PantallaMenuEsc : Control
                 resaltado ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.15f),
                 filled: false, width: resaltado ? 3f : 1.5f);
 
-            Texto(_botones[i].Titulo, r.Position.X + 28, r.Position.Y + 34, 23,
+            Text(Loc.Get(_botones[i].ClaveTitulo), r.Position.X + 28, r.Position.Y + 34, 23,
                 new Color(0.92f, 0.92f, 0.9f));
-            Texto(_botones[i].Detalle, r.Position.X + 28, r.Position.Y + 58, 15,
+            Text(Loc.Get(_botones[i].ClaveDetalle), r.Position.X + 28, r.Position.Y + 58, 15,
                 new Color(0.58f, 0.58f, 0.56f));
         }
 
     }
 
-    private void Texto(string s, float x, float y, int tamano, Color color)
+    private void Text(string s, float x, float y, int tamano, Color color)
         => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
+
+    /// <summary>
+    /// Centrado midiendo el texto, no con un offset a ojo.
+    /// </summary>
+    /// <remarks>
+    /// Antes el título llevaba un −86 fijo, calculado para «PAUSA»; con el texto
+    /// traducido el ancho cambia en cada idioma y el offset fijo lo descentra.
+    /// </remarks>
+    private void TextCentrado(string s, float y, int tamano, Color color)
+    {
+        float ancho = _fuente.GetStringSize(s, HorizontalAlignment.Left, -1, tamano).X;
+
+        Text(s, (Escala.LienzoAncho - ancho) / 2f, y, tamano, color);
+    }
 }

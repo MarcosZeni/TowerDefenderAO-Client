@@ -28,8 +28,8 @@ public partial class PantallaOpciones : Control
     /// <summary>Qué atajo está esperando una tecla. −1 = ninguno.</summary>
     private int _capturando = -1;
 
-    private const int Ancho = 900;
-    private const int X0 = (Escala.LienzoAncho - Ancho) / 2;
+    private const int Width = 900;
+    private const int X0 = (Escala.LienzoAncho - Width) / 2;
     private const int Y0 = 120;
     private const int AltoFila = 46;
 
@@ -56,7 +56,7 @@ public partial class PantallaOpciones : Control
         _abierto = false;
         _capturando = -1;
         Visible = false;
-        Configuracion.Guardar();
+        Configuracion.Store();
         Cerrado?.Invoke();
     }
 
@@ -86,13 +86,13 @@ public partial class PantallaOpciones : Control
 
     /// <summary>La fila de índice <paramref name="i"/>, o los botones del final.</summary>
     private static Rect2 RectFila(int i)
-        => new(X0, Y0 + (i * AltoFila), Ancho, AltoFila - 6);
+        => new(X0, Y0 + (i * AltoFila), Width, AltoFila - 6);
 
     /// <summary>Las cajitas que se pueden apretar dentro de una fila de valor.</summary>
     private static Rect2 RectValor(int i, int columna, int deCuantas)
     {
         float ancho = 150;
-        float x = X0 + Ancho - 24 - ((deCuantas - columna) * (ancho + 10));
+        float x = X0 + Width - 24 - ((deCuantas - columna) * (ancho + 10));
 
         return new Rect2(x, Y0 + (i * AltoFila) + 4, ancho, AltoFila - 14);
     }
@@ -219,22 +219,22 @@ public partial class PantallaOpciones : Control
 
             case Fila.VolumenMusica:
                 Configuracion.VolumenMusica = VolumenEn(i, donde, Configuracion.VolumenMusica);
-                Configuracion.Guardar();
+                Configuracion.Store();
                 break;
 
             case Fila.VolumenSonido:
                 Configuracion.VolumenSonido = VolumenEn(i, donde, Configuracion.VolumenSonido);
-                Configuracion.Guardar();
+                Configuracion.Store();
                 break;
 
             case Fila.AnimarArmas:
                 Configuracion.AnimarArmas = !Configuracion.AnimarArmas;
-                Configuracion.Guardar();
+                Configuracion.Store();
                 break;
 
             case Fila.AnimarEfectos:
                 Configuracion.AnimarEfectos = !Configuracion.AnimarEfectos;
-                Configuracion.Guardar();
+                Configuracion.Store();
                 break;
         }
 
@@ -242,7 +242,7 @@ public partial class PantallaOpciones : Control
     }
 
     private static Rect2 RectBarra(int i)
-        => new(X0 + Ancho - 344, Y0 + (i * AltoFila) + 12, 320, AltoFila - 30);
+        => new(X0 + Width - 344, Y0 + (i * AltoFila) + 12, 320, AltoFila - 30);
 
     /// <summary>Dónde cayó el click sobre la barra, en 0-100. Fuera, no cambia.</summary>
     private static int VolumenEn(int i, Vector2 donde, int actual)
@@ -269,31 +269,31 @@ public partial class PantallaOpciones : Control
 
         DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.86f));
 
-        Texto("OPCIONES", X0, Y0 - 34, 40, new Color(0.95f, 0.95f, 0.92f));
+        Text(Loc.Get("ui.opciones.titulo"), X0, Y0 - 34, 40, new Color(0.95f, 0.95f, 0.92f));
 
-        Titulo(IndiceDe(Fila.TituloVentana), "VENTANA");
+        Titulo(IndiceDe(Fila.TituloVentana), Loc.Get("ui.opciones.ventana"));
         ModoVentana(IndiceDe(Fila.ModoVentana));
         Resoluciones(IndiceDe(Fila.Resolucion));
 
-        Titulo(IndiceDe(Fila.TituloSonido), "SONIDO");
-        Barra(IndiceDe(Fila.VolumenMusica), "Música", Configuracion.VolumenMusica);
-        Barra(IndiceDe(Fila.VolumenSonido), "Efectos", Configuracion.VolumenSonido);
+        Titulo(IndiceDe(Fila.TituloSonido), Loc.Get("ui.opciones.sonido"));
+        Barra(IndiceDe(Fila.VolumenMusica), Loc.Get("ui.opciones.musica"), Configuracion.VolumenMusica);
+        Barra(IndiceDe(Fila.VolumenSonido), Loc.Get("ui.opciones.efectos"), Configuracion.VolumenSonido);
 
-        Titulo(IndiceDe(Fila.TituloAnimaciones), "ANIMACIONES");
-        Interruptor(IndiceDe(Fila.AnimarArmas), "Armas de los defensores", Configuracion.AnimarArmas);
-        Interruptor(IndiceDe(Fila.AnimarEfectos), "Portal y cristal de la Torre", Configuracion.AnimarEfectos);
+        Titulo(IndiceDe(Fila.TituloAnimaciones), Loc.Get("ui.opciones.animaciones"));
+        Interruptor(IndiceDe(Fila.AnimarArmas), Loc.Get("ui.opciones.armas"), Configuracion.AnimarArmas);
+        Interruptor(IndiceDe(Fila.AnimarEfectos), Loc.Get("ui.opciones.portal"), Configuracion.AnimarEfectos);
 
-        Titulo(IndiceDe(Fila.TituloTeclas), "TECLAS");
+        Titulo(IndiceDe(Fila.TituloTeclas), Loc.Get("ui.opciones.teclas"));
 
         for (int a = 0; a < CantidadAtajos; a++)
             Atajo(IndiceDe(Fila.PrimerAtajo) + a, (Atajo)a);
 
-        Boton(FilaRestaurar, "Restaurar las teclas de fábrica");
-        Boton(FilaVolver, "Volver   ·   ESC");
+        Boton(FilaRestaurar, Loc.Get("ui.opciones.restaurar"));
+        Boton(FilaVolver, Loc.Get("ui.opciones.volver"));
     }
 
     private void Titulo(int i, string texto)
-        => Texto(texto, X0, Y0 + (i * AltoFila) + 30, 20, new Color(0.55f, 0.75f, 0.95f));
+        => Text(texto, X0, Y0 + (i * AltoFila) + 30, 20, new Color(0.55f, 0.75f, 0.95f));
 
     private void Fondo(int i, bool interactiva)
     {
@@ -309,32 +309,32 @@ public partial class PantallaOpciones : Control
     private void ModoVentana(int i)
     {
         Fondo(i, interactiva: true);
-        Texto("Modo", X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        Text(Loc.Get("ui.opciones.modo"), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
 
         bool completa = DisplayServer.WindowGetMode() is DisplayServer.WindowMode.ExclusiveFullscreen
             or DisplayServer.WindowMode.Fullscreen;
 
-        Opcion(RectValor(i, 0, 2), "Pantalla completa", completa);
-        Opcion(RectValor(i, 1, 2), "En ventana", !completa);
+        Choice(RectValor(i, 0, 2), Loc.Get("ui.opciones.completa"), completa);
+        Choice(RectValor(i, 1, 2), Loc.Get("ui.opciones.enventana"), !completa);
     }
 
     private void Resoluciones(int i)
     {
         Fondo(i, interactiva: true);
-        Texto("Resolución", X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        Text(Loc.Get("ui.opciones.resolucion"), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
 
         var actual = DisplayServer.WindowGetSize();
 
         for (int r = 0; r < Resolucion.Opciones.Length; r++)
         {
             var o = Resolucion.Opciones[r];
-            Opcion(RectResolucion(i, r), $"{o.X}", o == actual);
+            Choice(RectResolucion(i, r), $"{o.X}", o == actual);
         }
 
         // ⚠ La resolución cambia la NITIDEZ, no el campo visible: el lienzo es
         // siempre 1920x1080 y `keep` no le da más ruta a nadie. Decirlo acá evita
         // que el jugador piense que en 4K ve más mapa (INTERFAZ.md §1).
-        Texto("no cambia el campo visible, solo la nitidez",
+        Text(Loc.Get("ui.opciones.nitidez"),
             X0 + 300 + (Resolucion.Opciones.Length * 96) + 8,
             Y0 + (i * AltoFila) + 27, 14, new Color(0.5f, 0.5f, 0.48f));
     }
@@ -342,7 +342,7 @@ public partial class PantallaOpciones : Control
     private void Barra(int i, string nombre, int valor)
     {
         Fondo(i, interactiva: true);
-        Texto(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        Text(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
 
         var barra = RectBarra(i);
 
@@ -350,37 +350,39 @@ public partial class PantallaOpciones : Control
         DrawRect(new Rect2(barra.Position, new Vector2(barra.Size.X * valor / 100f, barra.Size.Y)),
             valor > 0 ? new Color(0.35f, 0.75f, 0.95f) : new Color(0.4f, 0.4f, 0.4f));
 
-        Texto(valor == 0 ? "mudo" : $"{valor}",
+        Text(valor == 0 ? Loc.Get("ui.opciones.mudo") : $"{valor}",
             barra.End.X - 52, Y0 + (i * AltoFila) + 28, 17, new Color(0.8f, 0.8f, 0.78f));
     }
 
     private void Interruptor(int i, string nombre, bool activo)
     {
         Fondo(i, interactiva: true);
-        Texto(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        Text(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
 
-        Opcion(RectValor(i, 0, 1), activo ? "Sí" : "No", activo);
+        Choice(RectValor(i, 0, 1), Loc.Get(activo ? "ui.opciones.si" : "ui.opciones.no"), activo);
     }
 
     private void Atajo(int i, Atajo atajo)
     {
         Fondo(i, interactiva: true);
-        Texto(Configuracion.NombreDe(atajo), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        Text(Configuracion.NombreDe(atajo), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
 
         bool capturando = _capturando == (int)atajo;
 
-        Opcion(RectValor(i, 0, 1),
-            capturando ? "apretá una tecla" : Configuracion.NombreDeTecla(Configuracion.TeclaDe(atajo)),
+        Choice(RectValor(i, 0, 1),
+            capturando
+                ? Loc.Get("ui.opciones.captura")
+                : Configuracion.NombreDeTecla(Configuracion.TeclaDe(atajo)),
             capturando);
     }
 
     private void Boton(int i, string texto)
     {
         Fondo(i, interactiva: true);
-        Texto(texto, X0 + 20, Y0 + (i * AltoFila) + 28, 20, new Color(0.85f, 0.9f, 0.88f));
+        Text(texto, X0 + 20, Y0 + (i * AltoFila) + 28, 20, new Color(0.85f, 0.9f, 0.88f));
     }
 
-    private void Opcion(Rect2 r, string texto, bool elegida)
+    private void Choice(Rect2 r, string texto, bool elegida)
     {
         DrawRect(r, elegida ? new Color(0.16f, 0.42f, 0.24f) : new Color(0.14f, 0.14f, 0.18f));
         DrawRect(r, elegida ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.14f),
@@ -388,12 +390,12 @@ public partial class PantallaOpciones : Control
 
         float ancho = _fuente.GetStringSize(texto, HorizontalAlignment.Left, -1, 17).X;
 
-        Texto(texto, r.Position.X + ((r.Size.X - ancho) / 2f), r.Position.Y + 22, 17,
+        Text(texto, r.Position.X + ((r.Size.X - ancho) / 2f), r.Position.Y + 22, 17,
             elegida ? new Color(0.9f, 0.98f, 0.92f) : new Color(0.72f, 0.72f, 0.7f));
     }
 
     private static readonly Color Blanco = new(0.9f, 0.9f, 0.88f);
 
-    private void Texto(string s, float x, float y, int tamano, Color color)
+    private void Text(string s, float x, float y, int tamano, Color color)
         => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }
