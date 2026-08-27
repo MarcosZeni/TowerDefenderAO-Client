@@ -40,6 +40,9 @@ public sealed class Partida
     /// <summary>Índice espacial de enemigos, para el alcance.</summary>
     private readonly GrillaEspacial _grilla;
 
+    /// <summary>Último tick en que curó Vampirismo, por clase. Ver la habilidad.</summary>
+    private readonly Dictionary<Clase, int> _ultimaCuraPorClase = [];
+
     /// <summary>Buffer reusado por ElegirObjetivo, para no alocar por disparo.</summary>
     private readonly List<int> _candidatos = [];
 
@@ -793,9 +796,17 @@ public sealed class Partida
 
     private void FaseExpirar()
     {
-        // Todavía no hay efectos con duración. La fase existe igual y en su
-        // lugar del orden: agregarla después correría todo lo de abajo un lugar,
-        // y eso cambia los resultados de las corridas ya guardadas.
+        // Los dos efectos con duración que existen (propuesta V2): el slow y la
+        // marca de Codicia. Vencen acá, en la fase que siempre estuvo reservada
+        // para esto.
+        foreach (var e in _enemigos)
+        {
+            if (e.SlowPorciento > 0 && Tick >= e.SlowExpiraTick)
+                e.SlowPorciento = 0;
+
+            if (e.OroExtraPorciento > 0 && Tick >= e.OroExtraExpiraTick)
+                e.OroExtraPorciento = 0;
+        }
     }
 
     // =========================================================================
@@ -915,6 +926,10 @@ public sealed class Partida
             if (objetivo is null)
                 continue;
 
+            // El contador de golpes del defensor, para los críticos: sube ANTES
+            // de resolver el disparo, así "cada 7.º golpe" cuenta este.
+            d.ContadorGolpes++;
+
             // Daño instantáneo. El proyectil que se ve volar es SOLO render: si
             // el daño esperara a que el sprite llegue, el resultado dependería
             // de los FPS.
@@ -927,7 +942,7 @@ public sealed class Partida
 
             objetivo.Hp -= dano;
 
-            AplicarComportamiento(stats, objetivo);
+            AplicarComportamiento(stats, d, objetivo);
             AplicarHabilidadDeArma(stats, d, objetivo, dano);
 
             d.CooldownRestante = stats.CadenciaTicks;
@@ -942,7 +957,7 @@ public sealed class Partida
     /// apilan</b> —"Ricochet dos veces" no quiere decir nada— y esa regla sale
     /// del tier, no de una lista de excepciones.
     /// </remarks>
-    private void AplicarComportamiento(StatsEfectivos stats, Enemigo objetivo)
+    private void AplicarComportamiento(StatsEfectivos stats, Defensor defensor, Enemigo objetivo)
     {
         switch (stats.Comportamiento)
         {
@@ -958,11 +973,11 @@ public sealed class Partida
                 return;
 
             case EfectoPerk.Splash:
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false);
+                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false, maxSecundarios: 4);
                 return;
 
             case EfectoPerk.OndaDeFrio:
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: true);
+                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: true, maxSecundarios: 6);
                 return;
 
             case EfectoPerk.Ralentiza:
@@ -991,7 +1006,7 @@ public sealed class Partida
             case EfectoPerk.TormentaDivina:
                 // Únicos que combinan crítico y splash. Se resuelven como splash
                 // reforzado: el radio es el mismo, el daño mucho mayor.
-                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false);
+                AplicarSplash(objetivo, stats.Dano, stats.MagnitudComportamiento, ralentiza: false, maxSecundarios: 6);
                 return;
 
             case EfectoPerk.Apocalipsis:
@@ -1000,11 +1015,11 @@ public sealed class Partida
                 return;
 
             case EfectoPerk.GolpeCritico:
-                // Cada N golpes uno pega más. Se cuenta sobre el tick, que es
-                // determinista, en vez de tirar el dado: una tirada acá gastaría
-                // números del RNG en cada disparo de cada defensor, y eso hace
-                // que agregar un defensor cambie todos los drops posteriores.
-                if (Tick % 7 == 0)
+                // Cada 7.º golpe DE ESTE defensor (propuesta V2). Sigue sin tirar
+                // el dado —una tirada acá gastaría RNG por disparo y correría los
+                // drops—, pero ya no es Tick % 7 global: con eso criticaban todos
+                // juntos, y las cadencias múltiplo de 7 criticaban siempre o nunca.
+                if (defensor.ContadorGolpes % 7 == 0)
                     objetivo.Hp -= Enteros.MultiplicarPorcentaje(stats.Dano, stats.MagnitudComportamiento);
 
                 return;
@@ -1061,17 +1076,15 @@ public sealed class Partida
 
             case HabilidadArma.Sed:
                 // Sube con cada muerte de la oleada y se reinicia al terminarla.
-                // Reiniciarlo es lo que impide que una corrida larga lo vuelva
-                // infinito: el techo real es cuánto se puede matar en una oleada.
+                // Techo 100% (propuesta V2): con oleadas de 60 bichos, el tope de
+                // 300 se alcanzaba siempre y Sed era un ×4 garantizado.
                 return dano + Enteros.MultiplicarPorcentaje(
-                    dano, System.Math.Min(300, defensor.MuertesEnLaOleada * stats.MagnitudHabilidad));
+                    dano, System.Math.Min(100, defensor.MuertesEnLaOleada * stats.MagnitudHabilidad));
 
             case HabilidadArma.Critico:
-                // Cada 7 golpes. Se cuenta sobre el tick y no se tira el dado: una
-                // tirada acá gastaría un número del RNG por cada disparo de cada
-                // defensor, y eso hace que agregar un defensor corra todos los
-                // drops posteriores.
-                return Tick % 7 == 0
+                // Cada 7.º golpe DE ESTE defensor (propuesta V2), igual que el
+                // perk. Sin dado, sin sincronización global.
+                return defensor.ContadorGolpes % 7 == 0
                     ? Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad)
                     : dano;
 
@@ -1095,7 +1108,7 @@ public sealed class Partida
         switch (stats.Habilidad)
         {
             case HabilidadArma.Splash:
-                AplicarSplash(objetivo, dano, stats.MagnitudHabilidad, ralentiza: false);
+                AplicarSplash(objetivo, dano, stats.MagnitudHabilidad, ralentiza: false, maxSecundarios: 4);
                 return;
 
             case HabilidadArma.Rebote:
@@ -1119,17 +1132,20 @@ public sealed class Partida
 
             case HabilidadArma.Ejecutar:
             {
-                // ⚠ Mata de un golpe por debajo del umbral, y eso incluye al JEFE.
-                //
-                // Que funcione contra el jefe es a propósito: es lo que hace que
-                // una legendaria de ejecutar se sienta rota, que es el punto. El
-                // umbral tiene techo en 25% justamente para que "rota" no sea
-                // "el juego se terminó".
+                // Umbrales de la propuesta V2: tropa hasta 20%, jefe hasta 5%, y
+                // el JEFE FINAL es inmune — matarlo es cómo se gana la corrida,
+                // y ganarla salteándole un cuarto de vida vaciaba el final.
+                if (objetivo.EsJefe && Oleada >= Balance.OleadasPorCorrida)
+                    return;
+
                 if (objetivo.Vivo && objetivo.HpMaximo > 0)
                 {
+                    int umbral = System.Math.Min(
+                        stats.MagnitudHabilidad, objetivo.EsJefe ? 5 : 20);
+
                     int porcentaje = objetivo.Hp * 100 / objetivo.HpMaximo;
 
-                    if (porcentaje <= stats.MagnitudHabilidad)
+                    if (porcentaje <= umbral)
                         objetivo.Hp = 0;
                 }
 
@@ -1138,14 +1154,18 @@ public sealed class Partida
 
             case HabilidadArma.Cadena:
             {
-                // Le pega a TODOS los que tenga en alcance. Es la habilidad que
-                // más cambia cómo se juega: un defensor con cadena deja de querer
-                // el enemigo más adelantado y quiere el lugar donde pasen más.
+                // Le pega a hasta 5 secundarios en alcance (propuesta V2). Sin el
+                // techo, el daño escalaba lineal con la densidad y una oleada
+                // apretada lo multiplicaba por diez.
                 long alcance2 = (long)stats.AlcanceCeldas * stats.AlcanceCeldas;
                 int extra = Enteros.MultiplicarPorcentaje(dano, stats.MagnitudHabilidad);
+                int alcanzados = 0;
 
                 foreach (var otro in _enemigos)
                 {
+                    if (alcanzados >= 5)
+                        break;
+
                     if (!otro.Vivo || ReferenceEquals(otro, objetivo))
                         continue;
 
@@ -1155,24 +1175,36 @@ public sealed class Partida
                         defensor.Celda.X, defensor.Celda.Y, celda.X, celda.Y);
 
                     if (d2 <= alcance2)
+                    {
                         otro.Hp -= extra;
+                        alcanzados++;
+                    }
                 }
 
                 return;
             }
 
             case HabilidadArma.Vampirismo:
-                // Cura la Torre, con techo en su vida máxima. Convierte un
-                // defensor en soporte sin que exista todavía el sistema de
-                // soporte.
-                Torre.Hp = System.Math.Min(Torre.HpMaximo, Torre.Hp + stats.MagnitudHabilidad);
+                // Cura la Torre — con techo en su vida máxima y UN proc por clase
+                // cada 30 ticks (propuesta V2). El arma es de la clase: sin la
+                // ventana, diez unidades con la misma arma curaban cientos por
+                // segundo y la Torre se volvía inmortal.
+                if (!_ultimaCuraPorClase.TryGetValue(defensor.Clase, out int ultima) ||
+                    Tick - ultima >= 30)
+                {
+                    Torre.Hp = System.Math.Min(Torre.HpMaximo, Torre.Hp + stats.MagnitudHabilidad);
+                    _ultimaCuraPorClase[defensor.Clase] = Tick;
+                }
+
                 return;
 
             case HabilidadArma.Codicia:
                 // El oro extra se cobra en la fase de muertes, cuando se sepa si
-                // este golpe mató. Marcarlo acá y cobrarlo allá mantiene el orden
-                // de las fases intacto.
+                // este golpe mató. La marca EXPIRA a los 60 ticks (propuesta V2):
+                // marcada para siempre, un tanque golpeado una vez era alcancía
+                // aunque lo matara otro, minutos después.
                 objetivo.OroExtraPorciento = stats.MagnitudHabilidad;
+                objetivo.OroExtraExpiraTick = Tick + 60;
                 return;
 
             default:
@@ -1181,27 +1213,52 @@ public sealed class Partida
     }
 
     /// <summary>
-    /// El golpe rebota a los siguientes enemigos vivos.
+    /// El golpe rebota en cadena a enemigos CERCANOS por ruta.
     /// </summary>
     /// <remarks>
-    /// Rebota <b>en orden de spawn</b>, no al más cercano. Elegir el más cercano
-    /// pediría medir distancias entre enemigos, y esto corre por cada disparo de
-    /// cada defensor de cada tick: en la oleada 100 son decenas de miles de
-    /// llamadas por segundo.
+    /// <para>⚠ Cada salto exige estar a ≤2 celdas de ruta del objetivo ANTERIOR
+    /// (propuesta V2). Antes rebotaba al siguiente vivo en orden de spawn sin
+    /// mirar distancia: un rebote le pegaba a un bicho del otro lado del mapa.</para>
+    ///
+    /// <para>Dentro de la ventana se elige en orden de spawn, que es la regla de
+    /// desempate de todo el combate.</para>
     /// </remarks>
     private void AplicarRicochet(Enemigo objetivo, int danoBase, int magnitud, int rebotes)
     {
-        int dano = Enteros.MultiplicarPorcentaje(danoBase, magnitud);
+        const long VentanaRuta = 2L * Enteros.MilesimasPorCelda;
 
-        foreach (var otro in _enemigos)
+        int dano = Enteros.MultiplicarPorcentaje(danoBase, magnitud);
+        var anterior = objetivo;
+
+        // Los ya golpeados en ESTA cadena, para no rebotar dos veces al mismo.
+        // Lista y no HashSet: son 1-3 elementos.
+        var golpeados = new List<Enemigo> { objetivo };
+
+        while (rebotes > 0)
         {
-            if (rebotes == 0)
+            Enemigo? proximo = null;
+
+            foreach (var otro in _enemigos)
+            {
+                if (!otro.Vivo || golpeados.Contains(otro))
+                    continue;
+
+                long diferencia = System.Math.Abs(
+                    otro.DistanciaRecorrida - anterior.DistanciaRecorrida);
+
+                if (diferencia <= VentanaRuta)
+                {
+                    proximo = otro;
+                    break;
+                }
+            }
+
+            if (proximo is null)
                 break;
 
-            if (!otro.Vivo || ReferenceEquals(otro, objetivo))
-                continue;
-
-            otro.Hp -= dano;
+            proximo.Hp -= dano;
+            golpeados.Add(proximo);
+            anterior = proximo;
             rebotes--;
         }
     }
@@ -1215,14 +1272,24 @@ public sealed class Partida
     /// comparar posiciones serían dos conversiones y una distancia al cuadrado por
     /// enemigo.
     /// </remarks>
-    private void AplicarSplash(Enemigo objetivo, int danoBase, int magnitud, bool ralentiza)
+    /// <param name="maxSecundarios">
+    /// Techo de alcanzados (propuesta V2): Oro 4, Único 6, Cadena 5. Sin techo,
+    /// la densidad multiplicaba el daño 5-10× en oleadas apretadas y el splash
+    /// escalaba solo con que hubiera más bichos.
+    /// </param>
+    private void AplicarSplash(
+        Enemigo objetivo, int danoBase, int magnitud, bool ralentiza, int maxSecundarios)
     {
         const long radio = 2L * Enteros.MilesimasPorCelda;
 
         int dano = Enteros.MultiplicarPorcentaje(danoBase, magnitud);
+        int alcanzados = 0;
 
         foreach (var otro in _enemigos)
         {
+            if (alcanzados >= maxSecundarios)
+                break;
+
             if (!otro.Vivo || ReferenceEquals(otro, objetivo))
                 continue;
 
@@ -1232,19 +1299,31 @@ public sealed class Partida
                 continue;
 
             otro.Hp -= dano;
+            alcanzados++;
 
             if (ralentiza)
                 Ralentizar(otro, magnitud);
         }
     }
 
-    private static void Ralentizar(Enemigo enemigo, int magnitud)
+    /// <summary>
+    /// Aplica una ralentización TEMPORAL (propuesta V2).
+    /// </summary>
+    /// <remarks>
+    /// <para>Tres reglas: <b>no apila</b> —prevalece la potencia más fuerte—,
+    /// <b>refresca</b> los 90 ticks en cada aplicación, y tiene <b>techo en
+    /// 60%</b>. Antes era permanente, apilaba hasta -80% y dos fuentes de
+    /// Escarcha dejaban la corrida en cámara lenta para siempre.</para>
+    /// </remarks>
+    private void Ralentizar(Enemigo enemigo, int magnitud)
     {
-        int nuevo = enemigo.PerkVelocidadExtra - magnitud;
+        int potencia = System.Math.Min(magnitud, 60);
 
-        // Piso en -80%: un enemigo detenido del todo nunca llega, y eso convierte
-        // un perk de control en una victoria automática.
-        enemigo.PerkVelocidadExtra = System.Math.Max(-80, nuevo);
+        if (potencia <= 0)
+            return;
+
+        enemigo.SlowPorciento = System.Math.Max(enemigo.SlowPorciento, potencia);
+        enemigo.SlowExpiraTick = Tick + 90;
     }
 
     /// <summary>

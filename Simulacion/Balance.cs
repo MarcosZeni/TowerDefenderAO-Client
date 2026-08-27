@@ -176,17 +176,14 @@ public static class Balance
     /// encima pegara igual, el de rango jugaría solo — que es exactamente lo que
     /// pasaba con el mago de 40.</para>
     ///
-    /// <para>⚠ <b>El daño base tiene techo en 10</b> (pedido 2026-08-26). Los
-    /// bichos del escalón 0 tienen 20-45 HP, y con más de 10 el primer golpe
-    /// mataba: la oleada 1 se veía como un tablero borrando cosas sola. Con el
-    /// techo hacen falta <b>2 o 3 golpes</b> por bicho, que es donde se ve si
-    /// estás pegando o no.</para>
+    /// <para>⚠ Números de la <b>propuesta V2</b> (2026-08-27, herramienta de
+    /// balance del usuario). El techo de 10 del día anterior quedó superado: el
+    /// asesino (12) y el paladín (13) lo pasan a cambio de achicar la brecha de
+    /// DPS/oro, que iba de 5 a 27 por 100 de oro y ahora va de 7,6 a 19,4.</para>
     ///
-    /// <para>Con el techo puesto, quien diferencia es la <b>cadencia</b>. En DPS
-    /// (daño × 30 / cadencia): guerrero 16 · paladín 12,5 · asesino 10 ·
-    /// bardo 8,6 · clérigo 8,75 · ladrón 8,3 · druida 7,8 · mago 5 · cazador 4,3.
-    /// El ladrón queda abajo de su escalón a propósito: lo barato tapa huecos,
-    /// no gana corridas. Los números se calibran contra la curva de HP con
+    /// <para>En DPS (daño × 30 / cadencia): asesino 17,1 · paladín 16,25 ·
+    /// guerrero 11,7 · mago 10 · druida 8,9 · clérigo 8,75 · bardo 8,6 ·
+    /// ladrón 8,3 · cazador 5,7. Se calibra contra la curva de HP con
     /// <c>--balance</c>, no a ojo.</para>
     ///
     /// <para>El alcance se guarda <b>al cuadrado</b> porque así se compara: la
@@ -196,8 +193,9 @@ public static class Balance
     public static (int Costo, int Dano, int AlcanceCeldas, int CadenciaTicks) StatsDe(Clase clase)
         => clase switch
         {
-            // Alcance 4: pega suave. Resuelve grupos por cobertura, no por golpe.
-            Clase.Mago => (100, 5, 4, 30),
+            // Alcance 4: cobertura. La V2 lo subió a 10 — con 5 estaba doblemente
+            // castigado: por alcance y por golpe.
+            Clase.Mago => (100, 10, 4, 30),
 
             // Alcance 3 y pega BIEN: el rol de soporte (curar) todavía no existe,
             // y mientras tanto un clérigo de 8 era un defensor que no defendía.
@@ -212,25 +210,26 @@ public static class Balance
             //
             // Medido con el corredor: corridas que morían en la oleada 1 con
             // cinco guerreros puestos y ningún enemigo muerto.
-            Clase.Guerrero => (60, 8, 2, 15),
+            Clase.Guerrero => (60, 7, 2, 18),
 
-            // El golpe más grande del roster, lento: identidad de burst. Sigue la
-            // regla — alcance 2 — solo que concentrado en menos golpes.
-            Clase.Asesino => (90, 10, 2, 30),
+            // El golpe más grande del roster: burst. Paga el sobrekill y el corto
+            // alcance con DPS nominal alto (V2).
+            Clase.Asesino => (90, 12, 2, 21),
 
-            // Barato y flojo: sirve para tapar un hueco.
-            Clase.Ladron => (40, 5, 2, 18),
+            // Barato y flojo: tapa huecos. La V2 le subió el costo a 50 para que
+            // el spam de ladrones no sea la solución universal.
+            Clase.Ladron => (50, 5, 2, 18),
 
             // Alcance 3, medio: cuando exista el soporte va a bajar de nuevo.
             Clase.Bardo => (70, 6, 3, 21),
 
-            Clase.Druida => (85, 7, 3, 27),
+            Clase.Druida => (85, 8, 3, 27),
 
-            Clase.Paladin => (95, 10, 2, 24),
+            Clase.Paladin => (95, 13, 2, 24),
 
             // ⚠ Cazador, NO "arquero". El de más alcance del roster, y por la
             // regla, el golpe más suave.
-            Clase.Cazador => (75, 3, 6, 21),
+            Clase.Cazador => (75, 4, 6, 21),
 
             _ => (100, 4, 2, 30),
         };
@@ -387,6 +386,44 @@ public static class Balance
         // 35 da 44 de presupuesto, o sea dos. La cola cuadrática no se toca.
         int presupuesto = 35 + (9 * oleada * oleada);
 
+        var permitidos = PermitidosDe(area, datos);
+
+        // ⚠ El TOPE POR POOL (propuesta V2, 2026-08-27). La cuadrática cruza muy
+        // pronto lo que 60 NPCs pueden absorber, y todo el exceso se volvía HP:
+        // un muro que crecía sin techo. El tope es «lo que cuestan capEq bichos
+        // promedio del pool», con capEq subiendo de 50 a 65 DENTRO de cada área:
+        // la dificultad sigue subiendo, pero atada a lo que el área vende.
+        long sumaPesoCosto = 0;
+        long sumaPeso = 0;
+
+        foreach (var (tipoId, peso) in permitidos)
+        {
+            int costo = ArmadorOleadas.Costo(tipoId, datos);
+
+            if (costo == int.MaxValue)
+                continue;
+
+            sumaPesoCosto += (long)peso * costo;
+            sumaPeso += peso;
+        }
+
+        if (sumaPeso > 0)
+        {
+            int primera = Areas.PrimeraOleadaDe(area);
+            int waves = Areas.UltimaOleadaDe(area) - primera + 1;
+            int w = oleada - primera + 1;
+
+            // 50 → 65 lineal dentro del área, redondeo a mitad para arriba.
+            int capEq = waves <= 1
+                ? 65
+                : 50 + ((((w - 1) * 15 * 2) + (waves - 1)) / (2 * (waves - 1)));
+
+            long tope = sumaPesoCosto * capEq / sumaPeso;
+
+            if (tope < presupuesto)
+                presupuesto = (int)tope;
+        }
+
         // El jefe cierra el área. Son ocho por corrida, y como el jefe es la
         // única fuente de perks de Oro, eso le pone techo a cuántos puede juntar
         // un jugador — que es lo que hace que fusionar sea una decisión.
@@ -399,7 +436,7 @@ public static class Balance
         {
             Numero = oleada,
             Presupuesto = presupuesto,
-            Permitidos = PermitidosDe(area, datos),
+            Permitidos = permitidos,
             JefeTipoId = jefe,
 
             // Sube con la corrida: más adelante, más bichos con perk.

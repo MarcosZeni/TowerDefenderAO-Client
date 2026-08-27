@@ -281,13 +281,15 @@ public static class GeneradorArmas
         HabilidadArma[] raras =
         [
             HabilidadArma.Critico, HabilidadArma.Francotirador,
-            HabilidadArma.Carnicero, HabilidadArma.Sed, HabilidadArma.Doble,
+            HabilidadArma.Carnicero, HabilidadArma.Sed,
         ];
 
+        // ⚠ Doble subió a legendaria (propuesta V2): un segundo golpe completo
+        // es ×2 de DPS plano, y saliendo del pool épico dominaba todo lo demás.
         HabilidadArma[] rompen =
         [
             HabilidadArma.Ejecutar, HabilidadArma.Cadena,
-            HabilidadArma.Codicia, HabilidadArma.Vampirismo,
+            HabilidadArma.Codicia, HabilidadArma.Vampirismo, HabilidadArma.Doble,
         ];
 
         return rareza switch
@@ -324,8 +326,8 @@ public static class GeneradorArmas
         // daño del arma y la única estadística sería la cadencia.
         HabilidadArma.Ejecutar => Enteros.Limitar(8 + (presupuesto / 40), 8, 25),
 
-        HabilidadArma.Cadena => Enteros.Limitar(30 + (presupuesto / 8), 30, 70),
-        HabilidadArma.Codicia => Enteros.Limitar(50 + (presupuesto / 6), 50, 200),
+        HabilidadArma.Cadena => Enteros.Limitar(30 + (presupuesto / 8), 30, 60),
+        HabilidadArma.Codicia => Enteros.Limitar(25 + (presupuesto / 8), 25, 75),
         HabilidadArma.Vampirismo => Enteros.Limitar(1 + (presupuesto / 50), 1, 8),
 
         _ => 0,

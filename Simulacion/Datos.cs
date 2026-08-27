@@ -201,6 +201,8 @@ public static class Areas
     /// </remarks>
     public static bool TieneJefe(int oleada) => System.Array.IndexOf(_ultimaOleada, oleada) >= 0;
 
+    public static int UltimaOleadaDe(int area) => _ultimaOleada[area - 1];
+
     public static int PrimeraOleadaDe(int area)
         => area <= 1 ? 1 : _ultimaOleada[area - 2] + 1;
 }

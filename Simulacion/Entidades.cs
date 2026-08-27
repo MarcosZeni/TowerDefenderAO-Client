@@ -99,6 +99,14 @@ public sealed class Enemigo
     /// </remarks>
     public int OroExtraPorciento { get; set; }
 
+    /// <summary>Cuándo vence la marca de Codicia. La limpia la fase 3.</summary>
+    /// <remarks>
+    /// Antes la marca duraba para siempre (propuesta V2): un solo golpe de un
+    /// arma de Codicia convertía a un tanque en alcancía aunque lo terminara
+    /// matando otro, minutos después.
+    /// </remarks>
+    public int OroExtraExpiraTick { get; set; }
+
     /// <summary>
     /// Modificadores que le tocaron al spawnear, en puntos porcentuales.
     ///
@@ -110,10 +118,21 @@ public sealed class Enemigo
 
     public int PerkVelocidadExtra { get; set; }
 
+    /// <summary>Ralentización activa, en puntos porcentuales POSITIVOS (0-60).</summary>
+    /// <remarks>
+    /// ⚠ Separada del buff de velocidad y TEMPORAL (propuesta V2): antes el slow
+    /// restaba directo en <see cref="PerkVelocidadExtra"/> y era permanente —
+    /// dos fuentes dejaban a toda la oleada al 20% de velocidad para siempre.
+    /// No apila: prevalece la potencia más fuerte, y cada aplicación refresca
+    /// los 90 ticks. La vence la fase 3.
+    /// </remarks>
+    public int SlowPorciento { get; set; }
+
+    public int SlowExpiraTick { get; set; }
+
     public bool Vivo => Hp > 0;
 
-    /// <summary>Velocidad ya con los modificadores aplicados.</summary>
-    public int VelocidadEfectiva => Enteros.ConPorcentajes(Velocidad, PerkVelocidadExtra);
+    public int VelocidadEfectiva => Enteros.ConPorcentajes(Velocidad, PerkVelocidadExtra - SlowPorciento);
 }
 
 /// <summary>
@@ -146,6 +165,16 @@ public sealed class Defensor
     /// matado.
     /// </remarks>
     public int MuertesEnLaOleada { get; set; }
+
+    /// <summary>Golpes que tiró desde que existe. Lo usan los críticos.</summary>
+    /// <remarks>
+    /// ⚠ Contador POR DEFENSOR (propuesta V2): el crítico era <c>Tick % 7</c>
+    /// global, y con eso criticaban todos juntos en el mismo tick — y un
+    /// defensor cuya cadencia fuera múltiplo de 7 criticaba siempre o nunca
+    /// según la fase. Cada 7.º ataque DE ESTE defensor es el mismo promedio,
+    /// sin la sincronización.
+    /// </remarks>
+    public int ContadorGolpes { get; set; }
 
     /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la

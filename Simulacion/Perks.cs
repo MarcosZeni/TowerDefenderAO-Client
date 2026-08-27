@@ -220,16 +220,18 @@ public static class CatalogoPerks
             // --- Oro: comportamiento, compartido por 2-3 clases ---
             // Es la única fuente el jefe de oleada: por eso matarlo vale más que
             // sobrevivirlo.
-            Nuevo(id++, "Ricochet",       TierPerk.Oro, EfectoPerk.Ricochet, 60,
+            // ⚠ Magnitudes de la propuesta V2 (2026-08-27) en los cuatro Oro
+            // retrabajados: Ricochet 55, Onda 35, Escarcha 25, Certero 125.
+            Nuevo(id++, "Ricochet",       TierPerk.Oro, EfectoPerk.Ricochet, 55,
                 Clase.Cazador, Clase.Asesino),
 
-            Nuevo(id++, "Onda Expansiva", TierPerk.Oro, EfectoPerk.Splash, 45,
+            Nuevo(id++, "Onda Expansiva", TierPerk.Oro, EfectoPerk.Splash, 35,
                 Clase.Paladin, Clase.Guerrero, Clase.Mago),
 
-            Nuevo(id++, "Escarcha",       TierPerk.Oro, EfectoPerk.Ralentiza, 35,
+            Nuevo(id++, "Escarcha",       TierPerk.Oro, EfectoPerk.Ralentiza, 25,
                 Clase.Mago, Clase.Druida, Clase.Clerigo),
 
-            Nuevo(id++, "Golpe Certero",  TierPerk.Oro, EfectoPerk.GolpeCritico, 150,
+            Nuevo(id++, "Golpe Certero",  TierPerk.Oro, EfectoPerk.GolpeCritico, 125,
                 Clase.Asesino, Clase.Ladron, Clase.Cazador),
 
             Nuevo(id++, "Descarga Eléctrica", TierPerk.Oro, EfectoPerk.Ricochet, 50,

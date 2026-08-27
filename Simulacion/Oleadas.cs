@@ -73,9 +73,12 @@ public static class ArmadorOleadas
     /// bichos, no los mismos más fuertes. Así el presupuesto sigue siendo el
     /// único número que hay que mirar para saber cuán dura es una oleada.
     /// </remarks>
-    private const int CostoPerkVida = 12;
+    // ⚠ Números de la propuesta V2 (2026-08-27): escalones más chicos, más
+    // caros y CON TECHO. Los viejos (50%/12 sin tope) fabricaban muros de HP
+    // aleatorios en la mitad de la corrida.
+    private const int CostoPerkVida = 20;
 
-    private const int CostoPerkVelocidad = 10;
+    private const int CostoPerkVelocidad = 15;
 
     /// <summary>
     /// Tope de NPCs por oleada.
@@ -101,12 +104,15 @@ public static class ArmadorOleadas
     /// sale el presupuesto que no entra en NPCs nuevos. Una oleada tardía trae
     /// <b>los mismos 60 bichos, pero muy buffeados</b>, en vez de una marea.
     /// </remarks>
-    private const int EscalonPerkVida = 50;
+    private const int EscalonPerkVida = 25;
 
-    private const int EscalonPerkVelocidad = 10;
+    /// <summary>Techo del perk de vida: +200% por NPC (propuesta V2).</summary>
+    private const int MaxPerkVida = 200;
+
+    private const int EscalonPerkVelocidad = 8;
 
     /// <summary>Techo del perk de velocidad: un bicho que vuela no se puede matar.</summary>
-    private const int MaxPerkVelocidad = 120;
+    private const int MaxPerkVelocidad = 64;
 
     public static OleadaArmada Armar(RecetaOleada receta, Aleatorio rng, DatosBalance datos)
     {
@@ -152,12 +158,12 @@ public static class ArmadorOleadas
             {
                 if (rng.Ocurre(50) && restante >= CostoPerkVida)
                 {
-                    perkVida = 50;
+                    perkVida = EscalonPerkVida;
                     restante -= CostoPerkVida;
                 }
                 else if (restante >= CostoPerkVelocidad)
                 {
-                    perkVelocidad = 30;
+                    perkVelocidad = EscalonPerkVelocidad;
                     restante -= CostoPerkVelocidad;
                 }
             }
@@ -173,10 +179,11 @@ public static class ArmadorOleadas
 
         if (hayJefe)
         {
-            // El jefe se lleva lo que quedó sin gastar, como vida extra. Si no,
-            // el sobrante se tiraría y una oleada con jefe sería más fácil que la
-            // anterior sin él.
-            int vidaExtraJefe = restante / 4;
+            // El jefe se lleva parte de lo que quedó, como vida extra — CON TECHO
+            // (propuesta V2): el jefe es fuerte por diseño, no por residuo del
+            // presupuesto. Antes era sobrante/4 sin tope y en las áreas tardías
+            // salían jefes con miles de por ciento de HP.
+            int vidaExtraJefe = System.Math.Min(restante / 8, 150);
             npcs.Add(new CompraNpc(receta.JefeTipoId, vidaExtraJefe, 0, EsJefe: true));
         }
 
@@ -222,6 +229,12 @@ public static class ArmadorOleadas
                     npc.PerkVelocidad < MaxPerkVelocidad &&
                     restante >= CostoPerkVelocidad &&
                     rng.Ocurre(25);
+
+                // ⚠ La vida también tiene techo ahora (propuesta V2): un NPC
+                // topeado en las dos cosas se saltea, y si TODOS están topeados
+                // gastoAlgo queda en falso y el sobrante va al jefe.
+                if (!aVelocidad && npc.PerkVida >= MaxPerkVida)
+                    continue;
 
                 npcs[i] = aVelocidad
                     ? npc with { PerkVelocidad = npc.PerkVelocidad + EscalonPerkVelocidad }
@@ -279,7 +292,7 @@ public static class ArmadorOleadas
     /// <para>El HP pesa más que el daño porque en un tower defense aguantar es
     /// lo que cuesta matar; el daño solo importa si llega a la Torre.</para>
     /// </remarks>
-    private static int Costo(int tipoId, DatosBalance datos)
+    internal static int Costo(int tipoId, DatosBalance datos)
     {
         var e = datos.Por(tipoId);
 
