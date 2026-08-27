@@ -137,6 +137,15 @@ public partial class PantallaMochila : Control
             return;
         }
 
+        // Comprar un nivel de la clase mirada. Es el sumidero de oro de la
+        // corrida: con el tablero lleno y la mochila llena, es lo único que queda
+        // para gastar.
+        if (_claseElegida is { } paraSubir && RectSubirNivel().HasPoint(posicion))
+        {
+            _juego.SubirNivel(paraSubir);
+            return;
+        }
+
         // Un slot de perk de la clase mirada: sacarlo pide confirmación.
         if (_claseElegida is { } clase)
         {
@@ -179,6 +188,10 @@ public partial class PantallaMochila : Control
 
     private static Rect2 RectSlot(int i)
         => new(1200 + (i * 92), 300, 84, 84);
+
+    /// <summary>El botón de comprar el próximo nivel de la clase mirada.</summary>
+    private static Rect2 RectSubirNivel()
+        => new(1200, 528, 300, 52);
 
     private static Rect2 RectConfirmar()
         => new(Escala.LienzoAncho / 2 - 220, Escala.LienzoAlto / 2 + 30, 200, 56);
@@ -409,6 +422,58 @@ public partial class PantallaMochila : Control
         }
 
         Text(Loc.Get("ui.mochila.sacar_destruye"), 1200, 496, 16, Gris);
+
+        DibujarSubirNivel(partida, ficha);
+    }
+
+    /// <summary>
+    /// El botón de comprar el próximo nivel, con su precio.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es el sumidero de oro de la corrida.</b> Con el tablero lleno y
+    /// la mochila llena no quedaba nada que comprar y el oro dejaba de ser un
+    /// recurso: medido con <c>--balance</c>, ~127.000 sin gastar al morir.</para>
+    ///
+    /// <para>Va acá y no en la preparación porque es donde se ven los slots
+    /// cerrados: el motivo para pagar queda dibujado al lado del botón.</para>
+    ///
+    /// <para>El precio se muestra también cuando no alcanza. Un botón que
+    /// desaparece no enseña cuánto falta.</para>
+    /// </remarks>
+    private void DibujarSubirNivel(Run partida, RosterClass ficha)
+    {
+        var caja = RectSubirNivel();
+
+        if (ficha.Level >= ficha.MaxLevel)
+        {
+            DrawRect(caja, new Color(0.08f, 0.08f, 0.10f));
+            DrawRect(caja, new Color(1, 1, 1, 0.08f), filled: false, width: 1.5f);
+
+            Text(Loc.Get("ui.mochila.nivel_maximo"),
+                caja.Position.X + 18, caja.Position.Y + 33, 19, Gris);
+
+            return;
+        }
+
+        int precio = CargadorDatos.Actual.Curves.Economy.LevelUpPrice(ficha.Level + 1);
+        bool alcanza = precio <= partida.Gold;
+
+        DrawRect(caja, alcanza ? new Color(0.16f, 0.34f, 0.22f) : new Color(0.14f, 0.10f, 0.10f));
+
+        DrawRect(caja, alcanza ? new Color(0.45f, 0.85f, 0.55f) : new Color(0.55f, 0.35f, 0.35f),
+            filled: false, width: 1.5f);
+
+        string etiqueta = Loc.Get("ui.mochila.subir_nivel") + " " + (ficha.Level + 1)
+                          + " — " + precio + " " + Loc.Get("ui.mochila.oro");
+
+        Text(etiqueta, caja.Position.X + 18, caja.Position.Y + 33, 19,
+            alcanza ? new Color(0.90f, 0.98f, 0.92f) : new Color(0.78f, 0.60f, 0.58f));
+
+        if (!alcanza)
+        {
+            Text(Loc.Get("ui.mochila.sin_oro"),
+                caja.Position.X + caja.Size.X + 14, caja.Position.Y + 33, 16, Gris);
+        }
     }
 
     private void DibujarConfirmacion()

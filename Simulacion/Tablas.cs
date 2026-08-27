@@ -69,6 +69,7 @@ public sealed record EconomyData(
     int StartingGoldTokens,
     int GoldPerCalledEnemy,
     int CallGoldCap,
+    int LevelUpPriceBase,
     int[] GoldMultiplierPerArea)
 {
     /// <summary>
@@ -87,6 +88,39 @@ public sealed record EconomyData(
         => area >= 1 && area <= GoldMultiplierPerArea.Length
             ? GoldMultiplierPerArea[area - 1]
             : 100;
+
+    /// <summary>
+    /// Lo que cuesta comprar el nivel <paramref name="nivelDestino"/> de una
+    /// clase: <c>levelUpPriceBase × nivelDestino²</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es el sumidero de oro de la corrida.</b> Medido con
+    /// <c>--balance 24</c>, el jugador imaginario terminaba con ~127.000 sin
+    /// gastar, el tablero lleno y la mochila llena: el tope de lo que se puede
+    /// <i>tener</i> llegaba mucho antes que el de lo que se puede <i>pagar</i>.
+    /// Recortar el ingreso no lo arreglaba —con la mitad del oro seguían sobrando
+    /// 60.000— porque el problema no era cuánto entra sino que no había en qué
+    /// gastarlo.</para>
+    ///
+    /// <para>⚠ <b>Cuadrática y no lineal</b>, y esa es la parte que protege la
+    /// elección de cada tres oleadas. Con precio plano, comprar el nivel sería
+    /// barato desde el arranque y la pantalla de elección perdería la mitad de su
+    /// peso: para qué gastar la elección en levelear si se compra. Con el
+    /// cuadrado, el primer nivel comprado cuesta más de lo que hay en el bolsillo
+    /// en el área 1 y el sexto cuesta como una oleada entera de ingreso tardío.
+    /// Temprano el oro se va al tablero, tarde se va acá.</para>
+    ///
+    /// <para><b>La elección sigue siendo la única forma de CONTRATAR.</b> El oro
+    /// compra profundidad, no ancho: engorda lo que ya tenés, no te trae un rol
+    /// nuevo. Esa mitad de la decisión queda intacta.</para>
+    ///
+    /// <para>Uniforme para todas las clases a propósito. Atarlo al costo de la
+    /// clase sería más justo en teoría —un nivel de cazador vale más que uno de
+    /// ladrón— y en la práctica obliga al jugador a leer dos tablas para decidir
+    /// una cosa.</para>
+    /// </remarks>
+    public int LevelUpPrice(int nivelDestino)
+        => LevelUpPriceBase * nivelDestino * nivelDestino;
 }
 
 public sealed record BudgetData(
@@ -1158,6 +1192,7 @@ public static class TableReader
                 Int(economia, "startingGoldTokens", archivo),
                 Int(economia, "goldPerCalledEnemy", archivo),
                 Int(economia, "callGoldCap", archivo),
+                Int(economia, "levelUpPriceBase", archivo),
                 IntArrayOf(economia, "goldMultiplierPerArea", archivo)),
 
             new BudgetData(
@@ -1251,6 +1286,13 @@ public static class TableReader
 
         if (curvas.Tower.CadenceTicks < 1)
             throw new InvalidBalanceDataException($"{archivo}: la cadencia de la Tower tiene que ser 1 tick o más");
+
+        // ⚠ Un precio de nivel en 0 haría gratis el único sumidero de oro de la
+        // corrida, y en silencio: el jugador compraría los seis niveles de las
+        // nueve clases en la primera preparación y no habría con qué medir la
+        // economía nunca más.
+        if (curvas.Economy.LevelUpPriceBase < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «levelUpPriceBase» tiene que ser 1 o más");
 
         // ⚠ Un multiplicador por área que no cubra todas las áreas dejaría al
         // resto pagando el 100% en silencio, que es el error que no se ve: la

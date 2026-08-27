@@ -242,6 +242,17 @@ public partial class Juego : Node2D
     public void RemovePerk(DefenderClass clase, int slot)
         => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.RemovePerk, (int)clase, slot, 0));
 
+    /// <summary>
+    /// Compra un nivel de una clase del roster con el oro de la corrida.
+    /// </summary>
+    /// <remarks>
+    /// Es el sumidero de oro de la corrida. La pantalla ya chequeó el precio y el
+    /// nivel máximo, pero el que manda es <c>Run</c>: la acción entra al log igual
+    /// y ahí se valida, porque el log es lo que revalida el servidor.
+    /// </remarks>
+    public void SubirNivel(DefenderClass clase)
+        => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.BuyLevel, (int)clase, 0, 0));
+
     /// <summary>La clase que se pone con el próximo click, para la UI.</summary>
     public DefenderClass ClaseElegida => _claseElegida;
 

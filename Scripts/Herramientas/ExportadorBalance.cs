@@ -450,6 +450,7 @@ public static class ExportadorBalance
             ["PreviousAreaWeight", c.Wave.PreviousAreaWeight, "curvas.json", ""],
             ["PreviousAreaWeightFirst", c.Wave.PreviousAreaWeightFirst, "curvas.json", "peso en la PRIMERA oleada del area; se desvanece hasta PreviousAreaWeight"],
             ["PreviousAreaFadeWaves", c.Wave.PreviousAreaFadeWaves, "curvas.json", "en cuantas oleadas cae"],
+            ["PrecioNivelFormula", $"{c.Economy.LevelUpPriceBase} * nivelDestino^2", "curvas.json", "el sumidero de oro de la corrida; solo sube clases que ya estan"],
             ["CostoNpcFormula",
                 $"hp/{c.Wave.HpDivisor} + danoMax/{c.Wave.MaxDamageDivisor} + velocidad/{c.Wave.SpeedDivisor}",
                 "curvas.json", "entero, trunca"],

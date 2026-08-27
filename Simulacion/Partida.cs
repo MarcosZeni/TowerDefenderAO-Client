@@ -459,6 +459,10 @@ public sealed class Run
                 Backpack.RemoveAt(accion.A);
                 break;
 
+            case ActionType.BuyLevel:
+                BuyLevel((DefenderClass)accion.A);
+                break;
+
             case ActionType.Fuse:
                 Fuse(accion.A, accion.B, (DefenderClass)accion.C);
                 break;
@@ -692,6 +696,42 @@ public sealed class Run
 
         Backpack.RemoveAt(indiceMochila);
         Gold += arma.Value;
+    }
+
+    /// <summary>
+    /// Compra un nivel de una clase que ya está en el roster.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es el sumidero de oro de la corrida.</b> Sin esto el jugador
+    /// terminaba con el tablero lleno, la mochila llena y ~127.000 de oro que no
+    /// compraban nada: el tope de lo que se puede <i>tener</i> llegaba mucho antes
+    /// que el de lo que se puede <i>pagar</i>. Y no se arreglaba recortando el
+    /// ingreso —con la mitad seguían sobrando 60.000—, porque el problema no era
+    /// cuánto entra.</para>
+    ///
+    /// <para><b>El oro compra profundidad, no ancho.</b> Solo sube clases que ya
+    /// están: contratar sigue siendo exclusivo de la elección de cada tres
+    /// oleadas, así que esa decisión no se puede comprar. El precio cuadrático
+    /// hace el resto: temprano el oro se va al tablero porque un nivel no entra en
+    /// el bolsillo.</para>
+    ///
+    /// <para>No pasa del nivel máximo, que es también la cantidad de slots de
+    /// perk: comprar más allá no abriría nada y sería oro tirado en silencio.</para>
+    /// </remarks>
+    private void BuyLevel(DefenderClass clase)
+    {
+        var ficha = Roster.Find(clase);
+
+        if (ficha is null || ficha.Level >= ficha.MaxLevel)
+            return;
+
+        int precio = _datos.Curves.Economy.LevelUpPrice(ficha.Level + 1);
+
+        if (precio > Gold)
+            return;
+
+        Gold -= precio;
+        Roster.LevelUp(clase);
     }
 
     /// <summary>

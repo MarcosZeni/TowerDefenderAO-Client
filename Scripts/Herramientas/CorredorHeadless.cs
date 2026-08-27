@@ -479,7 +479,11 @@ public static class CorredorHeadless
                 // deja que el oro siga teniendo adónde ir.
                 bool libero = !puso && !compro && LiberarMochila(partida, log);
 
-                if (!puso && !compro && !libero)
+                // Último: el sumidero del sobrante. Poner un defensor más siempre
+                // vale más que un nivel comprado.
+                bool subio = !puso && !compro && !libero && SubirNivelSiSobra(partida, log);
+
+                if (!puso && !compro && !libero && !subio)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -619,7 +623,11 @@ public static class CorredorHeadless
                 // deja que el oro siga teniendo adónde ir.
                 bool libero = !puso && !compro && LiberarMochila(partida, log);
 
-                if (!puso && !compro && !libero)
+                // Último: el sumidero del sobrante. Poner un defensor más siempre
+                // vale más que un nivel comprado.
+                bool subio = !puso && !compro && !libero && SubirNivelSiSobra(partida, log);
+
+                if (!puso && !compro && !libero && !subio)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -893,6 +901,53 @@ public static class CorredorHeadless
         //    al levelear. No se tira: la mochila queda trabada y eso es una
         //    decisión del juego, no del bot.
         return false;
+    }
+
+    /// <summary>
+    /// Compra un nivel cuando ya no hay nada más que hacer con el oro. Devuelve
+    /// <c>true</c> si compró.
+    /// </summary>
+    /// <remarks>
+    /// <para>Va <b>último</b> en la preparación, después de poner, comprar y
+    /// destrabar la mochila: es literalmente el sumidero del sobrante. Poner un
+    /// defensor más siempre vale más que un nivel, y la política tiene que
+    /// reflejar eso o el bot dejaría el tablero a medio llenar.</para>
+    ///
+    /// <para>Sube <b>la clase de nivel más bajo</b>, que es la que tiene el nivel
+    /// siguiente más barato: el precio es cuadrático, así que repartir abre más
+    /// slots por moneda que concentrar. Es una heurística tonta a propósito, como
+    /// el resto —mide el piso, no el techo—, pero tonta y coherente.</para>
+    ///
+    /// <para>La afordabilidad se chequea acá y no solo en <c>Run.BuyLevel</c>:
+    /// una acción que rebota devolvería <c>true</c> sin cambiar nada y el bucle de
+    /// preparación, con el reloj congelado, no terminaría nunca.</para>
+    /// </remarks>
+    private static bool SubirNivelSiSobra(Run partida, ActionLog log)
+    {
+        var economia = CargadorDatos.Actual.Curves.Economy;
+
+        DefenderClass? mejor = null;
+        int mejorNivel = int.MaxValue;
+
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            if (ficha.Level >= ficha.MaxLevel || ficha.Level >= mejorNivel)
+                continue;
+
+            if (economia.LevelUpPrice(ficha.Level + 1) > partida.Gold)
+                continue;
+
+            mejor = ficha.DefenderClass;
+            mejorNivel = ficha.Level;
+        }
+
+        if (mejor is null)
+            return false;
+
+        log.Agregar(new PlayerAction(
+            partida.TickDeAccion, ActionType.BuyLevel, (int)mejor.Value, 0, 0));
+
+        return true;
     }
 
     /// <summary>

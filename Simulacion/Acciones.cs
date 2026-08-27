@@ -57,6 +57,18 @@ public enum ActionType
     /// pierde— así que va al log.
     /// </summary>
     Discard = 10,
+
+    /// <summary>
+    /// Comprar un nivel de una clase del roster con el oro de la corrida.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Es el sumidero de oro de la corrida: sin esto el jugador terminaba con
+    /// el tablero lleno, la mochila llena y ~127.000 de oro que no compraban
+    /// nada. El precio es cuadrático para que temprano el oro siga yendo al
+    /// tablero. <b>No reemplaza la elección de cada tres oleadas</b>: esa sigue
+    /// siendo la única forma de CONTRATAR una clase nueva.
+    /// </remarks>
+    BuyLevel = 11,
 }
 
 /// <summary>

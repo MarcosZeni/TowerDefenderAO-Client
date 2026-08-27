@@ -110,11 +110,29 @@
   // subir los precios: bajar la entrada mantiene legibles los precios de la
   // tienda, subir los precios los vuelve una tabla que hay que releer.
   //
+  // ⚠ "levelUpPriceBase" ES EL SUMIDERO DE ORO DE LA CORRIDA. Precio de comprar
+  // el nivel N de una clase del roster: base × N². Medido con --balance 24, el
+  // jugador imaginario terminaba con ~127.000 de oro sin gastar, el tablero lleno
+  // y la mochila llena: el tope de lo que se puede TENER llegaba mucho antes que
+  // el de lo que se puede PAGAR. Recortar el ingreso no lo arreglaba —con la
+  // mitad del oro seguían sobrando 60.000— porque el problema no era cuánto
+  // entra, era que no había en qué gastarlo.
+  //
+  // Cuadrático y no plano, y eso es lo que protege la elección de cada tres
+  // oleadas: con 300 de base, el nivel 2 sale 1.200 —más de lo que hay en el
+  // bolsillo en el área 1— y llevar una clase de 1 a 6 sale 27.000. Temprano el
+  // oro se va al tablero, tarde se va acá.
+  //
+  // ⚠ El oro compra PROFUNDIDAD, NO ANCHO: solo sube clases que ya están.
+  // Contratar sigue siendo exclusivo de la pantalla de elección, así que esa
+  // mitad de la decisión no se puede comprar.
+  //
   // ⚠ La lista tiene que traer exactamente "areaCount" números.
   "economy": {
     "startingGoldTokens": 2,
     "goldPerCalledEnemy": 12,
     "callGoldCap": 400,
+    "levelUpPriceBase": 300,
     "goldMultiplierPerArea": [100, 100, 90, 80, 70, 60, 50, 40]
   },
 
