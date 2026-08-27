@@ -847,7 +847,14 @@ public static class CorredorHeadless
         var plan = new List<(int, Cell)>();
         var usadas = new HashSet<Cell>();
 
-        long paso = 3 * Ints.ThousandthsPerCell;
+        // ⚠ UNA CELDA DE PASO Y TODOS LOS VECINOS, no una de cada tres.
+        //
+        // Con paso 3 y un solo vecino por parada, el plan tenía ~11 lugares en
+        // una ruta de 33 celdas y el bot moría con 8 defensores puestos, la
+        // mochila llena y 13.000 de oro sin gastar. Eso no medía el piso del
+        // juego: medía que el plan se quedaba sin casilleros. Un jugador malo
+        // pone mal, no deja de poner.
+        long paso = Ints.ThousandthsPerCell;
 
         // ⚠ DESDE LA TORRE hacia la entrada, no al revés.
         //
@@ -871,7 +878,6 @@ public static class CorredorHeadless
                 int retraso = rng.Between(0, Ints.SecondsToTicks(4));
 
                 plan.Add((plan.Count * Ints.SecondsToTicks(8) + retraso, v));
-                break;
             }
         }
 

@@ -418,7 +418,7 @@ public sealed class LayoutMapa
             return null;
 
         var json = JsonNode.Parse(System.IO.File.ReadAllText(ruta, Encoding.UTF8));
-        var filas = json?["filas"]?.AsArray();
+        var filas = json?["rows"]?.AsArray();
 
         if (filas is null)
             return null;
@@ -449,17 +449,17 @@ public sealed class LayoutMapa
         var salida = new JsonObject
         {
             ["version"] = 1,
-            ["leyenda"] = "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+            ["legend"] = "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
 
-            ["aviso"] = "Se dibuja con Escenas/EditorLayouts.tscn o lo genera " +
+            ["note"] = "Se dibuja con Escenas/EditorLayouts.tscn o lo genera " +
                         "--generar-layouts. Se puede corregir a mano, pero después hay " +
                         "que pasarlo por --validar-layouts.",
 
-            ["ancho"] = Width,
-            ["alto"] = Height,
-            ["largoRuta"] = LargoRuta,
-            ["valido"] = Valido,
-            ["filas"] = filas,
+            ["width"] = Width,
+            ["height"] = Height,
+            ["routeLength"] = LargoRuta,
+            ["valid"] = Valido,
+            ["rows"] = filas,
         };
 
         var opciones = new JsonSerializerOptions
