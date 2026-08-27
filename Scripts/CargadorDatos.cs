@@ -431,7 +431,7 @@ public static class CargadorDatos
                     30, 1, 30, 30, 1, 0, 0),
                 new ShopData(0, 0, 0, new LinearCurve(0, 0), new LinearCurve(0, 0)),
                 new DropData(0, 0, 1, 1, 1, 0, false),
-                new WaveData(1, 1, 1, 1, 1, 1, 30),
+                new WaveData(1, 1, 1, 1, 1, 1, 1, 1, 30),
                 new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0),
                 new BossData(1, 0, "")),
 

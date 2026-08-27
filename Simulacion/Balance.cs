@@ -42,7 +42,7 @@ public static class Balance
         int area = datos.Areas.OfWave(oleada);
         int presupuesto = c.Budget.Uncapped(oleada);
 
-        var permitidos = AllowedIn(area, datos);
+        var permitidos = AllowedIn(oleada, area, datos);
         int tope = PoolCap(oleada, area, permitidos, datos);
 
         if (tope >= 0 && tope < presupuesto)
@@ -112,7 +112,7 @@ public static class Balance
     }
 
     /// <summary>
-    /// Los enemigos que pueden salir en un área, con su peso.
+    /// Los enemigos que pueden salir en una oleada, con su peso.
     /// </summary>
     /// <remarks>
     /// <para>Se toman del área actual <b>y de la anterior</b>. Que los bichos de
@@ -120,10 +120,19 @@ public static class Balance
     /// entre áreas —que si no se siente como un muro— y le da al jugador la
     /// satisfacción de ver cómo lo que antes lo mataba ahora cae de un golpe.</para>
     ///
-    /// <para>Los del área anterior pesan menos, así que el área nueva domina la
-    /// composición sin que la vieja desaparezca de golpe.</para>
+    /// <para>⚠ El peso del área anterior <b>se desvanece</b> a lo largo de las
+    /// primeras oleadas del área, no es constante. Con peso fijo el pool cambiaba
+    /// de composición de una oleada a la otra, y como el tope del presupuesto es
+    /// el costo medio de ese pool, el presupuesto saltaba entre +19% y +56% en el
+    /// borde —el equivalente a diez o veinte oleadas de crecimiento normal,
+    /// entregadas de una—. Medido: dos tercios de las corridas del bot morían
+    /// exactamente en la primera oleada de un área.</para>
+    ///
+    /// <para>El desvanecido arregla el número y lo que se ve al mismo tiempo: la
+    /// primera oleada del área nueva trae sobre todo bichos conocidos y unos
+    /// pocos nuevos, que es cómo se presenta un área.</para>
     /// </remarks>
-    private static (int TypeId, int Weight)[] AllowedIn(int area, BalanceData datos)
+    private static (int TypeId, int Weight)[] AllowedIn(int oleada, int area, BalanceData datos)
     {
         var actual = datos.InArea(area);
         var anterior = area > 1 ? datos.InArea(area - 1) : [];
@@ -133,8 +142,10 @@ public static class Balance
         foreach (var e in actual)
             lista.Add((e.Id, datos.Curves.Wave.CurrentAreaWeight));
 
+        int pesoAnterior = PreviousWeightAt(oleada, area, datos);
+
         foreach (var e in anterior)
-            lista.Add((e.Id, datos.Curves.Wave.PreviousAreaWeight));
+            lista.Add((e.Id, pesoAnterior));
 
         // ⚠ Sin bestiario no hay oleada posible. Antes acá había un lobo
         // provisional escrito en el código; ahora que los datos son obligatorios,
@@ -148,5 +159,33 @@ public static class Balance
         }
 
         return [.. lista];
+    }
+
+    /// <summary>
+    /// Cuánto pesa el bestiario del área anterior en esta oleada: cae lineal de
+    /// <c>previousAreaWeightFirst</c> a <c>previousAreaWeight</c> a lo largo de
+    /// las primeras <c>previousAreaFadeWaves</c> oleadas del área.
+    /// </summary>
+    private static int PreviousWeightAt(int oleada, int area, BalanceData datos)
+    {
+        var p = datos.Curves.Wave;
+
+        if (p.PreviousAreaFadeWaves <= 1)
+            return p.PreviousAreaWeight;
+
+        // Posición dentro del área, 1 en la primera oleada.
+        int w = oleada - datos.Areas.FirstWaveOf(area) + 1;
+
+        if (w >= p.PreviousAreaFadeWaves)
+            return p.PreviousAreaWeight;
+
+        int caida = p.PreviousAreaWeightFirst - p.PreviousAreaWeight;
+
+        // Entero y sin punto flotante (JUGABILIDAD.md §4). Redondeo a mitad para
+        // arriba, igual que la rampa de capEq.
+        int bajado = (((w - 1) * caida * 2) + (p.PreviousAreaFadeWaves - 1))
+                     / (2 * (p.PreviousAreaFadeWaves - 1));
+
+        return p.PreviousAreaWeightFirst - bajado;
     }
 }

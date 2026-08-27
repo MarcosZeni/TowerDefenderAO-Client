@@ -448,6 +448,8 @@ public static class ExportadorBalance
             ["MaxNpcsPerWave", c.Wave.MaxNpcs, "curvas.json", "el presupuesto sobrante va a perks de NPC"],
             ["CurrentAreaWeight", c.Wave.CurrentAreaWeight, "curvas.json", "peso de sorteo por bicho"],
             ["PreviousAreaWeight", c.Wave.PreviousAreaWeight, "curvas.json", ""],
+            ["PreviousAreaWeightFirst", c.Wave.PreviousAreaWeightFirst, "curvas.json", "peso en la PRIMERA oleada del area; se desvanece hasta PreviousAreaWeight"],
+            ["PreviousAreaFadeWaves", c.Wave.PreviousAreaFadeWaves, "curvas.json", "en cuantas oleadas cae"],
             ["CostoNpcFormula",
                 $"hp/{c.Wave.HpDivisor} + danoMax/{c.Wave.MaxDamageDivisor} + velocidad/{c.Wave.SpeedDivisor}",
                 "curvas.json", "entero, trunca"],

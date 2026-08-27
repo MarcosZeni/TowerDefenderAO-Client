@@ -266,6 +266,19 @@
   // un muro— y le da al jugador la satisfacción de ver cómo lo que antes lo
   // mataba ahora cae de un golpe. Pesan menos para que el área nueva domine.
   //
+  // ⚠ EL PESO DEL ÁREA ANTERIOR SE DESVANECE, no es constante. Con peso fijo el
+  // pool cambiaba de composición de golpe al cruzar el borde, y como el tope del
+  // presupuesto es el costo medio del pool, el presupuesto saltaba entre +19% y
+  // +56% de una oleada a la otra: el equivalente a diez o veinte oleadas de
+  // crecimiento normal, entregadas de una. Medido con --balance: dos tercios de
+  // las corridas morían exactamente en la primera oleada de un área.
+  //
+  // "previousAreaWeightFirst" es el peso en la PRIMERA oleada del área y
+  // "previousAreaWeight" el de régimen; entre las dos hay una recta de
+  // "previousAreaFadeWaves" oleadas. Con 110 contra los 40 del área nueva, la
+  // oleada de estreno es mayormente conocida y trae unos pocos bichos nuevos, que
+  // es cómo se presenta un área: primero se los ve, después aprietan.
+  //
   // "npcCost": derivado de los stats en vez de escrito a mano por criatura. Si
   // la fórmula es buena, AGREGAR UN BICHO NUEVO NO OBLIGA A REBALANCEAR NADA. El
   // HP pesa más que el daño porque en un tower defense aguantar es lo que cuesta
@@ -275,6 +288,8 @@
     "maxNpcs": 60,
     "currentAreaWeight": 40,
     "previousAreaWeight": 15,
+    "previousAreaWeightFirst": 110,
+    "previousAreaFadeWaves": 5,
     "npcCost": { "hpDivisor": 4, "maxDamageDivisor": 2, "speedDivisor": 8 },
     "defaultSpawnInterval": 30
   },

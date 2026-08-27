@@ -152,6 +152,8 @@ public sealed record WaveData(
     int MaxNpcs,
     int CurrentAreaWeight,
     int PreviousAreaWeight,
+    int PreviousAreaWeightFirst,
+    int PreviousAreaFadeWaves,
     int HpDivisor,
     int MaxDamageDivisor,
     int SpeedDivisor,
@@ -1196,6 +1198,8 @@ public static class TableReader
                 Int(oleada, "maxNpcs", archivo),
                 Int(oleada, "currentAreaWeight", archivo),
                 Int(oleada, "previousAreaWeight", archivo),
+                Int(oleada, "previousAreaWeightFirst", archivo),
+                Int(oleada, "previousAreaFadeWaves", archivo),
                 Int(costoNpc, "hpDivisor", archivo),
                 Int(costoNpc, "maxDamageDivisor", archivo),
                 Int(costoNpc, "speedDivisor", archivo),
@@ -1224,6 +1228,23 @@ public static class TableReader
 
         if (curvas.Wave.HpDivisor == 0 || curvas.Wave.MaxDamageDivisor == 0 || curvas.Wave.SpeedDivisor == 0)
             throw new InvalidBalanceDataException($"{archivo}: ningún divisor de «costoNpc» puede ser 0");
+
+        // ⚠ El desvanecido del área anterior es lo que borra el MURO DEL BORDE.
+        // Sin él, la primera oleada de un área saltaba entre +19% y +56% de
+        // presupuesto de una oleada a la otra, porque el costo medio del pool
+        // cambia de golpe. Un fade de menos de una oleada no desvanece nada, y
+        // un peso inicial menor que el de régimen sería un fade al revés.
+        if (curvas.Wave.PreviousAreaFadeWaves < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «previousAreaFadeWaves» tiene que ser 1 o más");
+
+        if (curvas.Wave.PreviousAreaWeightFirst < curvas.Wave.PreviousAreaWeight)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «previousAreaWeightFirst» ({curvas.Wave.PreviousAreaWeightFirst}) no puede ser " +
+                $"menor que «previousAreaWeight» ({curvas.Wave.PreviousAreaWeight}): el área anterior se " +
+                "desvanece, no aparece");
+        }
+
 
         if (curvas.Boss.ExtraHealthDivisor == 0)
             throw new InvalidBalanceDataException($"{archivo}: «divisorVidaExtra» no puede ser 0");
