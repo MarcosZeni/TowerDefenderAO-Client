@@ -161,7 +161,7 @@ public sealed class Roster(BalanceData datos)
         if (ficha is null)
             return new EffectiveStats(
                 Ints.ToHundredths(b.Damage), Ints.ToThousandths(b.RangeCells), b.CadenceTicks,
-                PerkEffect.None, 0, WeaponAbility.None, 0);
+                PerkEffect.None, 0, 0, WeaponAbility.None, 0);
 
         // Cada nivel sube los stats base, aparte de abrir un slot.
         int porNivel = (ficha.Level - 1) * _datos.Classes.ExtraDamagePerLevel;
@@ -176,6 +176,7 @@ public sealed class Roster(BalanceData datos)
         var comportamiento = PerkEffect.None;
         var tierComportamiento = PerkTier.Bronze;
         int magnitudComportamiento = 0;
+        int magnitudComportamientoB = 0;
 
         foreach (int idPerk in ficha.Perks)
         {
@@ -188,11 +189,17 @@ public sealed class Roster(BalanceData datos)
                 case PerkEffect.Range: extraAlcance += p.Magnitude; break;
 
                 default:
+                    // ⚠ Desde Drops_v2 la mochila NO deja equipar un segundo
+                    // comportamiento, así que este desempate no debería hacer
+                    // falta nunca. Se deja igual, porque un log viejo o un dato
+                    // manipulado pueden traer dos: mejor que gane el más alto en
+                    // silencio que que el resultado dependa del orden de la lista.
                     if (comportamiento == PerkEffect.None || p.Tier > tierComportamiento)
                     {
                         comportamiento = p.Effect;
                         tierComportamiento = p.Tier;
                         magnitudComportamiento = p.Magnitude;
+                        magnitudComportamientoB = p.MagnitudeB;
                     }
                     break;
             }
@@ -224,6 +231,7 @@ public sealed class Roster(BalanceData datos)
         {
             comportamiento = PerkEffect.None;
             magnitudComportamiento = 0;
+            magnitudComportamientoB = 0;
         }
 
         return new EffectiveStats(
@@ -254,6 +262,7 @@ public sealed class Roster(BalanceData datos)
 
             Behavior: comportamiento,
             BehaviorMagnitude: magnitudComportamiento,
+            BehaviorMagnitudeB: magnitudComportamientoB,
 
             Ability: arma?.Ability ?? WeaponAbility.None,
             AbilityMagnitude: arma?.Magnitude ?? 0);
@@ -277,5 +286,16 @@ public readonly record struct EffectiveStats(
     int CadenceTicks,
     PerkEffect Behavior,
     int BehaviorMagnitude,
+
+    /// <summary>
+    /// El segundo número del comportamiento, para los que combinan dos cosas.
+    /// </summary>
+    /// <remarks>
+    /// Cero en los que hacen una sola. Lo usan todos los Únicos —cada uno es la
+    /// fusión de dos Oro rebajados— y las cadenas y quemaduras, que pegan
+    /// distinto al objetivo y a los secundarios.
+    /// </remarks>
+    int BehaviorMagnitudeB,
+
     WeaponAbility Ability,
     int AbilityMagnitude);

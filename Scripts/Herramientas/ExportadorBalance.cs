@@ -171,7 +171,7 @@ public static class ExportadorBalance
             // Las mismas cuentas que la simulación, pero LLAMÁNDOLAS, no
             // transcriptas: el costo sale del mismo método que usa el armador de
             // oleadas y el daño efectivo de las mismas constantes que el tick.
-            int danoEfectivo = System.Math.Max(cb.EnemyMinimumDamage, (e.MinDamage + e.MaxDamage) / cb.EnemyDamageAverageDivisor);
+            int danoEfectivo = System.Math.Max(cb.Enemy.MinimumDamage, (e.MinDamage + e.MaxDamage) / cb.Enemy.DamageAverageDivisor);
             int costo = WaveBuilder.Cost(e.Id, datos);
 
             double celdasSeg = e.Speed * 30.0 / 1000.0;
@@ -485,38 +485,93 @@ public static class ExportadorBalance
             ["PrecioPerkBronceFormula", Recta(c.Shop.BronzePerkPrice), "curvas.json", ""],
             ["PrecioPerkPlataFormula", Recta(c.Shop.SilverPerkPrice), "curvas.json", "el triple: se paga el SLOT, no solo el numero"],
 
+            // --- La escala interna ---
+            ["EscalaDanoYHp", Ints.HundredthsPerPoint, "Ints.HundredthsPerPoint", "centesimas de punto; los JSON van en puntos enteros"],
+            ["EscalaAlcance", Ints.ThousandthsPerCell, "Ints.ThousandthsPerCell", "milesimas de celda; sin esto los perks de alcance truncaban a cero"],
+
             // --- El tick ---
             ["DanoEnemigoFormula",
-                $"max({k.EnemyMinimumDamage}, (danoMin + danoMax)/{k.EnemyDamageAverageDivisor})",
+                $"max({k.Enemy.MinimumDamage}, (danoMin + danoMax)/{k.Enemy.DamageAverageDivisor})",
                 "combate.json", "promedio, no tirada: una tirada por golpe correría el RNG"],
-            ["SlowTope", k.SlowCapPercent, "combate.json", "% max; no apila, gana el mas fuerte"],
-            ["SlowDuracionTicks", k.SlowDurationTicks, "combate.json", "TEMPORAL; cada aplicacion refresca"],
-            ["VentanaSaltoRicochet", $"{k.RicochetJumpWindowCells} celdas DE RUTA", "combate.json", "del objetivo ANTERIOR, no del defensor"],
-            ["RadioSplash", $"{k.SplashRadiusCells} celdas DE RUTA", "combate.json", "distancia recorrida, no euclidea"],
-            ["RicochetBounces", k.RicochetBounces, "combate.json", "saltos extra ademas del golpe directo"],
-            ["PerforationBounces", k.PerforationBounces, "combate.json", ""],
-            ["ApocalypseBounces", k.ApocalypseBounces, "combate.json", ""],
-            ["MaxGoldSplashSecondaries", k.MaxGoldSplashSecondaries, "combate.json", ""],
-            ["MaxFrostWaveSecondaries", k.MaxFrostWaveSecondaries, "combate.json", ""],
-            ["MaxSecundariosIraDeDiosTormentaDivina", k.MaxDivineSecondaries, "combate.json", ""],
-            ["TerribleHungerSlow", k.TerribleHungerSlow, "combate.json", "el Unique envenena y ademas ralentiza"],
-            ["PenetranteDivisor", k.PiercingDivisor, "combate.json", "magnitud/N mientras no exista defensa que penetrar"],
-            ["CriticoCadaN", k.HitsPerCritical, "combate.json", "contador POR DEFENSOR, no Tick % N"],
+
+            // --- Estados (Estados_v2) ---
+            ["SlowTope", k.States.SlowCapPercent, "combate.json", "% max; no apila, gana el mas fuerte"],
+            ["SlowDuracionTicks", k.States.SlowDurationTicks, "combate.json", "TEMPORAL; cada aplicacion refresca"],
+            ["SlowDuracionMaxTicks", k.States.SlowMaxDurationTicks, "combate.json", "techo del refresco acumulado"],
+            ["VulnerableTicks", k.States.VulnerableTicks, "combate.json", "+% dano DIRECTO recibido; no apila"],
+            ["DebilidadTicks", k.States.WeakenTicks, "combate.json", "-% dano a la Torre; no sube el DPS de nadie"],
+            ["MarcaCazaTicks", k.States.HuntMarkTicks, "combate.json", "la clase que marca NO cobra el bonus"],
+            ["RaizTicks", k.States.RootTicks, "combate.json", "unico control DURO del juego"],
+            ["RaizInmunidadTicks", k.States.RootImmunityTicks, "combate.json", "periodo refractario: sin esto es perma-stun"],
+            ["RaizMaxPorEnemigo", k.States.RootMaxPerEnemy, "combate.json", "tope de veces por bicho"],
+            ["EmpujeMaxPorEnemigo", k.States.PushMaxPerEnemy, "combate.json", "presupuesto finito; nunca detras del spawn"],
+            ["AuraTicks", k.States.InspireTicks, "combate.json", "no apila: 3 bardos siguen dando +10%"],
+            ["AuraRadioCeldas", k.States.InspireRadiusCells, "combate.json", "no afecta al emisor"],
+            ["BotinTicks", k.States.LootTicks, "combate.json", ""],
+            ["BotinMaxPorEnemigo", k.States.LootMaxGoldPerEnemy, "combate.json", "oro, no %"],
+            ["BotinMaxPorOleada", k.States.LootMaxGoldPerWave, "combate.json", "el segundo techo: sin el, 60 bichos pagan 60 veces"],
+            ["DotTicks", k.States.DotTicks, "combate.json", "presupuesto: conserva Potencia x Duracion al mezclar"],
+            ["DotTicksMax", k.States.DotMaxTicks, "combate.json", "si no entra, SUBE el ritmo en vez de tirar dano"],
+
+            // --- Resistencia de jefe ---
+            ["JefePotenciaPorciento", k.Boss.PowerPercent, "combate.json", "el control SIGUE SIRVIENDO: vale la mitad, no cero"],
+            ["JefeControlDuroPorciento", k.Boss.HardCcDurationPercent, "combate.json", "% de la duracion de la raiz"],
+            ["JefeEmpujePorciento", k.Boss.PushPercent, "combate.json", ""],
+            ["JefeMaxEmpujes", k.Boss.MaxPushPerBoss, "combate.json", ""],
+            ["JefeFinalPotenciaPorciento", k.Boss.FinalBossPowerPercent, "combate.json", "el Dragon es un escalon aparte"],
+            ["JefeFinalInmuneControlDuro", k.Boss.FinalBossImmuneToHardCc ? "si" : "no", "combate.json", "matarlo es como se gana la corrida"],
+            ["JefeFinalInmuneEmpuje", k.Boss.FinalBossImmuneToPush ? "si" : "no", "combate.json", ""],
+
+            // --- Comportamientos ---
+            ["VentanaSaltoRicochet", $"{k.Behaviors.RicochetWindowThousandths} milesimas DE RUTA", "combate.json", "del objetivo ANTERIOR, no del defensor"],
+            ["RicochetBounces", k.Behaviors.RicochetBounces, "combate.json", "saltos extra ademas del golpe directo"],
+            ["CadenaMaxSaltos", k.Behaviors.ChainMaxJumps, "combate.json", "cada salto pega menos que el anterior"],
+            ["CadenaVentana", $"{k.Behaviors.ChainWindowThousandths} milesimas DE RUTA", "combate.json", ""],
+            ["RadioSplash", $"{k.Behaviors.SplashRadiusThousandths} milesimas DE RUTA", "combate.json", "distancia recorrida, no euclidea"],
+            ["SplashMaxSecundarios", k.Behaviors.SplashMaxSecondaries, "combate.json", ""],
+            ["SplashTechoTotal", $"{k.Behaviors.SplashTotalCapPercent}% del golpe", "combate.json", "el segundo techo: acota el dano SUMADO"],
+            ["QuemaduraMaxSecundarios", k.Behaviors.BurnMaxSecondaries, "combate.json", ""],
+            ["QuemaduraRadio", $"{k.Behaviors.BurnRadiusThousandths} milesimas", "combate.json", ""],
+            ["CriticoCadaN", k.Behaviors.HitsPerCritical, "combate.json", "contador POR DEFENSOR, no Tick % N"],
+            ["QuebrantoCadaN", k.Behaviors.SunderEveryHits, "combate.json", ""],
+            ["RaicesCadaN", k.Behaviors.RootEveryHits, "combate.json", ""],
+            ["SismicoCadaN", k.Behaviors.SeismicEveryHits, "combate.json", ""],
+            ["InspiracionCadaN", k.Behaviors.InspireEveryHits, "combate.json", ""],
+            ["EcoCadaN", k.Behaviors.EchoEveryHits, "combate.json", ""],
+            ["EcoRetrasoTicks", k.Behaviors.EchoDelayTicks, "combate.json", "si el objetivo murio, busca un vecino de ruta"],
+            ["EcoRadioBusqueda", $"{k.Behaviors.EchoSearchThousandths} milesimas", "combate.json", ""],
+            ["FocoMaxStacks", k.Behaviors.FocusMaxStacks, "combate.json", "golpes seguidos al MISMO objetivo"],
+            ["FocoReinicioTicks", k.Behaviors.FocusResetTicks, "combate.json", "se pierde al cambiar de objetivo"],
+            ["SobrepenetracionTecho", $"{k.Behaviors.OverpenCapPercent}% del golpe", "combate.json", "una sola transferencia; no encadena"],
+            ["SobrepenetracionRadio", $"{k.Behaviors.OverpenRadiusThousandths} milesimas", "combate.json", ""],
+            ["OportunistaUmbral", $"{k.Behaviors.OpportunistThresholdPercent}% HP o menos", "combate.json", "remata; NO ejecuta"],
+            ["PrimerImpactoUmbral", $"mas de {k.Behaviors.FirstStrikeThresholdPercent}% HP", "combate.json", "el opuesto de Oportunista"],
+            ["PreparacionTicksSinObjetivo", k.Behaviors.ChargeIdleTicks, "combate.json", "una sola carga guardada"],
+
+            // --- Unicos ---
+            ["OndaDeFrioMaxSecundarios", k.Uniques.FrostWaveMaxSecondaries, "combate.json", ""],
+            ["OndaDeFrioSlowTicks", k.Uniques.FrostWaveSlowTicks, "combate.json", "mas corto que Escarcha suelta"],
+            ["PerforacionRadio", $"{k.Uniques.PerforationRadiusThousandths} milesimas", "combate.json", ""],
+            ["InvisibilidadMaxOroPorEnemigo", k.Uniques.InvisibilityMaxGoldPerEnemy, "combate.json", "mas bajo que Saqueo suelto"],
+            ["InvisibilidadMaxOroPorOleada", k.Uniques.InvisibilityMaxGoldPerWave, "combate.json", ""],
+            ["TerribleHambreRaizTicks", k.Uniques.TerribleHungerRootTicks, "combate.json", "mas corta que Raices suelta"],
+            ["FuerzaMaxEmpujes", k.Uniques.StrengthMaxPushPerEnemy, "combate.json", ""],
 
             // --- Habilidades de arma ---
-            ["MaxWeaponSplashSecondaries", k.MaxWeaponSplashSecondaries, "combate.json", ""],
-            ["WeaponBounceBounces", k.WeaponBounceBounces, "combate.json", ""],
-            ["MaxChainSecondaries", k.MaxChainSecondaries, "combate.json", ""],
-            ["SedTecho", k.ThirstBonusCap, "combate.json", "% max ACUMULADO por oleada; se reinicia al terminarla"],
-            ["ExecuteThresholdTroop", k.ExecuteThresholdTroop, "combate.json", "TECHO: el umbral real es min(magnitud, esto)"],
-            ["ExecuteThresholdBoss", k.ExecuteThresholdBoss, "combate.json", ""],
-            ["FinalBossImmuneToExecute", k.FinalBossImmuneToExecute ? "si" : "no", "combate.json", "matarlo es como se gana la corrida"],
-            ["VampirismCooldownTicks", k.VampirismCooldownTicks, "combate.json", "un proc por CLASE, no por defensor"],
-            ["GreedMarkDurationTicks", k.GreedMarkDurationTicks, "combate.json", "se cobra al morir, no al golpear"],
+            ["MaxWeaponSplashSecondaries", k.Weapons.MaxSplashSecondaries, "combate.json", ""],
+            ["WeaponBounceBounces", k.Weapons.BounceBounces, "combate.json", ""],
+            ["MaxChainSecondaries", k.Weapons.MaxChainSecondaries, "combate.json", ""],
+            ["SedTecho", k.Weapons.ThirstBonusCap, "combate.json", "% max ACUMULADO por oleada; se reinicia al terminarla"],
+            ["ExecuteThresholdTroop", k.Weapons.ExecuteThresholdTroop, "combate.json", "TECHO: el umbral real es min(magnitud, esto)"],
+            ["ExecuteThresholdBoss", k.Weapons.ExecuteThresholdBoss, "combate.json", ""],
+            ["FinalBossImmuneToExecute", k.Weapons.FinalBossImmuneToExecute ? "si" : "no", "combate.json", "matarlo es como se gana la corrida"],
+            ["VampirismCooldownTicks", k.Weapons.VampirismCooldownTicks, "combate.json", "un proc por CLASE, no por defensor"],
+            ["GreedMarkDurationTicks", k.Weapons.GreedMarkDurationTicks, "combate.json", "se cobra al morir, no al golpear"],
 
             // --- Reglas que no son un numero ---
             ["AlcanceAlCuadrado", "si", "todo el combate", "sin raices; alcance 1 NO cubre diagonales"],
-            ["ComportamientosNoApilan", "si", "Roster.StatsOf", "gana el tier mas alto; el arma pisa al perk"],
+            ["SecundariosNoProccean", "si", "DamageSource", "splash/cadena/eco/DoT/overkill solo restan vida"],
+            ["UnaSolaRanuraDeComportamiento", "si", "Run.EquipPerk", "la mochila rebota el segundo Oro; el arma tapa al perk"],
         ];
     }
 

@@ -424,20 +424,28 @@ public static class CargadorDatos
                 new TowerData(1, 1, 30),
                 new RunData(1, 1, [1], 1, 30),
                 new DefenderData(1, 1, 50, 100),
-                new EconomyData(1, 0, 0),
+                new EconomyData(1, 0, 0, [100]),
                 new BudgetData(0, 0, 1, 1),
                 new PerWaveCurves(
                     new LinearCurve(0, 0), new LinearCurve(0, 0), new LinearCurve(0, 0),
                     30, 1, 30, 30, 1, 0, 0),
                 new ShopData(0, 0, 0, new LinearCurve(0, 0), new LinearCurve(0, 0)),
-                new DropData(0, 0),
+                new DropData(0, 0, 1, 1, 1, 0, false),
                 new WaveData(1, 1, 1, 1, 1, 1, 30),
                 new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0),
                 new BossData(1, 0, "")),
 
+            // ⚠ Todos estos números son MÍNIMOS QUE NO ROMPEN, no valores de
+            // balance: la tabla vacía existe para que el juego arranque y muestre
+            // el error, no para que se pueda jugar con ella. El hash queda en
+            // «sin-datos» y `Run` no acepta arrancar con esto.
             Combat = new CombatData(
-                2, 1, 60, 90, 2, 2, 1, 2, 3, 4, 6, 6, 25, 4, 7,
-                4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60),
+                new EnemyCombat(2, 1),
+                new BossControl(50, 40, 30, 0, 1, 30, true, true, true),
+                new StateRules(60, 90, 180, 60, 300, 90, 15, 120, 6, 3, 90, 3, 120, 10, 60, 90, 180),
+                new BehaviorRules(1, 2000, 2, 1500, 3, 1800, 105, 2, 1500, 7, 5, 60, 4, 6, 5, 8, 4, 15, 1000, 40, 1500, 25, 80, 45),
+                new UniqueRules(3, 75, 2000, 8, 50, 12, 3),
+                new WeaponRules(4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60)),
         };
 
         datos.BuildIndexes();

@@ -392,8 +392,23 @@ public partial class PantallaMochila : Control
             Text($"{Loc.Get("ui.mochila.habilidad")} {Loc.Effect(stats.Behavior)}",
                 1200, 448, 19, new Color(0.95f, 0.8f, 0.4f));
         }
+        else if (stats.Ability != WeaponAbility.None)
+        {
+            Text($"{Loc.Get("ui.mochila.habilidad")} {Loc.Ability(stats.Ability)}",
+                1200, 448, 19, new Color(0.95f, 0.8f, 0.4f));
+        }
 
-        Text(Loc.Get("ui.mochila.sacar_destruye"), 1200, 490, 16, Gris);
+        // ⚠ AVISO EXPLÍCITO (Drops_v2): el arma y el perk son la MISMA ranura, y
+        // el arma gana. La exclusión no cambió; lo que cambió es que ahora se
+        // dice. Antes un Oro raro —uno de los ocho de toda la corrida— podía
+        // quedar anulado por equipar un arma y el jugador no se enteraba nunca.
+        if (partida.ArmaTapaElRasgo(clase))
+        {
+            Text(Loc.Get("ui.mochila.arma_tapa_rasgo"),
+                1200, 470, 16, new Color(0.95f, 0.55f, 0.4f));
+        }
+
+        Text(Loc.Get("ui.mochila.sacar_destruye"), 1200, 496, 16, Gris);
     }
 
     private void DibujarConfirmacion()

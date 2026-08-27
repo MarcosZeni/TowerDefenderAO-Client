@@ -68,7 +68,26 @@ public sealed record DefenderData(
 public sealed record EconomyData(
     int StartingGoldTokens,
     int GoldPerCalledEnemy,
-    int CallGoldCap);
+    int CallGoldCap,
+    int[] GoldMultiplierPerArea)
+{
+    /// <summary>
+    /// El porcentaje de oro de kill que paga esa área.
+    /// </summary>
+    /// <remarks>
+    /// <para>Desacopla el escalado de los enemigos del escalado del dinero: el
+    /// presupuesto de oleada es cuadrático, así que sin esto el oro crecía con él
+    /// y en las áreas tardías el jugador terminaba con el tablero lleno y oro
+    /// sobrando — un recurso que dejó de ser un recurso.</para>
+    ///
+    /// <para>Es el patrón de BTD6: bajar el ingreso mantiene legibles los precios
+    /// de la tienda; subir los precios los vuelve una tabla que hay que releer.</para>
+    /// </remarks>
+    public int GoldPercentOfArea(int area)
+        => area >= 1 && area <= GoldMultiplierPerArea.Length
+            ? GoldMultiplierPerArea[area - 1]
+            : 100;
+}
 
 public sealed record BudgetData(
     int Base,
@@ -112,7 +131,22 @@ public sealed record ShopData(
         => tier == PerkTier.Bronze ? BronzePerkPrice.En(oleada) : SilverPerkPrice.En(oleada);
 }
 
-public sealed record DropData(int CommonChance, int BronzeChance);
+/// <summary>Cómo caen los perks. Ver <c>curvas.json</c> §drops.</summary>
+/// <remarks>
+/// ⚠ <b>El jefe ofrece varios y el jugador elige uno</b> (Drops_v2). Con un solo
+/// Oro al azar por jefe y ocho jefes por corrida, ver los <b>dos</b> componentes
+/// de una receta concreta era cuestión de suerte y los Únicos eran una lotería.
+/// Ofrecer tres y dejar elegir da agencia <b>sin regalar poder</b>: sigue saliendo
+/// un solo Oro por jefe.
+/// </remarks>
+public sealed record DropData(
+    int CommonChance,
+    int BronzeChance,
+    int BossGoldOptions,
+    int SynergyWeight,
+    int GoldPoolSize,
+    int GoldPoolPerNewClass,
+    bool FinalBossDrops);
 
 public sealed record WaveData(
     int MaxNpcs,
@@ -153,28 +187,107 @@ public sealed record CurveData(
 //  combate.json
 // =============================================================================
 
+/// <summary>El daño del enemigo, derivado de su rango del bestiario.</summary>
+public sealed record EnemyCombat(int DamageAverageDivisor, int MinimumDamage);
+
 /// <summary>
-/// Los números del tick, los que antes eran literales dentro de
-/// <see cref="Run"/>.
+/// Cuánto control aguanta un jefe.
 /// </summary>
-public sealed record CombatData(
-    int EnemyDamageAverageDivisor,
-    int EnemyMinimumDamage,
+/// <remarks>
+/// <para>⚠ <b>Es la regla que hace que los jefes sigan siendo jefes.</b> Sin ella
+/// un druida con Raíces y un mago con Escarcha dejan al jefe de área clavado y el
+/// combate deja de existir. Con ella el control <b>sigue sirviendo</b> —vale la
+/// mitad, no cero— y la pelea se gana pegando.</para>
+///
+/// <para>Dos números cubren todos los estados: la potencia se recorta parejo y el
+/// control duro se recorta por duración. Escribir un valor de jefe por perk sería
+/// veinte números que se desincronizan de a uno.</para>
+/// </remarks>
+public sealed record BossControl(
+    int PowerPercent,
+    int HardCcDurationPercent,
+    int PushPercent,
+    int HardCcExtraImmunityTicks,
+    int MaxPushPerBoss,
+    int FinalBossPowerPercent,
+    bool FinalBossImmuneToHardCc,
+    bool FinalBossImmuneToPush,
+    bool LootIgnoresBosses);
+
+/// <summary>Cuánto dura y hasta dónde llega cada estado.</summary>
+/// <remarks>
+/// ⚠ Ninguno apila: gana la potencia más fuerte y cada aplicación refresca la
+/// duración. Los DoT son la excepción, y con su propia regla —conservan
+/// Potencia × Duración—. Ver <see cref="DotState"/>.
+/// </remarks>
+public sealed record StateRules(
     int SlowCapPercent,
     int SlowDurationTicks,
-    int RicochetJumpWindowCells,
-    int SplashRadiusCells,
+    int SlowMaxDurationTicks,
+    int VulnerableTicks,
+    int WeakenTicks,
+    int HuntMarkTicks,
+    int RootTicks,
+    int RootImmunityTicks,
+    int RootMaxPerEnemy,
+    int PushMaxPerEnemy,
+    int InspireTicks,
+    int InspireRadiusCells,
+    int LootTicks,
+    int LootMaxGoldPerEnemy,
+    int LootMaxGoldPerWave,
+    int DotTicks,
+    int DotMaxTicks);
+
+/// <summary>
+/// Los disparadores y los alcances de cada comportamiento de Oro.
+/// </summary>
+/// <remarks>
+/// La <b>magnitud</b> no está acá: vive en <c>perks.json</c>, al lado del perk,
+/// que es donde la busca el que balancea. Acá quedan los números que el jugador
+/// no ve en la ficha —cada cuántos golpes dispara, a qué distancia alcanza,
+/// cuántos secundarios toca— y que son justamente los más difíciles de balancear.
+/// </remarks>
+public sealed record BehaviorRules(
     int RicochetBounces,
-    int PerforationBounces,
-    int ApocalypseBounces,
-    int MaxGoldSplashSecondaries,
-    int MaxFrostWaveSecondaries,
-    int MaxDivineSecondaries,
-    int TerribleHungerSlow,
-    int PiercingDivisor,
+    int RicochetWindowThousandths,
+    int ChainMaxJumps,
+    int ChainWindowThousandths,
+    int SplashMaxSecondaries,
+    int SplashRadiusThousandths,
+    int SplashTotalCapPercent,
+    int BurnMaxSecondaries,
+    int BurnRadiusThousandths,
     int HitsPerCritical,
-    int MaxWeaponSplashSecondaries,
-    int WeaponBounceBounces,
+    int FocusMaxStacks,
+    int FocusResetTicks,
+    int SunderEveryHits,
+    int RootEveryHits,
+    int SeismicEveryHits,
+    int InspireEveryHits,
+    int EchoEveryHits,
+    int EchoDelayTicks,
+    int EchoSearchThousandths,
+    int OverpenCapPercent,
+    int OverpenRadiusThousandths,
+    int OpportunistThresholdPercent,
+    int FirstStrikeThresholdPercent,
+    int ChargeIdleTicks);
+
+/// <summary>Los topes de los Únicos que no entran en sus dos magnitudes.</summary>
+public sealed record UniqueRules(
+    int FrostWaveMaxSecondaries,
+    int FrostWaveSlowTicks,
+    int PerforationRadiusThousandths,
+    int InvisibilityMaxGoldPerEnemy,
+    int InvisibilityMaxGoldPerWave,
+    int TerribleHungerRootTicks,
+    int StrengthMaxPushPerEnemy);
+
+/// <summary>Los topes de las habilidades de arma que no son la magnitud.</summary>
+public sealed record WeaponRules(
+    int MaxSplashSecondaries,
+    int BounceBounces,
     int MaxChainSecondaries,
     int ThirstBonusCap,
     int RangePortionCap,
@@ -184,6 +297,24 @@ public sealed record CombatData(
     bool FinalBossImmuneToExecute,
     int VampirismCooldownTicks,
     int GreedMarkDurationTicks);
+
+/// <summary>
+/// Los números del tick, los que antes eran literales dentro de
+/// <see cref="Run"/>.
+/// </summary>
+/// <remarks>
+/// Va partido en seis grupos y no como una lista plana de sesenta parámetros:
+/// una lista posicional de ese largo es una invitación a cruzar dos números al
+/// agregar el sesenta y uno, y el síntoma sería un radio de splash usado como
+/// duración de veneno.
+/// </remarks>
+public sealed record CombatData(
+    EnemyCombat Enemy,
+    BossControl Boss,
+    StateRules States,
+    BehaviorRules Behaviors,
+    UniqueRules Uniques,
+    WeaponRules Weapons);
 
 // =============================================================================
 //  clases.json
@@ -793,6 +924,12 @@ public static class TableReader
                 Tier = tier,
                 Effect = efecto,
                 Magnitude = Int(p, "magnitude", archivo),
+
+                // Opcional: solo los perks que combinan dos cosas lo traen. Los
+                // Únicos lo usan siempre —son la fusión de dos Oro—, y Cadena y
+                // Quemadura para el número del segundo salto y del secundario.
+                MagnitudeB = OptionalInt(p, "magnitudeB", 0),
+
                 Classes = ClassesOf(p, archivo),
                 MaxStacked = OptionalInt(p, "maxStacked", MaxDe(tier)),
             });
@@ -1018,7 +1155,8 @@ public static class TableReader
             new EconomyData(
                 Int(economia, "startingGoldTokens", archivo),
                 Int(economia, "goldPerCalledEnemy", archivo),
-                Int(economia, "callGoldCap", archivo)),
+                Int(economia, "callGoldCap", archivo),
+                IntArrayOf(economia, "goldMultiplierPerArea", archivo)),
 
             new BudgetData(
                 Int(presupuesto, "base", archivo),
@@ -1047,7 +1185,12 @@ public static class TableReader
 
             new DropData(
                 Int(drops, "commonChance", archivo),
-                Int(drops, "bronzeChance", archivo)),
+                Int(drops, "bronzeChance", archivo),
+                Int(drops, "bossGoldOptions", archivo),
+                Int(drops, "synergyWeight", archivo),
+                Int(drops, "goldPoolSize", archivo),
+                Int(drops, "goldPoolPerNewClass", archivo),
+                Bool(drops, "finalBossDrops", false)),
 
             new WaveData(
                 Int(oleada, "maxNpcs", archivo),
@@ -1088,6 +1231,23 @@ public static class TableReader
         if (curvas.Tower.CadenceTicks < 1)
             throw new InvalidBalanceDataException($"{archivo}: la cadencia de la Tower tiene que ser 1 tick o más");
 
+        // ⚠ Un multiplicador por área que no cubra todas las áreas dejaría al
+        // resto pagando el 100% en silencio, que es el error que no se ve: la
+        // economía tardía volvería a descontrolarse sin que nadie tocara nada.
+        if (curvas.Economy.GoldMultiplierPerArea.Length != areas)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «goldMultiplierPerArea» trae {curvas.Economy.GoldMultiplierPerArea.Length} " +
+                $"números pero hay {areas} áreas");
+        }
+
+        // ⚠ Un jefe que ofrece cero Oro rompe la única fuente de Oro del juego.
+        if (curvas.Drops.BossGoldOptions < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «bossGoldOptions» tiene que ser 1 o más");
+
+        if (curvas.Drops.GoldPoolSize < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «goldPoolSize» tiene que ser 1 o más");
+
         return curvas;
     }
 
@@ -1103,57 +1263,165 @@ public static class TableReader
         var raiz = doc.RootElement;
 
         var enemigo = Obj(raiz, "enemy", archivo);
-        var slow = Obj(raiz, "slow", archivo);
+        var jefe = Obj(raiz, "bossControl", archivo);
+        var estados = Obj(raiz, "states", archivo);
         var comp = Obj(raiz, "behaviors", archivo);
+        var unicos = Obj(raiz, "uniques", archivo);
         var arma = Obj(raiz, "weaponAbilities", archivo);
 
+        var slow = Obj(estados, "slow", archivo);
+        var raiz2 = Obj(estados, "root", archivo);
+        var empuje = Obj(estados, "push", archivo);
+        var aura = Obj(estados, "inspire", archivo);
+        var botin = Obj(estados, "loot", archivo);
+        var dot = Obj(estados, "dot", archivo);
+
+        var ricochet = Obj(comp, "ricochet", archivo);
+        var cadena = Obj(comp, "chain", archivo);
+        var splash = Obj(comp, "splash", archivo);
+        var quemar = Obj(comp, "burn", archivo);
+        var foco = Obj(comp, "focus", archivo);
+        var sobrepen = Obj(comp, "overpenetration", archivo);
+        var eco = Obj(comp, "arcaneEcho", archivo);
+
+        // "cada cuántos golpes" de los estados periódicos. Van sueltos y no en un
+        // objeto común porque cada uno se balancea contra su propio efecto: cambiar
+        // el de Raíces no tiene nada que ver con el de Inspiración.
+        int CadaCuantos(string prop) => Int(Obj(comp, prop, archivo), "everyHits", archivo);
+
         var combate = new CombatData(
-            Int(enemigo, "damageAverageDivisor", archivo),
-            Int(enemigo, "minimumDamage", archivo),
+            new EnemyCombat(
+                Int(enemigo, "damageAverageDivisor", archivo),
+                Int(enemigo, "minimumDamage", archivo)),
 
-            Int(slow, "capPercent", archivo),
-            Int(slow, "durationTicks", archivo),
+            new BossControl(
+                Int(jefe, "powerPercent", archivo),
+                Int(jefe, "hardCcDurationPercent", archivo),
+                Int(jefe, "pushPercent", archivo),
+                Int(jefe, "hardCcExtraImmunityTicks", archivo),
+                Int(jefe, "maxPushPerBoss", archivo),
+                Int(jefe, "finalBossPowerPercent", archivo),
+                Bool(jefe, "finalBossImmuneToHardCc", true),
+                Bool(jefe, "finalBossImmuneToPush", true),
+                Bool(jefe, "lootIgnoresBosses", true)),
 
-            Int(comp, "ricochetJumpWindowCells", archivo),
-            Int(comp, "splashRadiusCells", archivo),
-            Int(comp, "ricochetBounces", archivo),
-            Int(comp, "perforationBounces", archivo),
-            Int(comp, "apocalypseBounces", archivo),
-            Int(comp, "maxGoldSplashSecondaries", archivo),
-            Int(comp, "maxFrostWaveSecondaries", archivo),
-            Int(comp, "maxDivineSecondaries", archivo),
-            Int(comp, "terribleHungerSlow", archivo),
-            Int(comp, "piercingDivisor", archivo),
-            Int(comp, "hitsPerCritical", archivo),
+            new StateRules(
+                Int(slow, "capPercent", archivo),
+                Int(slow, "durationTicks", archivo),
+                Int(slow, "maxDurationTicks", archivo),
+                Int(Obj(estados, "vulnerable", archivo), "durationTicks", archivo),
+                Int(Obj(estados, "weaken", archivo), "durationTicks", archivo),
+                Int(Obj(estados, "huntMark", archivo), "durationTicks", archivo),
+                Int(raiz2, "durationTicks", archivo),
+                Int(raiz2, "immunityTicks", archivo),
+                Int(raiz2, "maxPerEnemy", archivo),
+                Int(empuje, "maxPerEnemy", archivo),
+                Int(aura, "durationTicks", archivo),
+                Int(aura, "radiusCells", archivo),
+                Int(botin, "durationTicks", archivo),
+                Int(botin, "maxGoldPerEnemy", archivo),
+                Int(botin, "maxGoldPerWave", archivo),
+                Int(dot, "durationTicks", archivo),
+                Int(dot, "maxDurationTicks", archivo)),
 
-            Int(arma, "maxSplashSecondaries", archivo),
-            Int(arma, "bounceBounces", archivo),
-            Int(arma, "maxChainSecondaries", archivo),
-            Int(arma, "thirstBonusCap", archivo),
-            Int(arma, "rangePortionCap", archivo),
-            Int(arma, "rangePortionScale", archivo),
-            Int(arma, "executeThresholdTroop", archivo),
-            Int(arma, "executeThresholdBoss", archivo),
-            Bool(arma, "finalBossImmuneToExecute", true),
-            Int(arma, "vampirismCooldownTicks", archivo),
-            Int(arma, "greedMarkDurationTicks", archivo));
+            new BehaviorRules(
+                Int(ricochet, "bounces", archivo),
+                Int(ricochet, "jumpWindowThousandths", archivo),
+                Int(cadena, "maxJumps", archivo),
+                Int(cadena, "jumpWindowThousandths", archivo),
+                Int(splash, "maxSecondaries", archivo),
+                Int(splash, "radiusThousandths", archivo),
+                Int(splash, "totalCapPercent", archivo),
+                Int(quemar, "maxSecondaries", archivo),
+                Int(quemar, "radiusThousandths", archivo),
+                CadaCuantos("criticalHit"),
+                Int(foco, "maxStacks", archivo),
+                Int(foco, "resetTicks", archivo),
+                CadaCuantos("sunder"),
+                CadaCuantos("root"),
+                CadaCuantos("seismic"),
+                CadaCuantos("inspire"),
+                Int(eco, "everyHits", archivo),
+                Int(eco, "delayTicks", archivo),
+                Int(eco, "searchRadiusThousandths", archivo),
+                Int(sobrepen, "capPercentOfDamage", archivo),
+                Int(sobrepen, "radiusThousandths", archivo),
+                Int(Obj(comp, "opportunist", archivo), "hpThresholdPercent", archivo),
+                Int(Obj(comp, "firstStrike", archivo), "hpThresholdPercent", archivo),
+                Int(Obj(comp, "charge", archivo), "idleTicks", archivo)),
+
+            new UniqueRules(
+                Int(unicos, "frostWaveMaxSecondaries", archivo),
+                Int(unicos, "frostWaveSlowTicks", archivo),
+                Int(unicos, "perforationRadiusThousandths", archivo),
+                Int(unicos, "invisibilityMaxGoldPerEnemy", archivo),
+                Int(unicos, "invisibilityMaxGoldPerWave", archivo),
+                Int(unicos, "terribleHungerRootTicks", archivo),
+                Int(unicos, "strengthMaxPushPerEnemy", archivo)),
+
+            new WeaponRules(
+                Int(arma, "maxSplashSecondaries", archivo),
+                Int(arma, "bounceBounces", archivo),
+                Int(arma, "maxChainSecondaries", archivo),
+                Int(arma, "thirstBonusCap", archivo),
+                Int(arma, "rangePortionCap", archivo),
+                Int(arma, "rangePortionScale", archivo),
+                Int(arma, "executeThresholdTroop", archivo),
+                Int(arma, "executeThresholdBoss", archivo),
+                Bool(arma, "finalBossImmuneToExecute", true),
+                Int(arma, "vampirismCooldownTicks", archivo),
+                Int(arma, "greedMarkDurationTicks", archivo)));
 
         // ⚠ Un slow del 100% no es un enemigo lento: es un enemigo parado, y un
         // enemigo parado fuera del alcance de todos clava la oleada para siempre.
-        if (combate.SlowCapPercent is < 0 or > 99)
-            throw new InvalidBalanceDataException($"{archivo}: «topePorciento» del slow tiene que estar entre 0 y 99");
+        // El control duro que SÍ para —Raíces— es otra cosa: dura poco, deja
+        // inmunidad al salir y tiene tope de veces por bicho.
+        if (combate.States.SlowCapPercent is < 0 or > 99)
+            throw new InvalidBalanceDataException($"{archivo}: «capPercent» del slow tiene que estar entre 0 y 99");
 
-        if (combate.SlowDurationTicks < 1)
+        if (combate.States.SlowDurationTicks < 1)
             throw new InvalidBalanceDataException($"{archivo}: el slow tiene que durar 1 tick o más. Si dura 0 no hace nada; si no vence, es permanente.");
 
-        if (combate.HitsPerCritical < 1)
-            throw new InvalidBalanceDataException($"{archivo}: «golpesPorCritico» tiene que ser 1 o más");
+        // ⚠ Sin período refractario, varias fuentes de Raíces son perma-stun y la
+        // dificultad deja de existir. Sin tope por enemigo, tampoco alcanza: seis
+        // raíces seguidas ya son cuatro segundos parado.
+        if (combate.States.RootImmunityTicks <= combate.States.RootTicks)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: la inmunidad a raíz ({combate.States.RootImmunityTicks} ticks) tiene que ser MAYOR " +
+                $"que la raíz ({combate.States.RootTicks}). Si no, se puede encadenar sin fin.");
+        }
 
-        if (combate.PiercingDivisor == 0 || combate.EnemyDamageAverageDivisor == 0)
+        if (combate.States.RootMaxPerEnemy < 1 || combate.States.PushMaxPerEnemy < 1)
+            throw new InvalidBalanceDataException($"{archivo}: los topes por enemigo de raíz y empuje tienen que ser 1 o más");
+
+        // Los DoT guardan presupuesto: sin techo de duración, uno muy cargado
+        // sigue cobrando media corrida después del golpe que lo puso.
+        if (combate.States.DotMaxTicks < combate.States.DotTicks || combate.States.DotTicks < 1)
+            throw new InvalidBalanceDataException($"{archivo}: la duración del DoT tiene que ser 1 o más, y el techo no puede ser menor");
+
+        foreach (var (nombre, cada) in new (string, int)[]
+        {
+            ("criticalHit", combate.Behaviors.HitsPerCritical),
+            ("sunder", combate.Behaviors.SunderEveryHits),
+            ("root", combate.Behaviors.RootEveryHits),
+            ("seismic", combate.Behaviors.SeismicEveryHits),
+            ("inspire", combate.Behaviors.InspireEveryHits),
+            ("arcaneEcho", combate.Behaviors.EchoEveryHits),
+        })
+        {
+            if (cada < 1)
+                throw new InvalidBalanceDataException($"{archivo}: «{nombre}.everyHits» tiene que ser 1 o más");
+        }
+
+        if (combate.Behaviors.FocusMaxStacks < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «focus.maxStacks» tiene que ser 1 o más");
+
+        if (combate.Enemy.DamageAverageDivisor == 0)
             throw new InvalidBalanceDataException($"{archivo}: ningún divisor puede ser 0");
 
-        if (combate.RangePortionScale == 0)
-            throw new InvalidBalanceDataException($"{archivo}: «escalaPorcionAlcance» no puede ser 0");
+        if (combate.Weapons.RangePortionScale == 0)
+            throw new InvalidBalanceDataException($"{archivo}: «rangePortionScale» no puede ser 0");
 
         return combate;
     }

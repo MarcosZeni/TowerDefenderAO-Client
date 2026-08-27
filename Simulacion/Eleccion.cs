@@ -8,10 +8,32 @@ public enum ChoiceType
 
     /// <summary>Subir de nivel una que ya está: stats y <b>un slot más</b>.</summary>
     LevelUp = 1,
+
+    /// <summary>
+    /// Quedarse con uno de los perks de Oro que ofrece un jefe.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>El jefe ofrece varios y el jugador elige uno</b> (Drops_v2). Sigue
+    /// saliendo un solo Oro por jefe: lo que cambia no es cuánto poder entrega,
+    /// es que el jugador decide cuál. Con un Oro al azar y ocho jefes por
+    /// corrida, ver los <b>dos</b> componentes de una receta era cuestión de
+    /// suerte, y los Únicos eran una lotería en vez de un objetivo de build.
+    /// </remarks>
+    Perk = 2,
 }
 
-/// <summary>Una de las tres opciones que se ofrecen.</summary>
-public readonly record struct Choice(ChoiceType Kind, DefenderClass DefenderClass, int ResultingLevel);
+/// <summary>Una de las opciones que se ofrecen.</summary>
+/// <param name="DefenderClass">
+/// En una oferta de perk, una clase del roster que lo puede equipar. No decide
+/// nada —el perk va a la mochila y el jugador lo equipa donde quiera—: está para
+/// que la pantalla pueda decir a quién le sirve.
+/// </param>
+/// <param name="PerkId">El perk ofrecido, o <c>-1</c> si la opción no es de perk.</param>
+public readonly record struct Choice(
+    ChoiceType Kind,
+    DefenderClass DefenderClass,
+    int ResultingLevel,
+    int PerkId = -1);
 
 /// <summary>
 /// Arma las 3 opciones de la pantalla de elección.

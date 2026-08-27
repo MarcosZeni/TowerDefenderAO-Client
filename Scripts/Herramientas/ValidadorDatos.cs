@@ -42,6 +42,8 @@ public static class ValidadorDatos
         ValidarTablas(datos, problemas, avisos);
         ValidarPerks(problemas, avisos);
         ValidarPlanos(problemas);
+        ValidarPlanosAlcanzables(datos, avisos);
+        ValidarTextos(datos, problemas, avisos);
         ValidarLayouts(problemas, avisos);
         ValidarCurvas(datos, problemas, avisos);
 
@@ -69,6 +71,95 @@ public static class ValidadorDatos
     /// el juego ni abre; lo que solo es raro sale por acá como aviso y se juega
     /// igual.</para>
     /// </remarks>
+    /// <summary>
+    /// Que cada receta de fusión se pueda completar jugando.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Un plano se compra <b>con la billetera</b> y es la única progresión
+    /// permanente del proyecto. Si sus dos componentes no pueden caer en una
+    /// corrida de la clase que usa el Único, el jugador pagó por una receta que no
+    /// va a completar nunca — que es la peor forma posible de gastar la única
+    /// moneda que persiste.</para>
+    ///
+    /// <para>Los drops se filtran por las clases <b>activas</b>, así que un
+    /// componente que ninguna clase del roster pueda equipar no sale nunca. Por
+    /// eso «sobrepenetracion» lleva Thief en su lista aunque el Ladrón nunca lo
+    /// equipe suelto: sin la clase, la receta de Invisibilidad es inalcanzable en
+    /// una corrida que arranque solo con Ladrón.</para>
+    /// </remarks>
+    private static void ValidarPlanosAlcanzables(BalanceData datos, List<string> avisos)
+    {
+        int dependen = 0;
+
+        foreach (var plano in datos.Blueprints.All)
+        {
+            var resultante = datos.Perks.Get(plano.ResultingUnique);
+
+            foreach (var clase in resultante.Classes)
+            {
+                foreach (int componente in new[] { plano.GoldA, plano.GoldB })
+                {
+                    var oro = datos.Perks.Get(componente);
+
+                    if (oro.WorksFor(clase))
+                        continue;
+
+                    dependen++;
+
+                    avisos.Add(
+                        $"plano «{plano.Key}»: {clase} no puede equipar «{oro.Key}», " +
+                        "así que la receta depende de tener otra clase en el roster");
+                }
+            }
+        }
+
+        if (dependen == 0)
+            avisos.Add($"planos: los {datos.Blueprints.All.Count} se pueden juntar con la clase del Único sola");
+    }
+
+    /// <summary>
+    /// Que todo lo que el jugador va a leer tenga texto en el idioma de referencia.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Una clave sin traducir se muestra <b>cruda</b> —«perk.saqueo.name»— a
+    /// propósito, para que se vea en la primera pasada. Esto la ve antes: agregar
+    /// trece perks y veinte efectos y olvidarse de un nombre es exactamente el
+    /// olvido que no duele hasta que alguien juega.
+    /// </remarks>
+    private static void ValidarTextos(BalanceData datos, List<string> problemas, List<string> avisos)
+    {
+        // ⚠ En headless nadie cargó el idioma: las herramientas imprimen en
+        // español directo y no pasan por Loc. Sin esta línea, el chequeo acusa a
+        // los 94 textos de faltar y no sirve para nada.
+        if (Loc.Codigo.Length == 0)
+            Loc.Cargar(Loc.Referencia);
+
+        var faltan = new List<string>();
+
+        foreach (var p in datos.Perks.All)
+        {
+            if (Loc.Perk(p) == $"perk.{p.Key}.name")
+                faltan.Add($"perk.{p.Key}.name");
+        }
+
+        foreach (var e in System.Enum.GetValues<PerkEffect>())
+        {
+            if (e != PerkEffect.None && Loc.Effect(e) == $"effect.{e}.name")
+                faltan.Add($"effect.{e}.name");
+        }
+
+        foreach (var h in System.Enum.GetValues<WeaponAbility>())
+        {
+            if (h != WeaponAbility.None && Loc.Ability(h) == $"ability.{h}.name")
+                faltan.Add($"ability.{h}.name");
+        }
+
+        if (faltan.Count > 0)
+            problemas.Add($"faltan {faltan.Count} texto(s) en Datos\\lang\\{Loc.Referencia}.json: {string.Join(", ", faltan)}");
+        else
+            avisos.Add($"textos: nombre en «{Loc.Referencia}» para los {datos.Perks.All.Count} perks, los efectos y las habilidades");
+    }
+
     private static void ValidarTablas(BalanceData datos, List<string> problemas, List<string> avisos)
     {
         // Toda clase del enum tiene que estar en clases.json: si falta una, el

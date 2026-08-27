@@ -68,6 +68,32 @@ public sealed class Run
     /// </summary>
     private readonly Queue<NpcPurchase> _porSpawnear = new();
 
+    /// <summary>
+    /// Los ecos pendientes, en orden de creación.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Se resuelven <b>en orden de creación</b>, nunca al revés. Es la misma
+    /// regla que la lista de enemigos: dos ecos que caen en el mismo tick sobre
+    /// el mismo grupo tienen que resolverse siempre igual, o dos corridas con la
+    /// misma seed matan enemigos distintos.
+    /// </remarks>
+    private readonly List<PendingEcho> _ecos = [];
+
+    /// <summary>
+    /// Los Oro que esta corrida puede llegar a ver. Se arma en el primer jefe.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El catálogo tiene 22 Oro y ofrecerlos todos <b>diluye las recetas</b>:
+    /// cada jefe pasa a ser una elección entre veintidós cosas casi equivalentes y
+    /// juntar los dos componentes de un plano vuelve a ser suerte. Con un pool
+    /// acotado por corrida, lo que sale se repite lo suficiente como para poder
+    /// perseguirlo (Drops_v2).
+    /// </remarks>
+    private readonly List<int> _poolOro = [];
+
+    /// <summary>Oro extra que ya pagó Saqueo en esta oleada. Tiene tope.</summary>
+    private int _oroBotinOleada;
+
     /// <summary>Ticks entre spawn y spawn de la oleada actual.</summary>
     /// <remarks>Arranca en el de <c>curvas.json</c> hasta que la primera oleada imponga el suyo.</remarks>
     private int _intervaloSpawn;
@@ -354,8 +380,8 @@ public sealed class Run
         // 2. Spawn de los que le tocan a este tick, con sus perks ya tirados.
         FaseSpawn();
 
-        // 3. Expirar los efectos vencidos.
-        FaseExpirar();
+        // 3. Estados: vencer lo que se acabó, cobrar los DoT, soltar los ecos.
+        FaseEstados();
 
         // 4. Mover: distanciaRecorrida += velocidadEfectiva.
         FaseMover();
@@ -531,12 +557,33 @@ public sealed class Run
         // o dos cazadores, y las corridas de clase cara se estancaban en la
         // oleada 1 — medido con --balance, mitad de las seeds muertas ahí. Es
         // determinista igual: sale de la acción de elegir, que está en el log.
+        // ⚠ La oferta de Oro del jefe se resuelve acá y sale por otro camino: no
+        // toca el roster, no entrega oro y no consume RNG. El perk va a la
+        // mochila y el jugador decide después en qué clase lo pone.
+        if (opcion.Kind == ChoiceType.Perk)
+        {
+            // Mochila llena: se pierde, igual que un drop común. La UI de verdad
+            // abre el diálogo de "tirá uno" antes de llegar acá.
+            Backpack.StorePerk(opcion.PerkId);
+            OpenChoices = [];
+            return;
+        }
+
         bool primeraClase = Roster.Classes.Count == 0;
 
         if (opcion.Kind == ChoiceType.Hire)
+        {
             Roster.Hire(opcion.DefenderClass);
+
+            // Contratar una clase nueva ABRE Oro nuevo (Drops_v2): sin esto, un
+            // roster que crece no cambia lo que el jefe puede ofrecer y contratar
+            // tarde deja a la clase nueva sin comportamiento propio para siempre.
+            AmpliarPoolDeOro(opcion.DefenderClass);
+        }
         else
+        {
             Roster.LevelUp(opcion.DefenderClass);
+        }
 
         if (primeraClase)
             Gold = _datos.Curves.Economy.StartingGoldTokens * _datos.StatsOf(opcion.DefenderClass).Cost;
@@ -560,6 +607,17 @@ public sealed class Run
 
         var def = _datos.Perks.Get(cosa.Id);
         if (!def.WorksFor(clase))
+            return;
+
+        // ⚠ LA RANURA DE COMPORTAMIENTO ES UNA SOLA (Drops_v2).
+        //
+        // Antes se podían equipar tres Oro en la misma clase y solo el de tier
+        // más alto hacía algo: dos slots y dos drops de jefe —o sea dos de las
+        // ocho oportunidades de Oro de toda la corrida— gastados en nada, sin
+        // que el juego avisara. Rebotar el segundo es la versión honesta: para
+        // cambiar de comportamiento hay que sacar el que está, y sacarlo lo
+        // destruye, que es la decisión que el sistema quiere que se tome.
+        if (EsComportamiento(def.Tier) && ComportamientoDe(ficha) is not null)
             return;
 
         // El tope de apilado sale del tier: Bronce 3, Plata 2, Oro y Único 1.
@@ -697,13 +755,52 @@ public sealed class Run
         Backpack.RemoveAt(mayor);
         Backpack.RemoveAt(menor);
 
-        // Si no hay slot libre, el Único va a la mochila y el jugador decide
-        // después. Perderlo por no tener lugar sería castigar la mecánica que el
-        // juego quiere enseñar.
-        if (ficha.HasFreeSlot)
+        // Si no hay slot libre —o si la clase ya tiene un comportamiento puesto—
+        // el Único va a la mochila y el jugador decide después. Perderlo por no
+        // tener lugar sería castigar la mecánica que el juego quiere enseñar, y
+        // meterlo pisando el Oro equipado destruiría un Oro sin preguntar.
+        if (ficha.HasFreeSlot && ComportamientoDe(ficha) is null)
             ficha.Perks.Add(plano.ResultingUnique);
         else
             Backpack.StorePerk(plano.ResultingUnique);
+    }
+
+    /// <summary>Oro y Único son comportamiento; Bronce y Plata son números.</summary>
+    private static bool EsComportamiento(PerkTier tier)
+        => tier is PerkTier.Gold or PerkTier.Unique;
+
+    /// <summary>El perk de comportamiento que la clase tiene puesto, si hay.</summary>
+    private PerkDefinition? ComportamientoDe(RosterClass ficha)
+    {
+        foreach (int id in ficha.Perks)
+        {
+            var p = _datos.Perks.Get(id);
+
+            if (EsComportamiento(p.Tier))
+                return p;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// La clase tiene un comportamiento puesto Y un arma con habilidad, así que
+    /// el comportamiento está mudo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Existe para que la interfaz lo pueda <b>decir</b> (Drops_v2). La
+    /// exclusión se mantiene —arma y perk son la misma ranura— pero antes era
+    /// invisible: un Oro raro podía quedar anulado por equipar un arma y el
+    /// jugador no se enteraba nunca.
+    /// </remarks>
+    public bool ArmaTapaElRasgo(DefenderClass clase)
+    {
+        var ficha = Roster.Find(clase);
+
+        if (ficha is null || ComportamientoDe(ficha) is null || ficha.Weapon < 0)
+            return false;
+
+        return Backpack.WeaponById(ficha.Weapon)?.Ability is not (null or WeaponAbility.None);
     }
 
     /// <summary>
@@ -793,8 +890,8 @@ public sealed class Run
         // 3,5: sería exactamente el truncamiento que la escala vino a sacar, dejado
         // en pie a un renglón de distancia del arreglo.
         int dano = System.Math.Max(
-            Ints.ToHundredths(_datos.Combat.EnemyMinimumDamage),
-            Ints.ToHundredths(b.MinDamage + b.MaxDamage) / _datos.Combat.EnemyDamageAverageDivisor);
+            Ints.ToHundredths(_datos.Combat.Enemy.MinimumDamage),
+            Ints.ToHundredths(b.MinDamage + b.MaxDamage) / _datos.Combat.Enemy.DamageAverageDivisor);
 
         _enemigos.Add(new Enemy
         {
@@ -816,22 +913,124 @@ public sealed class Run
     }
 
     // =========================================================================
-    //  Fase 3 — Expirar efectos
+    //  Fase 3 — Estados
     // =========================================================================
 
-    private void FaseExpirar()
+    /// <summary>
+    /// Vence lo que se acabó, cobra los daños por tiempo y suelta los ecos.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Va ANTES de mover, y eso importa.</b> Un enemigo al que el
+    /// veneno mata en este tick no camina un paso más, y un slow que vence en
+    /// este tick ya no lo frena. Ponerlo después de mover daría un tick de
+    /// gracia a cada estado, que suena inocente hasta que se multiplica por cien
+    /// oleadas y el ranking deja de cerrar.</para>
+    ///
+    /// <para>Un DoT que mata acá deja al enemigo con <c>Alive == false</c>, y la
+    /// fase 8 le cobra el oro y le tira el drop como a cualquier otro muerto.</para>
+    /// </remarks>
+    private void FaseEstados()
     {
-        // Los dos efectos con duración que existen (propuesta V2): el slow y la
-        // marca de Codicia. Vencen acá, en la fase que siempre estuvo reservada
-        // para esto.
         foreach (var e in _enemigos)
         {
             if (e.SlowPercent > 0 && Tick >= e.SlowExpiryTick)
                 e.SlowPercent = 0;
 
+            if (e.VulnerablePercent > 0 && Tick >= e.VulnerableExpiryTick)
+                e.VulnerablePercent = 0;
+
+            if (e.WeakenPercent > 0 && Tick >= e.WeakenExpiryTick)
+                e.WeakenPercent = 0;
+
+            if (e.MarkPercent > 0 && Tick >= e.MarkExpiryTick)
+                e.MarkPercent = 0;
+
             if (e.ExtraGoldPercent > 0 && Tick >= e.ExtraGoldExpiryTick)
                 e.ExtraGoldPercent = 0;
+
+            if (!e.Alive)
+                continue;
+
+            // Los tres DoT cobran en orden fijo. Es daño SECUNDARIO: no dispara
+            // comportamientos, no aplica estados y no crea más secundarios.
+            for (int i = 0; i < e.Dots.Length; i++)
+            {
+                int sale = e.Dots[i].Tick(Tick);
+
+                if (sale > 0)
+                    e.Hp -= sale;
+            }
         }
+
+        // Las auras de cadencia también vencen acá: son estado del defensor, pero
+        // se apagan por tiempo igual que los del enemigo.
+        foreach (var d in _defensores)
+        {
+            if (d.CadenceBuffPercent > 0 && Tick >= d.CadenceBuffExpiryTick)
+                d.CadenceBuffPercent = 0;
+        }
+
+        ResolverEcos();
+    }
+
+    /// <summary>
+    /// Suelta los ecos que ya cumplieron su espera.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>En orden de creación.</b> Recorrer al revés para poder borrar
+    /// sobre la marcha es el atajo obvio y es exactamente el bug que rompe la
+    /// revalidación: dos ecos que caen en el mismo tick sobre el mismo grupo
+    /// resolverían al revés y matarían enemigos distintos.</para>
+    ///
+    /// <para>El eco guarda la <b>distancia recorrida</b> además del id de spawn,
+    /// porque el objetivo original puede estar muerto y borrado de la lista
+    /// cuando llega el momento. Ahí busca un vecino de ruta.</para>
+    /// </remarks>
+    private void ResolverEcos()
+    {
+        if (_ecos.Count == 0)
+            return;
+
+        foreach (var eco in _ecos)
+        {
+            if (Tick < eco.Tick)
+                continue;
+
+            var objetivo = PorIdDeSpawn(eco.SpawnId);
+
+            objetivo ??= MasCercanoEnRuta(eco.Distance, eco.RadiusThousandths);
+
+            if (objetivo is not null)
+                GolpeSecundario(objetivo, eco.Damage);
+        }
+
+        _ecos.RemoveAll(e => Tick >= e.Tick);
+    }
+
+    private Enemy? PorIdDeSpawn(int id)
+    {
+        foreach (var e in _enemigos)
+        {
+            if (e.SpawnId == id)
+                return e.Alive ? e : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>El primero vivo dentro del radio de ruta, en orden de spawn.</summary>
+    private Enemy? MasCercanoEnRuta(long distancia, int radio)
+    {
+        foreach (var e in _enemigos)
+        {
+            if (!e.Alive)
+                continue;
+
+            if (System.Math.Abs(e.DistanceTravelled - distancia) <= radio)
+                return e;
+        }
+
+        return null;
     }
 
     // =========================================================================
@@ -843,6 +1042,13 @@ public sealed class Run
         foreach (var e in _enemigos)
         {
             if (!e.Alive || e.AttackingTower)
+                continue;
+
+            // ⚠ Raíces frena de verdad, no ralentiza. Es el único control duro
+            // del juego y por eso viene con período refractario y tope de veces
+            // por enemigo: sin las dos cosas, tres druidas alcanzan para que nada
+            // camine nunca más.
+            if (e.Rooted(Tick))
                 continue;
 
             e.DistanceTravelled += e.EffectiveSpeed;
@@ -897,7 +1103,11 @@ public sealed class Run
                 continue;
             }
 
-            Tower.Receive(e.Damage);
+            // ⚠ Debilidad se cobra ACÁ y no al golpear al enemigo: el perk no
+            // sube el daño de nadie, baja el castigo por filtrar. Es una utilidad
+            // distinta del slow, y es la que le faltaba al catálogo — todo lo
+            // demás era alguna forma de pegar más fuerte.
+            Tower.Receive(Ints.WithPercents(e.Damage, -e.WeakenPercent));
             e.AttackCooldown = e.CadenceTicks;
         }
 
@@ -949,116 +1159,745 @@ public sealed class Run
             var objetivo = ElegirObjetivo(d, stats.RangeMilli);
 
             if (objetivo is null)
-                continue;
+            {
+                // Sin nadie a tiro. Preparación convierte esa espera en ventaja:
+                // el próximo golpe sale cargado. Una sola carga guardada, o un
+                // defensor en una esquina muerta del mapa acumularía un golpe
+                // infinito para el día que algo le pase cerca.
+                d.IdleTicks++;
 
-            // El contador de golpes del defensor, para los críticos: sube ANTES
-            // de resolver el disparo, así "cada 7.º golpe" cuenta este.
+                if (stats.Behavior == PerkEffect.Charge &&
+                    d.IdleTicks >= _datos.Combat.Behaviors.ChargeIdleTicks)
+                {
+                    d.Charged = true;
+                }
+
+                continue;
+            }
+
+            d.IdleTicks = 0;
+
+            // El contador de golpes del defensor: sube ANTES de resolver el
+            // disparo, así "cada 7.º golpe" cuenta este. Lo usan el crítico,
+            // Quebranto, Raíces, Golpe Sísmico, Inspiración y Eco Arcano.
             d.HitCounter++;
+
+            // La concentración se actualiza antes de calcular el daño: el golpe
+            // que suma el stack ya lo cobra.
+            ActualizarFoco(d, objetivo);
 
             // Daño instantáneo. El proyectil que se ve volar es SOLO render: si
             // el daño esperara a que el sprite llegue, el resultado dependería
             // de los FPS.
             int dano = stats.Damage;
 
-            // La habilidad del arma puede cambiar el daño ANTES de aplicarlo:
-            // francotirador, carnicero y sed lo escalan. Las que agregan efectos
-            // van después, con el daño ya resuelto.
+            // ⚠ Dos pasadas de escalado, y el ORDEN ESTÁ FIJO: primero el
+            // comportamiento del perk, después la habilidad del arma. En la
+            // práctica nunca están los dos —el arma tapa al perk— pero el orden
+            // igual se congela: si algún día conviven, el resultado no puede
+            // depender de en qué rama del switch cayó cada uno.
+            dano = AdjustDamageByBehavior(stats, d, objetivo, dano);
             dano = AdjustDamageByAbility(stats, d, objetivo, dano);
 
-            objetivo.Hp -= dano;
+            // El golpe DIRECTO: el único que cobra vulnerabilidad y marca, y el
+            // único que puede disparar un comportamiento.
+            int overkill = GolpeDirecto(d, objetivo, dano);
 
-            ApplyBehavior(stats, d, objetivo);
+            ApplyBehavior(stats, d, objetivo, dano, overkill);
             ApplyWeaponAbility(stats, d, objetivo, dano);
 
-            d.RemainingCooldown = stats.CadenceTicks;
+            d.LastHitTick = Tick;
+            d.RemainingCooldown = CadenciaConAura(d, stats);
         }
     }
+
+    /// <summary>
+    /// La cadencia real del defensor, contando el aura de un aliado.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El aura <b>no</b> entra en <see cref="Roster.StatsOf"/> y no puede
+    /// entrar: los stats son de la CLASE y el aura es de ESTA unidad, que depende
+    /// de dónde está parada. Meterla ahí haría que dos bardos idénticos en
+    /// esquinas opuestas del mapa devolvieran stats distintos, y toda la promesa
+    /// de "el defensor no guarda nada propio" se caería.
+    ///
+    /// ⚠ La cadencia va al REVÉS: menos ticks es más rápido, así que un +10%
+    /// DIVIDE el intervalo.
+    /// </remarks>
+    private int CadenciaConAura(Defender d, EffectiveStats stats)
+    {
+        if (d.CadenceBuffPercent <= 0 || Tick >= d.CadenceBuffExpiryTick)
+            return stats.CadenceTicks;
+
+        return System.Math.Max(
+            1, stats.CadenceTicks * 100 / System.Math.Max(1, 100 + d.CadenceBuffPercent));
+    }
+
+    /// <summary>
+    /// Lleva la cuenta de golpes seguidos al mismo objetivo.
+    /// </summary>
+    /// <remarks>
+    /// Se pierde al cambiar de objetivo o tras pasar demasiados ticks sin pegar.
+    /// Los golpes secundarios no cuentan: si contaran, un mago con splash sumaría
+    /// stacks sobre bichos que ni siquiera está apuntando.
+    /// </remarks>
+    private void ActualizarFoco(Defender d, Enemy objetivo)
+    {
+        var b = _datos.Combat.Behaviors;
+
+        bool sigue = d.FocusTargetSpawnId == objetivo.SpawnId
+                     && d.LastHitTick != int.MinValue
+                     && Tick - d.LastHitTick <= b.FocusResetTicks;
+
+        d.FocusStacks = sigue
+            ? System.Math.Min(b.FocusMaxStacks, d.FocusStacks + 1)
+            : 0;
+
+        d.FocusTargetSpawnId = objetivo.SpawnId;
+    }
+
+    // =========================================================================
+    //  El golpe: directo contra secundario
+    // =========================================================================
+
+    /// <summary>
+    /// Un golpe <b>directo</b>. Devuelve el overkill, o 0 si no mató.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el único daño que cobra vulnerabilidad y marca de caza, y el
+    /// único que puede disparar un comportamiento. Todo lo que sale de él
+    /// —splash, cadena, rebote, eco, DoT, overkill— pasa por
+    /// <see cref="GolpeSecundario"/> y solo resta vida.</para>
+    ///
+    /// <para>El overkill sale de acá y no de una segunda cuenta porque es el
+    /// único momento en que se sabe: una vez que la fase 8 saca al muerto de la
+    /// lista, cuánto le sobró al golpe ya no existe en ningún lado.</para>
+    /// </remarks>
+    private static int GolpeDirecto(Defender defensor, Enemy objetivo, int dano)
+    {
+        int real = Ints.WithPercents(dano, BonusRecibido(objetivo, defensor.DefenderClass));
+
+        objetivo.Hp -= real;
+
+        return objetivo.Hp < 0 ? -objetivo.Hp : 0;
+    }
+
+    /// <summary>
+    /// Daño <b>secundario</b>: resta vida y nada más.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ No aplica estados, no sube contadores, no dispara comportamientos y no
+    /// crea más secundarios. Es la primera regla de Estados_v2 y la que hace
+    /// acotable a todo el sistema: sin ella, Cadena crea Cadena y el eco dispara
+    /// otro eco.
+    /// </remarks>
+    private static void GolpeSecundario(Enemy objetivo, int dano)
+    {
+        if (dano > 0)
+            objetivo.Hp -= dano;
+    }
+
+    /// <summary>
+    /// Cuánto daño DIRECTO extra recibe este enemigo, en puntos porcentuales.
+    /// </summary>
+    /// <remarks>
+    /// Vulnerabilidad la cobra cualquiera; la marca de caza <b>no la cobra la
+    /// clase que marcó</b>, o sería un bonus propio disfrazado de soporte y dos
+    /// cazadores serían mejor que un cazador y otra cosa.
+    /// </remarks>
+    private static int BonusRecibido(Enemy e, DefenderClass clase)
+    {
+        int extra = e.VulnerablePercent;
+
+        if (e.MarkPercent > 0 && e.MarkOwner != clase)
+            extra += e.MarkPercent;
+
+        return extra;
+    }
+
+    // =========================================================================
+    //  Los comportamientos de Oro y Único
+    // =========================================================================
+
+    /// <summary>
+    /// Los comportamientos que <b>escalan el golpe</b>, antes de aplicarlo.
+    /// </summary>
+    /// <remarks>
+    /// Van separados de los que agregan efectos por la misma razón que las
+    /// habilidades de arma: lo que sale del golpe —splash, DoT, eco— tiene que
+    /// calcularse sobre el daño <b>ya escalado</b>, o un asesino rematando haría
+    /// el bonus solo al objetivo principal y no al sangrado.
+    /// </remarks>
+    private int AdjustDamageByBehavior(
+        EffectiveStats stats, Defender defensor, Enemy objetivo, int dano)
+    {
+        var b = _datos.Combat.Behaviors;
+
+        // Preparación gasta la carga en este golpe, y va primero para que lo demás
+        // escale sobre el golpe cargado.
+        if (stats.Behavior == PerkEffect.Charge && defensor.Charged)
+        {
+            defensor.Charged = false;
+            dano = Ints.WithPercents(dano, stats.BehaviorMagnitude);
+        }
+
+        return stats.Behavior switch
+        {
+            // Concentración: +magnitud por cada golpe seguido al mismo objetivo.
+            PerkEffect.Focus or PerkEffect.Perforation
+                => Ints.WithPercents(dano, defensor.FocusStacks * stats.BehaviorMagnitude),
+
+            // Oportunista remata lo herido; Primer Impacto abre lo entero. Son el
+            // mismo mecanismo con el umbral dado vuelta.
+            PerkEffect.Opportunist when PorDebajoDe(objetivo, b.OpportunistThresholdPercent)
+                => Ints.WithPercents(dano, stats.BehaviorMagnitude),
+
+            PerkEffect.Apocalypse when PorDebajoDe(objetivo, b.OpportunistThresholdPercent)
+                => Ints.WithPercents(dano, stats.BehaviorMagnitudeB),
+
+            PerkEffect.FirstStrike when PorEncimaDe(objetivo, b.FirstStrikeThresholdPercent)
+                => Ints.WithPercents(dano, stats.BehaviorMagnitude),
+
+            // Guardia del Umbral vale 0% casi siempre y muchísimo en la única
+            // situación que importa: el bicho ya llegó y está mordiendo la Torre.
+            PerkEffect.ThresholdGuard or PerkEffect.WrathOfGod when objetivo.AttackingTower
+                => Ints.WithPercents(dano, stats.BehaviorMagnitude),
+
+            _ => dano,
+        };
+    }
+
+    private static bool PorDebajoDe(Enemy e, int porcentaje)
+        => e.MaxHp > 0 && e.Hp * 100 / e.MaxHp <= porcentaje;
+
+    private static bool PorEncimaDe(Enemy e, int porcentaje)
+        => e.MaxHp > 0 && e.Hp * 100 / e.MaxHp > porcentaje;
 
     /// <summary>
     /// El efecto del perk de Oro o Único que tenga equipado la clase.
     /// </summary>
     /// <remarks>
-    /// Solo uno se aplica: el de tier más alto. <b>Los comportamientos no se
-    /// apilan</b> —"Ricochet dos veces" no quiere decir nada— y esa regla sale
-    /// del tier, no de una lista de excepciones.
+    /// <para>Solo uno se aplica. Antes la regla era "gana el de tier más alto"
+    /// porque se podían equipar varios; desde Drops_v2 la mochila directamente no
+    /// deja poner un segundo comportamiento, así que la lista de acá tiene
+    /// exactamente un caso vivo por defensor.</para>
+    ///
+    /// <para>⚠ Todo lo que sale de acá es <b>secundario</b>: no vuelve a entrar
+    /// por esta función, no aplica estados salvo donde el perk lo dice
+    /// explícitamente, y no sube contadores.</para>
     /// </remarks>
-    private void ApplyBehavior(EffectiveStats stats, Defender defensor, Enemy objetivo)
+    /// <param name="dano">El golpe ya escalado, en centésimas de punto.</param>
+    /// <param name="overkill">Lo que le sobró al golpe si mató. 0 si no mató.</param>
+    private void ApplyBehavior(
+        EffectiveStats stats, Defender defensor, Enemy objetivo, int dano, int overkill)
     {
+        var c = _datos.Combat;
+        var b = c.Behaviors;
+
         switch (stats.Behavior)
         {
             case PerkEffect.None:
                 return;
 
+            // --- Daño y limpieza ---------------------------------------------
+
             case PerkEffect.Ricochet:
-                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.RicochetBounces);
+                Rebotar(objetivo, dano, stats.BehaviorMagnitude, b.RicochetBounces, b.RicochetWindowThousandths);
                 return;
 
-            case PerkEffect.Perforation:
-                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.PerforationBounces);
+            case PerkEffect.Chain:
+                Encadenar(objetivo, dano, stats.BehaviorMagnitude, stats.BehaviorMagnitudeB, b.ChainMaxJumps, b.ChainWindowThousandths);
                 return;
 
             case PerkEffect.Splash:
-                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxGoldSplashSecondaries);
-                return;
-
-            case PerkEffect.FrostWave:
-                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: true, maxSecundarios: _datos.Combat.MaxFrostWaveSecondaries);
-                return;
-
-            case PerkEffect.Slow:
-                Ralentizar(objetivo, stats.BehaviorMagnitude);
-                return;
-
-            case PerkEffect.Poison:
-            case PerkEffect.TerribleHunger:
-                // El veneno pega de una vez y no por tick: los efectos con
-                // duración son la fase 3 y todavía no existe. Cuando exista, esto
-                // se muda ahí, no se agrega otra fase.
-                objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude);
-
-                if (stats.Behavior == PerkEffect.TerribleHunger)
-                    Ralentizar(objetivo, _datos.Combat.TerribleHungerSlow);
-
-                return;
-
-            case PerkEffect.Piercing:
-                // Ignora la defensa. Como los enemigos todavía no la usan en el
-                // cálculo de daño, por ahora es un golpe extra proporcional.
-                objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude / _datos.Combat.PiercingDivisor);
-                return;
-
-            case PerkEffect.WrathOfGod:
-            case PerkEffect.DivineStorm:
-                // Únicos que combinan crítico y splash. Se resuelven como splash
-                // reforzado: el radio es el mismo, el daño mucho mayor.
-                ApplySplash(objetivo, stats.Damage, stats.BehaviorMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxDivineSecondaries);
-                return;
-
-            case PerkEffect.Apocalypse:
-                // Ricochet en cadena: rebota a los tres siguientes vivos.
-                ApplyRicochet(objetivo, stats.Damage, stats.BehaviorMagnitude, rebotes: _datos.Combat.ApocalypseBounces);
+                Salpicar(objetivo, dano, stats.BehaviorMagnitude, b.SplashMaxSecondaries, b.SplashRadiusThousandths, slowPotencia: 0, slowTicks: 0);
                 return;
 
             case PerkEffect.CriticalHit:
-                // Cada 7.º golpe DE ESTE defensor (propuesta V2). Sigue sin tirar
-                // el dado —una tirada acá gastaría RNG por disparo y correría los
-                // drops—, pero ya no es Tick % 7 global: con eso criticaban todos
-                // juntos, y las cadencias múltiplo de 7 criticaban siempre o nunca.
-                if (defensor.HitCounter % _datos.Combat.HitsPerCritical == 0)
-                    objetivo.Hp -= Ints.MultiplyPercent(stats.Damage, stats.BehaviorMagnitude);
+                if (defensor.HitCounter % b.HitsPerCritical == 0)
+                    GolpeSecundario(objetivo, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
 
+                return;
+
+            case PerkEffect.Overpenetration:
+                Sobrepenetrar(objetivo, dano, overkill, stats.BehaviorMagnitude, b.OverpenRadiusThousandths);
+                return;
+
+            case PerkEffect.ArcaneEcho:
+                if (defensor.HitCounter % b.EchoEveryHits == 0)
+                    EncolarEco(objetivo, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+
+                return;
+
+            // --- Desgaste -----------------------------------------------------
+
+            case PerkEffect.Poison:
+                AplicarDot(objetivo, DotKind.Poison, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+                return;
+
+            case PerkEffect.Bleed:
+                AplicarDot(objetivo, DotKind.Bleed, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+                return;
+
+            case PerkEffect.Burn:
+                Quemar(objetivo, dano, stats.BehaviorMagnitude, stats.BehaviorMagnitudeB);
+                return;
+
+            // --- Control y soporte --------------------------------------------
+
+            case PerkEffect.Slow:
+                Ralentizar(objetivo, stats.BehaviorMagnitude, c.States.SlowDurationTicks);
+                return;
+
+            case PerkEffect.Weaken:
+                Debilitar(objetivo, stats.BehaviorMagnitude);
+                return;
+
+            case PerkEffect.HuntMark:
+                Marcar(objetivo, defensor.DefenderClass, stats.BehaviorMagnitude);
+                return;
+
+            case PerkEffect.Sunder:
+                if (defensor.HitCounter % b.SunderEveryHits == 0)
+                    Vulnerar(objetivo, stats.BehaviorMagnitude);
+
+                return;
+
+            case PerkEffect.Root:
+                if (defensor.HitCounter % b.RootEveryHits == 0)
+                    Enraizar(objetivo, c.States.RootTicks);
+
+                return;
+
+            case PerkEffect.Seismic:
+                if (defensor.HitCounter % b.SeismicEveryHits == 0)
+                    Empujar(objetivo, stats.BehaviorMagnitude, c.States.PushMaxPerEnemy);
+
+                return;
+
+            case PerkEffect.Inspire:
+                if (defensor.HitCounter % b.InspireEveryHits == 0)
+                    Inspirar(defensor, stats.BehaviorMagnitude);
+
+                return;
+
+            case PerkEffect.Loot:
+                MarcarBotin(objetivo, stats.BehaviorMagnitude, c.States.LootMaxGoldPerEnemy, c.States.LootMaxGoldPerWave);
+                return;
+
+            // Estos ya escalaron el golpe en AdjustDamageByBehavior y no hacen
+            // nada más. Están enumerados y no en el `default` a propósito: así
+            // agregar un comportamiento nuevo obliga a decidir en qué lado va.
+            case PerkEffect.Focus:
+            case PerkEffect.Opportunist:
+            case PerkEffect.ThresholdGuard:
+            case PerkEffect.FirstStrike:
+            case PerkEffect.Charge:
+                return;
+
+            // =================================================================
+            //  Los Únicos: los dos Oro de su receta, rebajados
+            // =================================================================
+
+            // Onda Expansiva + Escarcha.
+            case PerkEffect.FrostWave:
+                Salpicar(objetivo, dano, stats.BehaviorMagnitude, c.Uniques.FrostWaveMaxSecondaries, b.SplashRadiusThousandths, stats.BehaviorMagnitudeB, c.Uniques.FrostWaveSlowTicks);
+                return;
+
+            // Concentración (ya escaló el golpe) + Sobrepenetración.
+            case PerkEffect.Perforation:
+                Sobrepenetrar(objetivo, dano, overkill, stats.BehaviorMagnitudeB, c.Uniques.PerforationRadiusThousandths);
+                return;
+
+            // Guardia del Umbral (ya escaló el golpe) + Quebranto.
+            case PerkEffect.WrathOfGod:
+                if (defensor.HitCounter % b.SunderEveryHits == 0)
+                    Vulnerar(objetivo, stats.BehaviorMagnitudeB);
+
+                return;
+
+            // Hemorragia + Oportunista (ya escaló el golpe).
+            case PerkEffect.Apocalypse:
+                AplicarDot(objetivo, DotKind.Bleed, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+                return;
+
+            // Raíces + Tormenta de Fuego.
+            case PerkEffect.TerribleHunger:
+                AplicarDot(objetivo, DotKind.Burn, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+
+                if (defensor.HitCounter % b.RootEveryHits == 0)
+                    Enraizar(objetivo, c.Uniques.TerribleHungerRootTicks);
+
+                return;
+
+            // Inspiración + Quebranto, las dos en el mismo golpe periódico.
+            case PerkEffect.DivineStorm:
+                if (defensor.HitCounter % b.InspireEveryHits == 0)
+                {
+                    Inspirar(defensor, stats.BehaviorMagnitude);
+                    Vulnerar(objetivo, stats.BehaviorMagnitudeB);
+                }
+
+                return;
+
+            // Inspiración (periódica) + Debilidad (en cada golpe).
+            case PerkEffect.Blindness:
+                if (defensor.HitCounter % b.InspireEveryHits == 0)
+                    Inspirar(defensor, stats.BehaviorMagnitude);
+
+                Debilitar(objetivo, stats.BehaviorMagnitudeB);
+                return;
+
+            // Golpe Sísmico + Quebranto, las dos en el mismo golpe periódico.
+            case PerkEffect.Strength:
+                if (defensor.HitCounter % b.SeismicEveryHits == 0)
+                {
+                    Empujar(objetivo, stats.BehaviorMagnitude, c.Uniques.StrengthMaxPushPerEnemy);
+                    Vulnerar(objetivo, stats.BehaviorMagnitudeB);
+                }
+
+                return;
+
+            // Saqueo + Sobrepenetración, los dos con topes propios más chicos.
+            case PerkEffect.Invisibility:
+                MarcarBotin(objetivo, stats.BehaviorMagnitude, c.Uniques.InvisibilityMaxGoldPerEnemy, c.Uniques.InvisibilityMaxGoldPerWave);
+                Sobrepenetrar(objetivo, dano, overkill, stats.BehaviorMagnitudeB, b.OverpenRadiusThousandths);
                 return;
         }
     }
 
+    // =========================================================================
+    //  Los estados, uno por uno
+    // =========================================================================
+    //
+    //  Todos comparten la misma forma: recortar la potencia si el objetivo es un
+    //  jefe, quedarse con la más fuerte de las dos y refrescar la duración.
+    //  Escribirlos por separado y no con un helper genérico es a propósito: son
+    //  propiedades y no campos, así que un helper con `ref` no compila, y la
+    //  alternativa —pasar delegados— haría ilegible la parte más delicada del
+    //  tick a cambio de ahorrar quince líneas.
+
+    /// <summary>El jefe de la oleada 100. Es un escalón aparte de los de área.</summary>
+    private bool EsJefeFinal(Enemy e) => e.IsBoss && Wave >= _datos.Curves.RunCurve.WavesPerRun;
+
     /// <summary>
-    /// Le baja la velocidad a un enemigo.
+    /// Recorta la potencia de un estado según contra qué se aplica.
     /// </summary>
     /// <remarks>
-    /// Permanente mientras viva, no con duración, porque los efectos con
-    /// vencimiento son la fase 3 del tick y todavía no existe. Cuando exista, el
-    /// cambio va ahí y no acá.
+    /// ⚠ Es lo que hace que los jefes sigan siendo jefes. El control <b>sigue
+    /// sirviendo</b> —vale la mitad, no cero—: sin recorte, un druida y un mago
+    /// dejan al jefe de área clavado y el combate deja de existir; con inmunidad
+    /// total, los perks de control son basura en las ocho peleas que importan.
     /// </remarks>
+    private int PotenciaContra(Enemy e, int potencia)
+    {
+        if (!e.IsBoss)
+            return potencia;
+
+        var jefe = _datos.Combat.Boss;
+
+        return Ints.MultiplyPercent(
+            potencia, EsJefeFinal(e) ? jefe.FinalBossPowerPercent : jefe.PowerPercent);
+    }
+
+    /// <summary>
+    /// Aplica una ralentización TEMPORAL.
+    /// </summary>
+    /// <remarks>
+    /// <para>Tres reglas: <b>no apila</b> —prevalece la potencia más fuerte—,
+    /// <b>refresca</b> la duración en cada aplicación, y tiene <b>techo</b>. Antes
+    /// era permanente, apilaba hasta -80% y dos fuentes de Escarcha dejaban la
+    /// corrida en cámara lenta para siempre.</para>
+    ///
+    /// <para>El refresco tampoco es infinito: la duración acumulada no puede pasar
+    /// de <c>slow.maxDurationTicks</c> contados desde ahora, o pegarle sin parar a
+    /// un tanque lo dejaría lento el resto de la corrida.</para>
+    /// </remarks>
+    private void Ralentizar(Enemy enemigo, int magnitud, int ticks)
+    {
+        int potencia = System.Math.Min(
+            PotenciaContra(enemigo, magnitud), _datos.Combat.States.SlowCapPercent);
+
+        if (potencia <= 0 || ticks <= 0)
+            return;
+
+        if (potencia > enemigo.SlowPercent)
+            enemigo.SlowPercent = potencia;
+
+        int techo = Tick + _datos.Combat.States.SlowMaxDurationTicks;
+        int vence = System.Math.Max(enemigo.SlowExpiryTick, Tick + ticks);
+
+        enemigo.SlowExpiryTick = System.Math.Min(vence, techo);
+    }
+
+    /// <summary>Vulnerable: recibe más daño DIRECTO de todas las clases.</summary>
+    private void Vulnerar(Enemy enemigo, int magnitud)
+    {
+        int potencia = PotenciaContra(enemigo, magnitud);
+
+        if (potencia <= 0)
+            return;
+
+        if (potencia > enemigo.VulnerablePercent)
+            enemigo.VulnerablePercent = potencia;
+
+        enemigo.VulnerableExpiryTick = Tick + _datos.Combat.States.VulnerableTicks;
+    }
+
+    /// <summary>Debilidad: le hace menos daño a la Torre si llega.</summary>
+    private void Debilitar(Enemy enemigo, int magnitud)
+    {
+        int potencia = PotenciaContra(enemigo, magnitud);
+
+        if (potencia <= 0)
+            return;
+
+        if (potencia > enemigo.WeakenPercent)
+            enemigo.WeakenPercent = potencia;
+
+        enemigo.WeakenExpiryTick = Tick + _datos.Combat.States.WeakenTicks;
+    }
+
+    /// <summary>Marca de caza: las OTRAS clases le pegan más fuerte.</summary>
+    private void Marcar(Enemy enemigo, DefenderClass clase, int magnitud)
+    {
+        int potencia = PotenciaContra(enemigo, magnitud);
+
+        if (potencia <= 0)
+            return;
+
+        // ⚠ El dueño se pisa junto con la potencia. Si se conservara el viejo, un
+        // cazador podría marcar y otro cobrar sobre su propia marca.
+        if (potencia >= enemigo.MarkPercent)
+        {
+            enemigo.MarkPercent = potencia;
+            enemigo.MarkOwner = clase;
+        }
+
+        enemigo.MarkExpiryTick = Tick + _datos.Combat.States.HuntMarkTicks;
+    }
+
+    /// <summary>
+    /// Inmoviliza, con período refractario y tope por enemigo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Es el <b>único control duro</b> del juego, y por eso viene con las tres
+    /// trabas juntas: dura poco, deja inmunidad al salir y no se puede repetir
+    /// más de N veces sobre el mismo bicho. Sin ellas, tres druidas alcanzan para
+    /// que nada camine nunca más y la dificultad deja de existir. La idea es del
+    /// rework de aturdimiento de Infinitode 2.
+    /// </remarks>
+    private void Enraizar(Enemy enemigo, int ticks)
+    {
+        var estados = _datos.Combat.States;
+        var jefe = _datos.Combat.Boss;
+
+        if (Tick < enemigo.RootImmuneUntilTick || enemigo.RootCount >= estados.RootMaxPerEnemy)
+            return;
+
+        if (EsJefeFinal(enemigo) && jefe.FinalBossImmuneToHardCc)
+            return;
+
+        int dura = enemigo.IsBoss
+            ? Ints.MultiplyPercent(ticks, jefe.HardCcDurationPercent)
+            : ticks;
+
+        if (dura < 1)
+            return;
+
+        enemigo.RootedUntilTick = Tick + dura;
+
+        enemigo.RootImmuneUntilTick = enemigo.RootedUntilTick + estados.RootImmunityTicks +
+            (enemigo.IsBoss ? jefe.HardCcExtraImmunityTicks : 0);
+
+        enemigo.RootCount++;
+    }
+
+    /// <summary>
+    /// Empuja al enemigo hacia atrás por la ruta.
+    /// </summary>
+    /// <remarks>
+    /// <para>El presupuesto es finito por enemigo: sin tope, dos guerreros
+    /// mantienen a un bicho oscilando en el mismo tramo para siempre.</para>
+    ///
+    /// <para>⚠ Nunca lo empuja detrás del spawn, y si estaba mordiendo la Torre
+    /// vuelve a caminar — que es exactamente para lo que existe el perk.</para>
+    /// </remarks>
+    private void Empujar(Enemy enemigo, int milesimas, int maxPropio)
+    {
+        var jefe = _datos.Combat.Boss;
+
+        if (EsJefeFinal(enemigo) && jefe.FinalBossImmuneToPush)
+            return;
+
+        int tope = enemigo.IsBoss ? jefe.MaxPushPerBoss : maxPropio;
+
+        if (enemigo.PushCount >= tope)
+            return;
+
+        int fuerza = enemigo.IsBoss
+            ? Ints.MultiplyPercent(milesimas, jefe.PushPercent)
+            : milesimas;
+
+        if (fuerza <= 0)
+            return;
+
+        enemigo.DistanceTravelled -= fuerza;
+
+        if (enemigo.DistanceTravelled < 0)
+            enemigo.DistanceTravelled = 0;
+
+        if (enemigo.AttackingTower && enemigo.DistanceTravelled < _ruta.Length)
+            enemigo.AttackingTower = false;
+
+        enemigo.PushCount++;
+    }
+
+    /// <summary>
+    /// Aura de cadencia a los defensores aliados cercanos.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>No afecta al emisor</b> —si no, sería un buff propio con nombre de
+    /// soporte— y <b>no apila</b>: tres bardos siguen dando +10%, no +30%. Sin la
+    /// segunda regla, spamear soportes es la mejor estrategia universal y todas
+    /// las demás composiciones sobran.
+    /// </remarks>
+    private void Inspirar(Defender emisor, int potencia)
+    {
+        if (potencia <= 0)
+            return;
+
+        var estados = _datos.Combat.States;
+
+        long radio = Ints.ToThousandths(estados.InspireRadiusCells);
+        long radio2 = radio * radio;
+
+        foreach (var otro in _defensores)
+        {
+            if (ReferenceEquals(otro, emisor))
+                continue;
+
+            long d2 = Ints.SquaredDistanceThousandths(
+                emisor.Cell.X, emisor.Cell.Y, otro.Cell.X, otro.Cell.Y);
+
+            if (d2 > radio2)
+                continue;
+
+            if (potencia > otro.CadenceBuffPercent)
+                otro.CadenceBuffPercent = potencia;
+
+            otro.CadenceBuffExpiryTick = Tick + estados.InspireTicks;
+        }
+    }
+
+    /// <summary>
+    /// Marca de botín: si muere marcado, suelta oro extra.
+    /// </summary>
+    /// <remarks>
+    /// Dos topes, y hacen falta los dos: el de por enemigo impide que un tanque
+    /// sea una alcancía, y el de por oleada impide que sesenta bichos marcados
+    /// paguen sesenta veces ese tope. Sin ellos una build de economía se vuelve
+    /// obligatoria, que es lo contrario de una decisión.
+    /// </remarks>
+    private void MarcarBotin(Enemy enemigo, int porcentaje, int maxPorEnemigo, int maxPorOleada)
+    {
+        if (porcentaje <= 0)
+            return;
+
+        // Los jefes quedan afuera: su oro ya es el premio de la pelea.
+        if (_datos.Combat.Boss.LootIgnoresBosses && enemigo.IsBoss)
+            return;
+
+        if (porcentaje > enemigo.ExtraGoldPercent)
+            enemigo.ExtraGoldPercent = porcentaje;
+
+        enemigo.ExtraGoldMax = maxPorEnemigo;
+        enemigo.ExtraGoldWaveCap = maxPorOleada;
+        enemigo.ExtraGoldExpiryTick = Tick + _datos.Combat.States.LootTicks;
+    }
+
+    /// <summary>Suma daño por tiempo, conservando Potencia × Duración.</summary>
+    private void AplicarDot(Enemy enemigo, DotKind cual, int danoTotal)
+    {
+        var estados = _datos.Combat.States;
+        enemigo.Dots[(int)cual].Add(Tick, danoTotal, estados.DotTicks, estados.DotMaxTicks);
+    }
+
+    /// <summary>Quemadura al objetivo y una versión menor a los cercanos por ruta.</summary>
+    private void Quemar(Enemy objetivo, int dano, int principal, int secundario)
+    {
+        var b = _datos.Combat.Behaviors;
+
+        AplicarDot(objetivo, DotKind.Burn, Ints.MultiplyPercent(dano, principal));
+
+        if (secundario <= 0 || b.BurnMaxSecondaries <= 0)
+            return;
+
+        int alcanzados = 0;
+
+        foreach (var otro in _enemigos)
+        {
+            if (alcanzados >= b.BurnMaxSecondaries)
+                break;
+
+            if (!otro.Alive || ReferenceEquals(otro, objetivo))
+                continue;
+
+            if (System.Math.Abs(otro.DistanceTravelled - objetivo.DistanceTravelled) > b.BurnRadiusThousandths)
+                continue;
+
+            AplicarDot(otro, DotKind.Burn, Ints.MultiplyPercent(dano, secundario));
+            alcanzados++;
+        }
+    }
+
+    /// <summary>
+    /// Transfiere parte del sobrante de una muerte al vecino de ruta.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Una sola transferencia y no encadena.</b> El techo sobre el daño del
+    /// golpe impide que un golpe enorme contra un bicho de una vida se convierta
+    /// en un segundo golpe enorme gratis.
+    /// </remarks>
+    private void Sobrepenetrar(Enemy muerto, int dano, int overkill, int porcentaje, int radio)
+    {
+        if (overkill <= 0 || porcentaje <= 0)
+            return;
+
+        int transfiere = Ints.MultiplyPercent(overkill, porcentaje);
+        int techo = Ints.MultiplyPercent(dano, _datos.Combat.Behaviors.OverpenCapPercent);
+
+        if (transfiere > techo)
+            transfiere = techo;
+
+        if (transfiere <= 0)
+            return;
+
+        foreach (var otro in _enemigos)
+        {
+            if (!otro.Alive || ReferenceEquals(otro, muerto))
+                continue;
+
+            if (System.Math.Abs(otro.DistanceTravelled - muerto.DistanceTravelled) > radio)
+                continue;
+
+            GolpeSecundario(otro, transfiere);
+            return;
+        }
+    }
+
+    /// <summary>Encola un eco para dentro de unos ticks.</summary>
+    private void EncolarEco(Enemy objetivo, int dano)
+    {
+        if (dano <= 0)
+            return;
+
+        var b = _datos.Combat.Behaviors;
+
+        _ecos.Add(new PendingEcho(
+            Tick + b.EchoDelayTicks, objetivo.SpawnId, objetivo.DistanceTravelled, dano, b.EchoSearchThousandths));
+    }
+
     /// <summary>
     /// Las habilidades que escalan el daño del golpe, antes de aplicarlo.
     /// </summary>
@@ -1106,12 +1945,12 @@ public sealed class Run
                 // Techo 100% (propuesta V2): con oleadas de 60 bichos, el tope de
                 // 300 se alcanzaba siempre y Sed era un ×4 garantizado.
                 return dano + Ints.MultiplyPercent(
-                    dano, System.Math.Min(_datos.Combat.ThirstBonusCap, defensor.KillsInWave * stats.AbilityMagnitude));
+                    dano, System.Math.Min(_datos.Combat.Weapons.ThirstBonusCap, defensor.KillsInWave * stats.AbilityMagnitude));
 
             case WeaponAbility.Critical:
                 // Cada 7.º golpe DE ESTE defensor (propuesta V2), igual que el
                 // perk. Sin dado, sin sincronización global.
-                return defensor.HitCounter % _datos.Combat.HitsPerCritical == 0
+                return defensor.HitCounter % _datos.Combat.Behaviors.HitsPerCritical == 0
                     ? Ints.MultiplyPercent(dano, stats.AbilityMagnitude)
                     : dano;
 
@@ -1135,26 +1974,37 @@ public sealed class Run
         switch (stats.Ability)
         {
             case WeaponAbility.Splash:
-                ApplySplash(objetivo, dano, stats.AbilityMagnitude, ralentiza: false, maxSecundarios: _datos.Combat.MaxWeaponSplashSecondaries);
+                Salpicar(objetivo, dano, stats.AbilityMagnitude, _datos.Combat.Weapons.MaxSplashSecondaries, _datos.Combat.Behaviors.SplashRadiusThousandths, slowPotencia: 0, slowTicks: 0);
                 return;
 
             case WeaponAbility.Bounce:
-                ApplyRicochet(objetivo, dano, stats.AbilityMagnitude, rebotes: _datos.Combat.WeaponBounceBounces);
+                Rebotar(objetivo, dano, stats.AbilityMagnitude, _datos.Combat.Weapons.BounceBounces, _datos.Combat.Behaviors.RicochetWindowThousandths);
                 return;
 
             case WeaponAbility.Frost:
-                Ralentizar(objetivo, stats.AbilityMagnitude);
+                // ⚠ Misma función que el perk Escarcha, así que hereda las mismas
+                // reglas: no apila, refresca, tiene techo y los jefes lo resisten.
+                // Dos sistemas de slow con reglas distintas es cómo se cuela el
+                // stack infinito por la puerta de atrás.
+                Ralentizar(objetivo, stats.AbilityMagnitude, _datos.Combat.States.SlowDurationTicks);
                 return;
 
             case WeaponAbility.Poison:
-                objetivo.Hp -= Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
+                // Veneno de verdad desde Estados_v2: reparte el daño en ticks y se
+                // funde con el del perk conservando Potencia × Duración. Antes era
+                // un segundo golpe inmediato con nombre de veneno.
+                AplicarDot(objetivo, DotKind.Poison, Ints.MultiplyPercent(dano, stats.AbilityMagnitude));
                 return;
 
             case WeaponAbility.DoubleShot:
                 // Un segundo golpe completo. Es la habilidad más simple y de las
                 // más fuertes: duplica todo lo que el defensor haga, incluidos los
                 // perks numéricos.
-                objetivo.Hp -= dano;
+                //
+                // ⚠ Va como SECUNDARIO: duplica el daño, no el disparo. Si contara
+                // como directo dispararía otra vez todos los comportamientos, y el
+                // arma que ya tapa al perk terminaría procándolo dos veces.
+                GolpeSecundario(objetivo, dano);
                 return;
 
             case WeaponAbility.Execute:
@@ -1162,13 +2012,16 @@ public sealed class Run
                 // Umbrales de la propuesta V2: tropa hasta 20%, jefe hasta 5%, y
                 // el JEFE FINAL es inmune — matarlo es cómo se gana la corrida,
                 // y ganarla salteándole un cuarto de vida vaciaba el final.
-                if (_datos.Combat.FinalBossImmuneToExecute && objetivo.IsBoss && Wave >= _datos.Curves.RunCurve.WavesPerRun)
+                if (_datos.Combat.Weapons.FinalBossImmuneToExecute && EsJefeFinal(objetivo))
                     return;
 
                 if (objetivo.Alive && objetivo.MaxHp > 0)
                 {
                     int umbral = System.Math.Min(
-                        stats.AbilityMagnitude, objetivo.IsBoss ? _datos.Combat.ExecuteThresholdBoss : _datos.Combat.ExecuteThresholdTroop);
+                        stats.AbilityMagnitude,
+                        objetivo.IsBoss
+                            ? _datos.Combat.Weapons.ExecuteThresholdBoss
+                            : _datos.Combat.Weapons.ExecuteThresholdTroop);
 
                     int porcentaje = objetivo.Hp * 100 / objetivo.MaxHp;
 
@@ -1190,7 +2043,7 @@ public sealed class Run
 
                 foreach (var otro in _enemigos)
                 {
-                    if (alcanzados >= _datos.Combat.MaxChainSecondaries)
+                    if (alcanzados >= _datos.Combat.Weapons.MaxChainSecondaries)
                         break;
 
                     if (!otro.Alive || ReferenceEquals(otro, objetivo))
@@ -1203,7 +2056,7 @@ public sealed class Run
 
                     if (d2 <= alcance2)
                     {
-                        otro.Hp -= extra;
+                        GolpeSecundario(otro, extra);
                         alcanzados++;
                     }
                 }
@@ -1217,7 +2070,7 @@ public sealed class Run
                 // ventana, diez unidades con la misma arma curaban cientos por
                 // segundo y la Torre se volvía inmortal.
                 if (!_ultimaCuraPorClase.TryGetValue(defensor.DefenderClass, out int ultima) ||
-                    Tick - ultima >= _datos.Combat.VampirismCooldownTicks)
+                    Tick - ultima >= _datos.Combat.Weapons.VampirismCooldownTicks)
                 {
                     // ⚠ La magnitud son PUNTOS de vida (1 a 8), no un porcentaje:
                     // hay que escalarla como el HP de la Torre. Sin esto, curar 8
@@ -1236,8 +2089,15 @@ public sealed class Run
                 // este golpe mató. La marca EXPIRA a los 60 ticks (propuesta V2):
                 // marcada para siempre, un tanque golpeado una vez era alcancía
                 // aunque lo matara otro, minutos después.
+                //
+                // ⚠ Codicia NO lleva topes de oro, al revés que el perk Saqueo:
+                // es una habilidad de arma legendaria, o sea el premio de una
+                // corrida entera. Saqueo hace lo mismo más chico y por eso paga el
+                // precio de los dos techos.
                 objetivo.ExtraGoldPercent = stats.AbilityMagnitude;
-                objetivo.ExtraGoldExpiryTick = Tick + _datos.Combat.GreedMarkDurationTicks;
+                objetivo.ExtraGoldMax = 0;
+                objetivo.ExtraGoldWaveCap = 0;
+                objetivo.ExtraGoldExpiryTick = Tick + _datos.Combat.Weapons.GreedMarkDurationTicks;
                 return;
 
             default:
@@ -1256,11 +2116,13 @@ public sealed class Run
     /// <para>Dentro de la ventana se elige en orden de spawn, que es la regla de
     /// desempate de todo el combate.</para>
     /// </remarks>
-    private void ApplyRicochet(Enemy objetivo, int danoBase, int magnitud, int rebotes)
+    private void Rebotar(Enemy objetivo, int danoBase, int magnitud, int rebotes, int ventana)
     {
-        long ventanaRuta = (long)_datos.Combat.RicochetJumpWindowCells * Ints.ThousandthsPerCell;
-
         int dano = Ints.MultiplyPercent(danoBase, magnitud);
+
+        if (dano <= 0)
+            return;
+
         var anterior = objetivo;
 
         // Los ya golpeados en ESTA cadena, para no rebotar dos veces al mismo.
@@ -1269,27 +2131,12 @@ public sealed class Run
 
         while (rebotes > 0)
         {
-            Enemy? proximo = null;
-
-            foreach (var otro in _enemigos)
-            {
-                if (!otro.Alive || golpeados.Contains(otro))
-                    continue;
-
-                long diferencia = System.Math.Abs(
-                    otro.DistanceTravelled - anterior.DistanceTravelled);
-
-                if (diferencia <= ventanaRuta)
-                {
-                    proximo = otro;
-                    break;
-                }
-            }
+            var proximo = ProximoEnVentana(anterior, golpeados, ventana);
 
             if (proximo is null)
                 break;
 
-            proximo.Hp -= dano;
+            GolpeSecundario(proximo, dano);
             golpeados.Add(proximo);
             anterior = proximo;
             rebotes--;
@@ -1297,66 +2144,113 @@ public sealed class Run
     }
 
     /// <summary>
-    /// Daña a los que están cerca del objetivo.
+    /// Cadena acotada: cada salto pega menos que el anterior.
     /// </summary>
     /// <remarks>
-    /// "Cerca" se mide <b>en la ruta</b>, no en el mapa, y da lo mismo porque
-    /// todos caminan por ella. Comparar distancia recorrida es una resta;
-    /// comparar posiciones serían dos conversiones y una distancia al cuadrado por
-    /// enemigo.
+    /// Es lo que reemplazó al rebote global de Descarga Eléctrica. La diferencia
+    /// con <see cref="Rebotar"/> es que los saltos <b>decaen</b>: el primero cobra
+    /// <paramref name="primero"/> y los siguientes <paramref name="siguientes"/>,
+    /// así el techo del perk se lee de sus dos números y no del largo de la
+    /// oleada.
     /// </remarks>
-    /// <param name="maxSecundarios">
-    /// Techo de alcanzados (propuesta V2): Oro 4, Único 6, Cadena 5. Sin techo,
-    /// la densidad multiplicaba el daño 5-10× en oleadas apretadas y el splash
-    /// escalaba solo con que hubiera más bichos.
-    /// </param>
-    private void ApplySplash(
-        Enemy objetivo, int danoBase, int magnitud, bool ralentiza, int maxSecundarios)
+    private void Encadenar(
+        Enemy objetivo, int danoBase, int primero, int siguientes, int maxSaltos, int ventana)
     {
-        long radio = (long)_datos.Combat.SplashRadiusCells * Ints.ThousandthsPerCell;
+        var anterior = objetivo;
+        var golpeados = new List<Enemy> { objetivo };
 
-        int dano = Ints.MultiplyPercent(danoBase, magnitud);
+        for (int salto = 0; salto < maxSaltos; salto++)
+        {
+            int porcentaje = salto == 0 ? primero : siguientes;
+
+            if (porcentaje <= 0)
+                return;
+
+            var proximo = ProximoEnVentana(anterior, golpeados, ventana);
+
+            if (proximo is null)
+                return;
+
+            GolpeSecundario(proximo, Ints.MultiplyPercent(danoBase, porcentaje));
+            golpeados.Add(proximo);
+            anterior = proximo;
+        }
+    }
+
+    /// <summary>
+    /// El próximo enemigo vivo a menos de <paramref name="ventana"/> de ruta.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ La ventana se mide contra el objetivo <b>ANTERIOR</b> de la cadena, no
+    /// contra el original. Antes se rebotaba al siguiente vivo en orden de spawn
+    /// sin mirar distancia, y un rebote le pegaba a un bicho del otro lado del
+    /// mapa. Dentro de la ventana se elige en orden de spawn, que es la regla de
+    /// desempate de todo el combate.
+    /// </remarks>
+    private Enemy? ProximoEnVentana(Enemy anterior, List<Enemy> golpeados, int ventana)
+    {
+        foreach (var otro in _enemigos)
+        {
+            if (!otro.Alive || golpeados.Contains(otro))
+                continue;
+
+            if (System.Math.Abs(otro.DistanceTravelled - anterior.DistanceTravelled) <= ventana)
+                return otro;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Daña a los que están cerca del objetivo, y opcionalmente los ralentiza.
+    /// </summary>
+    /// <remarks>
+    /// <para>"Cerca" se mide <b>en la ruta</b>, no en el mapa, y da lo mismo
+    /// porque todos caminan por ella. Comparar distancia recorrida es una resta;
+    /// comparar posiciones serían dos conversiones y una distancia al cuadrado por
+    /// enemigo.</para>
+    ///
+    /// <para>⚠ <b>Dos techos, no uno.</b> El de cantidad —cuántos alcanza— y el de
+    /// daño total sumado, que sale de <c>splash.totalCapPercent</c>. Sin el
+    /// segundo, subir el tope de secundarios sube el daño en la misma proporción y
+    /// el perk deja de tener un número que se pueda leer.</para>
+    /// </remarks>
+    private void Salpicar(
+        Enemy objetivo, int danoBase, int magnitud, int maxSecundarios, int radio,
+        int slowPotencia, int slowTicks)
+    {
+        int porGolpe = Ints.MultiplyPercent(danoBase, magnitud);
+
+        if (porGolpe <= 0 || maxSecundarios <= 0)
+            return;
+
+        int presupuesto = Ints.MultiplyPercent(danoBase, _datos.Combat.Behaviors.SplashTotalCapPercent);
+        int gastado = 0;
         int alcanzados = 0;
 
         foreach (var otro in _enemigos)
         {
-            if (alcanzados >= maxSecundarios)
+            if (alcanzados >= maxSecundarios || gastado >= presupuesto)
                 break;
 
             if (!otro.Alive || ReferenceEquals(otro, objetivo))
                 continue;
 
-            long diferencia = System.Math.Abs(otro.DistanceTravelled - objetivo.DistanceTravelled);
-
-            if (diferencia > radio)
+            if (System.Math.Abs(otro.DistanceTravelled - objetivo.DistanceTravelled) > radio)
                 continue;
 
-            otro.Hp -= dano;
+            int sale = porGolpe;
+
+            if (gastado + sale > presupuesto)
+                sale = presupuesto - gastado;
+
+            GolpeSecundario(otro, sale);
+            gastado += sale;
             alcanzados++;
 
-            if (ralentiza)
-                Ralentizar(otro, magnitud);
+            if (slowPotencia > 0)
+                Ralentizar(otro, slowPotencia, slowTicks);
         }
-    }
-
-    /// <summary>
-    /// Aplica una ralentización TEMPORAL (propuesta V2).
-    /// </summary>
-    /// <remarks>
-    /// <para>Tres reglas: <b>no apila</b> —prevalece la potencia más fuerte—,
-    /// <b>refresca</b> los 90 ticks en cada aplicación, y tiene <b>techo en
-    /// 60%</b>. Antes era permanente, apilaba hasta -80% y dos fuentes de
-    /// Escarcha dejaban la corrida en cámara lenta para siempre.</para>
-    /// </remarks>
-    private void Ralentizar(Enemy enemigo, int magnitud)
-    {
-        int potencia = System.Math.Min(magnitud, _datos.Combat.SlowCapPercent);
-
-        if (potencia <= 0)
-            return;
-
-        enemigo.SlowPercent = System.Math.Max(enemigo.SlowPercent, potencia);
-        enemigo.SlowExpiryTick = Tick + _datos.Combat.SlowDurationTicks;
     }
 
     /// <summary>
@@ -1426,10 +2320,7 @@ public sealed class Run
             if (e.Alive)
                 continue;
 
-            // El oro extra de Codicia se cobra ACÁ, no al golpear: solo cuenta si
-            // el golpe efectivamente mató.
-            Gold += Ints.WithPercents(e.Gold, e.ExtraGoldPercent);
-
+            Gold += OroPorMatar(e);
             RollDrop(e);
         }
 
@@ -1440,6 +2331,55 @@ public sealed class Run
 
         // RemoveAll es estable: conserva el orden relativo de los que quedan.
         _enemigos.RemoveAll(e => !e.Alive);
+    }
+
+    /// <summary>
+    /// Cuánto oro deja este muerto: el suyo por el área, más lo que agregue la
+    /// marca de botín si la tiene.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>El multiplicador de área desacopla el escalado de los enemigos
+    /// del escalado del dinero</b> (Economia_Propuesta). El presupuesto de oleada
+    /// es cuadrático, así que sin esto el oro crecía con él y en las áreas
+    /// tardías el jugador terminaba con el tablero lleno y oro sobrando: un
+    /// recurso que dejó de ser un recurso. Se recorta la entrada en vez de subir
+    /// los precios, que es lo que hace BTD6 — bajar el ingreso mantiene legibles
+    /// los precios de la tienda.</para>
+    ///
+    /// <para>El extra de la marca se cobra ACÁ y no al golpear: solo cuenta si el
+    /// golpe efectivamente mató. Cobrarlo al golpear daría oro por pegarle a algo
+    /// que sobrevive.</para>
+    /// </remarks>
+    private int OroPorMatar(Enemy e)
+    {
+        int area = _datos.Areas.OfWave(Wave);
+        int oro = Ints.MultiplyPercent(e.Gold, _datos.Curves.Economy.GoldPercentOfArea(area));
+
+        if (e.ExtraGoldPercent <= 0)
+            return oro;
+
+        int extra = Ints.MultiplyPercent(oro, e.ExtraGoldPercent);
+
+        // Techo por enemigo: sin él, un tanque golpeado una vez es una alcancía.
+        if (e.ExtraGoldMax > 0 && extra > e.ExtraGoldMax)
+            extra = e.ExtraGoldMax;
+
+        // Techo por oleada: sin él, sesenta bichos marcados pagan sesenta veces
+        // el techo individual y la build de economía vuelve a ser obligatoria.
+        if (e.ExtraGoldWaveCap > 0)
+        {
+            int queda = e.ExtraGoldWaveCap - _oroBotinOleada;
+
+            if (queda < 0)
+                queda = 0;
+
+            if (extra > queda)
+                extra = queda;
+
+            _oroBotinOleada += extra;
+        }
+
+        return oro + extra;
     }
 
     /// <summary>
@@ -1508,12 +2448,13 @@ public sealed class Run
 
         if (esJefe)
         {
-            var oro = _datos.Perks.Roll(PerkTier.Gold, clases, _rng);
-            if (oro is not null && !Backpack.StorePerk(oro.Id))
-            {
-                // Mochila llena: se pierde. La UI de verdad va a abrir el diálogo
-                // de "destruí uno de los 15 o el entrante" antes de llegar acá.
-            }
+            // ⚠ El jefe FINAL no suelta nada (Drops_v2). La corrida termina al
+            // matarlo, así que cualquier recompensa llega cuando ya no hay dónde
+            // usarla: toda recompensa tiene que tener ventana real de uso.
+            if (!_datos.Curves.Drops.FinalBossDrops && EsJefeFinal(enemigo))
+                return;
+
+            OfrecerOro(clases);
 
             // El jefe suelta además una pieza de equipo, con presupuesto atado a
             // la oleada: así un ítem de la 80 es mejor que uno de la 10 sin que
@@ -1543,6 +2484,218 @@ public sealed class Run
             if (plata is not null)
                 Backpack.StorePerk(plata.Id);
         }
+    }
+
+    // =========================================================================
+    //  El Oro del jefe: ofrecer varios y que el jugador elija
+    // =========================================================================
+
+    /// <summary>
+    /// Abre la pantalla de elección con los Oro que ofrece este jefe.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Sigue saliendo UN SOLO Oro por jefe.</b> Lo que cambia no es
+    /// cuánto poder entrega la corrida, es que el jugador decide cuál. Con un Oro
+    /// al azar y ocho jefes, ver los <b>dos</b> componentes de una receta concreta
+    /// era cuestión de suerte y los Únicos eran una lotería.</para>
+    ///
+    /// <para>Las opciones salen del pool de la corrida, filtradas por las clases
+    /// activas —un Oro que ninguna clase del roster puede equipar es una de las
+    /// ocho oportunidades tirada a la basura— y sorteadas con el peso de sinergia,
+    /// que empuja hacia la pareja de un plano que el jugador ya está armando.</para>
+    /// </remarks>
+    private void OfrecerOro(IReadOnlyList<DefenderClass> clases)
+    {
+        var candidatos = PoolDeOro(clases);
+
+        if (candidatos.Count == 0)
+            return;
+
+        int cuantas = System.Math.Min(_datos.Curves.Drops.BossGoldOptions, candidatos.Count);
+        var opciones = new Choice[cuantas];
+
+        for (int i = 0; i < cuantas; i++)
+        {
+            int elegido = SortearConSinergia(candidatos);
+
+            opciones[i] = new Choice(
+                ChoiceType.Perk, PrimeraClaseQueLoUsa(elegido, clases), 0, elegido);
+
+            // Se saca del pozo: tres opciones donde dos son iguales es una
+            // elección de dos.
+            candidatos.Remove(elegido);
+        }
+
+        OpenChoices = opciones;
+    }
+
+    /// <summary>
+    /// Sortea un Oro dando más peso a la pareja de un plano que ya está a medias.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Es la mitad que hace que las recetas se puedan <b>perseguir</b>. La otra
+    /// mitad la da que las recetas ahora se adivinan mirando el efecto: cada Único
+    /// es la combinación real de sus dos componentes (ver <c>planos.json</c>). Sin
+    /// las dos, un plano comprado con la billetera puede no completarse nunca y la
+    /// única progresión permanente del juego se vuelve una promesa vacía.
+    /// </remarks>
+    private int SortearConSinergia(List<int> candidatos)
+    {
+        int peso = _datos.Curves.Drops.SynergyWeight;
+
+        if (peso <= 1 || candidatos.Count == 1)
+            return candidatos[_rng.Index(candidatos.Count)];
+
+        var pesos = new int[candidatos.Count];
+        int total = 0;
+
+        for (int i = 0; i < candidatos.Count; i++)
+        {
+            pesos[i] = CompletaUnPlanoConocido(candidatos[i]) ? peso : 1;
+            total += pesos[i];
+        }
+
+        int tirada = _rng.Between(0, total);
+
+        for (int i = 0; i < candidatos.Count; i++)
+        {
+            tirada -= pesos[i];
+
+            if (tirada < 0)
+                return candidatos[i];
+        }
+
+        return candidatos[^1];
+    }
+
+    /// <summary>¿Este Oro es la pareja de algo que el jugador ya tiene?</summary>
+    private bool CompletaUnPlanoConocido(int idPerk)
+    {
+        foreach (var plano in _datos.Blueprints.All)
+        {
+            if (!plano.Initial && !_planosAprendidos.Contains(plano.Key))
+                continue;
+
+            if (plano.GoldA == idPerk && TieneOro(plano.GoldB))
+                return true;
+
+            if (plano.GoldB == idPerk && TieneOro(plano.GoldA))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>¿Tiene este perk, equipado o en la mochila?</summary>
+    private bool TieneOro(int idPerk)
+    {
+        foreach (var item in Backpack.Items)
+        {
+            if (item.Kind == ItemType.Perk && item.Id == idPerk)
+                return true;
+        }
+
+        foreach (var ficha in Roster.Classes)
+        {
+            foreach (int p in ficha.Perks)
+            {
+                if (p == idPerk)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Los Oro de esta corrida que le sirven a alguna clase activa.
+    /// </summary>
+    /// <remarks>
+    /// El pool se arma en el <b>primer jefe</b> y no al empezar, porque al empezar
+    /// el roster está vacío: no habría con qué filtrar y saldría el catálogo
+    /// entero. Es un punto fijo de la secuencia del RNG, que es lo único que la
+    /// revalidación necesita.
+    /// </remarks>
+    private List<int> PoolDeOro(IReadOnlyList<DefenderClass> clases)
+    {
+        if (_poolOro.Count == 0)
+            ArmarPoolDeOro(clases, _datos.Curves.Drops.GoldPoolSize);
+
+        var salida = new List<int>(_poolOro.Count);
+
+        foreach (int id in _poolOro)
+        {
+            if (AlgunaLoUsa(id, clases))
+                salida.Add(id);
+        }
+
+        return salida;
+    }
+
+    private void ArmarPoolDeOro(IReadOnlyList<DefenderClass> clases, int cuantos)
+    {
+        var disponibles = new List<int>();
+
+        foreach (var p in _datos.Perks.All)
+        {
+            // Los que ya están adentro no se vuelven a sortear: el pool es un
+            // conjunto, y una entrada repetida sesgaría todos los sorteos
+            // posteriores hacia ese perk sin que nadie lo haya decidido.
+            if (p.Tier == PerkTier.Gold && !_poolOro.Contains(p.Id) && AlgunaLoUsa(p.Id, clases))
+                disponibles.Add(p.Id);
+        }
+
+        while (_poolOro.Count < cuantos && disponibles.Count > 0)
+        {
+            int i = _rng.Index(disponibles.Count);
+            _poolOro.Add(disponibles[i]);
+            disponibles.RemoveAt(i);
+        }
+    }
+
+    /// <summary>
+    /// Suma unos Oro al pool cuando entra una clase nueva.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto, un roster que crece no cambia lo que el jefe puede ofrecer y
+    /// contratar tarde deja a la clase nueva sin comportamiento propio para
+    /// siempre — que es exactamente lo contrario de lo que contratar promete.
+    ///
+    /// ⚠ No hace nada si el pool todavía no existe: hasta el primer jefe no hay
+    /// pool que ampliar, y crearlo acá movería el punto de consumo del RNG.
+    /// </remarks>
+    private void AmpliarPoolDeOro(DefenderClass nueva)
+    {
+        if (_poolOro.Count == 0)
+            return;
+
+        ArmarPoolDeOro([nueva], _poolOro.Count + _datos.Curves.Drops.GoldPoolPerNewClass);
+    }
+
+    private bool AlgunaLoUsa(int idPerk, IReadOnlyList<DefenderClass> clases)
+    {
+        var p = _datos.Perks.Get(idPerk);
+
+        foreach (var c in clases)
+        {
+            if (p.WorksFor(c))
+                return true;
+        }
+
+        return false;
+    }
+
+    private DefenderClass PrimeraClaseQueLoUsa(int idPerk, IReadOnlyList<DefenderClass> clases)
+    {
+        var p = _datos.Perks.Get(idPerk);
+
+        foreach (var c in clases)
+        {
+            if (p.WorksFor(c))
+                return c;
+        }
+
+        return clases.Count > 0 ? clases[0] : DefenderClass.Mage;
     }
 
     // =========================================================================
@@ -1671,6 +2824,10 @@ public sealed class Run
         // cuánto se puede matar de una vez, no cuánto se lleva matado.
         foreach (var d in _defensores)
             d.KillsInWave = 0;
+
+        // Lo mismo con el tope de oro de Saqueo, y por lo mismo: el techo real es
+        // cuánto se puede saquear en una oleada, no en cien.
+        _oroBotinOleada = 0;
 
         foreach (var compra in armada.Npcs)
             _porSpawnear.Enqueue(compra);

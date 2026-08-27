@@ -164,10 +164,15 @@ public partial class PantallaEleccion : Control
         bool resaltada = i == _bajoElCursor;
 
         bool contrata = opcion.Kind == ChoiceType.Hire;
+        bool esPerk = opcion.Kind == ChoiceType.Perk;
 
-        var acento = contrata
-            ? new Color(0.35f, 0.65f, 0.95f)
-            : new Color(0.95f, 0.72f, 0.25f);
+        // El Oro del jefe usa su propio acento —el dorado del tier— para que se
+        // distinga de un vistazo de las dos elecciones de roster: es otra decisión
+        // y llega en otro momento de la corrida.
+        var acento =
+            esPerk ? new Color(0.93f, 0.78f, 0.31f) :
+            contrata ? new Color(0.35f, 0.65f, 0.95f) :
+                       new Color(0.95f, 0.72f, 0.25f);
 
         DrawRect(r, new Color(0.09f, 0.09f, 0.13f, 0.97f));
         DrawRect(r, resaltada ? acento : new Color(1, 1, 1, 0.15f), filled: false, width: resaltada ? 4f : 2f);
@@ -178,6 +183,15 @@ public partial class PantallaEleccion : Control
 
         float x = r.Position.X + 32;
         float y = r.Position.Y + 70;
+
+        if (esPerk)
+        {
+            DibujarTarjetaDePerk(opcion, x, y, acento);
+            Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
+                new Color(0.5f, 0.5f, 0.5f));
+
+            return;
+        }
 
         Text(Loc.Get(contrata ? "ui.eleccion.contratar" : "ui.eleccion.subir_de_nivel"), x, y, 22, acento);
 
@@ -223,6 +237,51 @@ public partial class PantallaEleccion : Control
 
         Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
             new Color(0.5f, 0.5f, 0.5f));
+    }
+
+    /// <summary>
+    /// La tarjeta de un perk de Oro ofrecido por un jefe.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Dice <b>a qué clase le sirve</b> y no solo el nombre. Un Oro es un
+    /// comportamiento que solo pueden usar dos o tres de las nueve clases, y
+    /// elegir entre tres nombres sin saber quién los puede equipar es elegir a
+    /// ciegas — que es exactamente lo que la oferta de tres vino a arreglar.
+    /// </remarks>
+    private void DibujarTarjetaDePerk(Choice opcion, float x, float y, Color acento)
+    {
+        var def = CargadorDatos.Actual.Perks.Get(opcion.PerkId);
+
+        Text(Loc.Tier(def.Tier), x, y, 22, acento);
+
+        y += 56;
+        Text(Loc.Perk(def), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
+
+        y += 50;
+        Text($"{Loc.Effect(def.Effect)} · {def.Magnitude}%", x, y, 19, new Color(0.7f, 0.7f, 0.68f));
+
+        y += 54;
+
+        // Las clases que lo pueden equipar, no todas las del roster.
+        var sirve = new System.Text.StringBuilder();
+
+        foreach (var c in ChoiceBuilder.All)
+        {
+            if (!def.WorksFor(c))
+                continue;
+
+            if (sirve.Length > 0)
+                sirve.Append(" · ");
+
+            sirve.Append(Loc.Class(c));
+        }
+
+        Text(Loc.Get("ui.eleccion.sirve_a"), x, y, 19, new Color(0.6f, 0.6f, 0.58f));
+        y += 28;
+        Text(sirve.ToString(), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
+
+        y += 36;
+        Text(Loc.Get("ui.eleccion.va_a_la_mochila"), x, y, 18, new Color(0.6f, 0.6f, 0.58f));
     }
 
     /// <summary>

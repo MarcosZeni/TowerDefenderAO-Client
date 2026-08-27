@@ -139,9 +139,104 @@ public sealed class Enemy
 
     public int SlowExpiryTick { get; set; }
 
+    // -------------------------------------------------------------------------
+    //  Estados de Estados_v2
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ TODOS siguen las mismas dos reglas, y por eso no hay una lista de
+    //  excepciones que mantener:
+    //
+    //    1. NO APILAN. Gana la potencia más fuerte y cada aplicación refresca la
+    //       duración. Sumarlas hace que la estrategia óptima sea "poné diez del
+    //       mismo", que es lo contrario de lo que un roguelike de composición
+    //       quiere premiar.
+    //    2. LOS APLICA SOLO EL DAÑO DIRECTO. Ver DamageSource.
+    //
+    //  Los DoT son la excepción a la primera, y con su propia regla: conservan
+    //  Potencia × Duración en vez de pisarse. Ver DotState.
+
+    /// <summary>Vulnerabilidad activa: recibe este % extra de daño DIRECTO.</summary>
+    public int VulnerablePercent { get; set; }
+
+    public int VulnerableExpiryTick { get; set; }
+
+    /// <summary>Debilidad: le hace este % MENOS de daño a la Torre si llega.</summary>
+    public int WeakenPercent { get; set; }
+
+    public int WeakenExpiryTick { get; set; }
+
+    /// <summary>Marca de caza: las OTRAS clases le pegan este % más fuerte.</summary>
+    public int MarkPercent { get; set; }
+
+    public int MarkExpiryTick { get; set; }
+
+    /// <summary>
+    /// Qué clase puso la marca. <b>Esa clase no cobra el bonus.</b>
+    /// </summary>
+    /// <remarks>
+    /// Sin esta exclusión, Marca de Caza sería un +10% propio disfrazado de
+    /// soporte, y dos cazadores serían mejor que un cazador y otra cosa — que es
+    /// justo la composición que el perk existe para romper.
+    /// </remarks>
+    public DefenderClass MarkOwner { get; set; }
+
+    /// <summary>Hasta qué tick está inmovilizado. No se mueve mientras dure.</summary>
+    public int RootedUntilTick { get; set; }
+
+    /// <summary>
+    /// Hasta qué tick es inmune a que lo vuelvan a enraizar.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El período refractario es lo que separa "control duro" de "perma-stun".
+    /// Sin él, tres druidas alcanzan para que nada camine nunca más, y la
+    /// dificultad deja de existir. La idea es del rework de aturdimiento de
+    /// Infinitode 2: inmunidad al salir, más un tope de veces por enemigo.
+    /// </remarks>
+    public int RootImmuneUntilTick { get; set; }
+
+    /// <summary>Cuántas veces lo enraizaron. Tiene tope.</summary>
+    public int RootCount { get; set; }
+
+    /// <summary>Cuántas veces lo empujaron hacia atrás. Tiene tope.</summary>
+    public int PushCount { get; set; }
+
+    /// <summary>
+    /// Los tres daños por tiempo. Índice por <see cref="DotKind"/>.
+    /// </summary>
+    /// <remarks>
+    /// Array de tres y no tres campos sueltos para que la fase de estados los
+    /// cobre en un <c>for</c>: con campos sueltos, agregar un DoT nuevo obliga a
+    /// tocar el bucle, y ese es el olvido que deja un efecto que se aplica y
+    /// nunca cobra.
+    /// </remarks>
+    public DotState[] Dots { get; } = new DotState[3];
+
+    /// <summary>
+    /// Tope en ORO del extra que puede soltar por la marca, o 0 si no tiene.
+    /// </summary>
+    /// <remarks>
+    /// Codicia —habilidad de arma legendaria— no lleva tope: es el premio de una
+    /// corrida. Saqueo —perk de Oro— sí, y además cuenta contra un tope por
+    /// oleada. Sin los dos topes, una build de economía se vuelve obligatoria.
+    /// </remarks>
+    public int ExtraGoldMax { get; set; }
+
+    /// <summary>
+    /// Tope en ORO de lo que esta marca puede aportar en TODA la oleada, o 0.
+    /// </summary>
+    /// <remarks>
+    /// Es el segundo techo de Saqueo, y hace falta además del de por enemigo: sin
+    /// él, una oleada de sesenta bichos marcados paga sesenta veces el tope
+    /// individual y la build de economía vuelve a ser obligatoria.
+    /// </remarks>
+    public int ExtraGoldWaveCap { get; set; }
+
     public bool Alive => Hp > 0;
 
     public int EffectiveSpeed => Ints.WithPercents(Speed, ExtraSpeedPerk - SlowPercent);
+
+    /// <summary>¿Está inmovilizado ahora?</summary>
+    public bool Rooted(int tick) => tick < RootedUntilTick;
 }
 
 /// <summary>
@@ -185,9 +280,48 @@ public sealed class Defender
     /// </remarks>
     public int HitCounter { get; set; }
 
+    // -------------------------------------------------------------------------
+    //  Estado propio del defensor
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ Nada de esto son STATS. Los stats siguen viviendo en la clase y se
+    //  recalculan cada vez (`base + nivel + perks + equipo`); esto es memoria de
+    //  lo que ESTA unidad viene haciendo, que es otra cosa. Dos cazadores con los
+    //  mismos perks pegan igual; uno puede llevar cinco golpes seguidos al mismo
+    //  bicho y el otro no.
+    //
+    //  Y va por defensor y no por tick global a propósito: con `Tick % N`,
+    //  criticaban todos juntos y un defensor con cadencia múltiplo de N criticaba
+    //  siempre o nunca según la fase en que se lo puso.
+
+    /// <summary>A qué enemigo le viene pegando seguido. Lo usa Concentración.</summary>
+    public int FocusTargetSpawnId { get; set; } = -1;
+
+    /// <summary>Cuántos golpes seguidos lleva al mismo objetivo. Tiene techo.</summary>
+    public int FocusStacks { get; set; }
+
+    /// <summary>El tick del último golpe. La concentración se pierde si pasa mucho.</summary>
+    public int LastHitTick { get; set; } = int.MinValue;
+
+    /// <summary>Ticks seguidos sin nadie en alcance. Lo usa Preparación.</summary>
+    public int IdleTicks { get; set; }
+
+    /// <summary>Tiene el próximo golpe cargado. Una sola carga guardada.</summary>
+    public bool Charged { get; set; }
+
+    /// <summary>Buff de cadencia recibido de un aura aliada, en puntos porcentuales.</summary>
+    /// <remarks>
+    /// ⚠ <b>No apila</b>: se conserva el más fuerte y se refresca la duración.
+    /// Tres bardos siguen dando +10%, no +30%. Sin la regla, spamear soportes es
+    /// la mejor estrategia universal y todas las demás composiciones sobran.
+    /// </remarks>
+    public int CadenceBuffPercent { get; set; }
+
+    public int CadenceBuffExpiryTick { get; set; }
+
     /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la
-    /// devolución del 50% al venderlo.
+    /// devolución al venderlo.
     /// </summary>
     public required int PlacementTick { get; init; }
 }

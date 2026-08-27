@@ -95,10 +95,27 @@
   // ⚠ ADELANTAR OLEADA no es un lujo: sin esa mecánica el desempate del ranking
   // por ticks no mide nada, y la punta de la tabla deja de ser una tabla de
   // velocidad.
+  //
+  // ⚠ "goldMultiplierPerArea" desacopla el escalado de los ENEMIGOS del escalado
+  // del DINERO (Economia_Propuesta). El presupuesto de oleada es cuadrático, así
+  // que el oro que sueltan los bichos crecía con él: en las áreas tardías el
+  // jugador terminaba con el tablero lleno y oro sobrando sin nada que comprar,
+  // que es un recurso que dejó de ser un recurso.
+  //
+  // Un porcentaje por área, aplicado al oro de kill. Las dos primeras quedan al
+  // 100: el arranque es donde el oro de verdad aprieta, y recortarlo ahí castiga
+  // al que está aprendiendo. Baja de a 10 puntos por área a partir de la tercera.
+  //
+  // Es el patrón de BTD6, que reduce el cash por pop desde la ronda 51 en vez de
+  // subir los precios: bajar la entrada mantiene legibles los precios de la
+  // tienda, subir los precios los vuelve una tabla que hay que releer.
+  //
+  // ⚠ La lista tiene que traer exactamente "areaCount" números.
   "economy": {
     "startingGoldTokens": 2,
     "goldPerCalledEnemy": 12,
-    "callGoldCap": 400
+    "callGoldCap": 400,
+    "goldMultiplierPerArea": [100, 100, 90, 80, 70, 60, 50, 40]
   },
 
   // --- El presupuesto de la oleada ------------------------------------------
@@ -140,13 +157,16 @@
   // compra tiene que ser peor que lo que se gana matando al jefe, o matar al
   // jefe deja de valer la pena.
   //
-  // "clearGoldBonus" es la mitad de lo que era: con 20 + n×12 el tablero se
-  // llenaba en pocas oleadas y después el oro quedaba suelto sin nada que comprar.
+  // "clearGoldBonus" subió de 10 + n×6 a 20 + n×7 (Economia_Propuesta). Es la
+  // contrapartida del recorte de oro por kill de las áreas tardías: se mueve el
+  // ingreso desde "matar bichos" hacia "limpiar la oleada", que es lo que el
+  // juego quiere premiar. La cuenta da 27 en la oleada 1 y 104 en la 12, contra
+  // 16 y 82 de antes.
   //
   // "spawnIntervalTicks" y "npcPerkChance" son limitar(base + perWave×n, min, max)
   // con perWave fraccionario escrito como divisor.
   "perWaveCurves": {
-    "clearGoldBonus":       { "base": 10, "perWave": 6 },
+    "clearGoldBonus":       { "base": 20, "perWave": 7 },
     "bossDropBudget":   { "base": 40, "perWave": 6 },
     "shopItemBudget": { "base": 30, "perWave": 5 },
 
@@ -192,9 +212,38 @@
   // 4% con ~40 bichos por oleada da 1,6 drops por oleada, o sea unos 20 por
   // área. Con 15 lugares de mochila, eso aprieta recién entrando a la segunda
   // área — que es exactamente el ritmo que el diseño quiere.
+  //
+  // --- Cómo se reparte el Oro (Drops_v2) ------------------------------------
+  //
+  // ⚠ EL JEFE OFRECE VARIOS Y EL JUGADOR ELIGE UNO. Con un solo Oro al azar por
+  // jefe y ocho jefes por corrida, ver los DOS componentes de una receta
+  // concreta era cuestión de suerte, y los Únicos eran una lotería en vez de un
+  // objetivo de build. Ofrecer tres y dejar elegir da agencia sin regalar poder:
+  // sigue saliendo un solo Oro por jefe.
+  //
+  // "synergyWeight": si el jugador ya tiene un Oro que participa en un plano que
+  // conoce, su pareja entra al sorteo con este peso multiplicado. Es la mitad
+  // que hace que las recetas se puedan perseguir: la primera mitad la da que las
+  // recetas ahora se adivinan mirando el efecto (ver planos.json).
+  //
+  // "goldPoolSize": cuántos Oro distintos puede llegar a ver UNA corrida. El
+  // catálogo tiene 22 y ofrecer los 22 diluye las recetas y convierte cada jefe
+  // en 22 opciones casi equivalentes. El pool se arma en el primer jefe con las
+  // clases que el jugador tenga, y suma "goldPoolPerNewClass" al contratar una
+  // clase nueva — así contratar sigue abriendo cosas.
+  //
+  // ⚠ "finalBossDrops": false. El jefe de la oleada 100 NO suelta nada, y no es
+  // una mezquindad: la corrida TERMINA al matarlo, así que cualquier recompensa
+  // llega cuando ya no hay dónde usarla. Toda recompensa tiene que tener ventana
+  // real de uso.
   "drops": {
     "commonChance": 4,
-    "bronzeChance": 70
+    "bronzeChance": 70,
+    "bossGoldOptions": 3,
+    "synergyWeight": 3,
+    "goldPoolSize": 13,
+    "goldPoolPerNewClass": 2,
+    "finalBossDrops": false
   },
 
   // --- Cómo se arma la oleada con ese presupuesto ---------------------------

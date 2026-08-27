@@ -388,6 +388,7 @@ public static class CorredorHeadless
         GD.Print($"── Balance · {corridas} corridas ──────────────────────");
 
         int suma = 0, peor = int.MaxValue, mejor = 0;
+        int sumaOro = 0, peorOro = int.MaxValue, mejorOro = 0;
 
         for (int i = 0; i < corridas; i++)
         {
@@ -398,11 +399,28 @@ public static class CorredorHeadless
             if (r.Wave < peor) peor = r.Wave;
             if (r.Wave > mejor) mejor = r.Wave;
 
+            sumaOro += r.Gold;
+            if (r.Gold < peorOro) peorOro = r.Gold;
+            if (r.Gold > mejorOro) mejorOro = r.Gold;
+
             GD.Print($"  seed {seed,-22} oleada {r.Wave,3} · {r.Ticks,7} ticks · " +
-                     $"{r.Defenders,2} def · {r.ClasesRoster} clases · mochila {r.Backpack,2} · {r.State}");
+                     $"{r.Defenders,2} def · {r.ClasesRoster} clases · mochila {r.Backpack,2} · " +
+                     $"oro {r.Gold,6} · {r.State}");
         }
 
         GD.Print($"── oleada:  peor {peor} · media {suma / corridas} · mejor {mejor} ──");
+
+        // ⚠ EL ORO SIN GASTAR ES LA MEDICIÓN QUE PIDE Economia_Propuesta.
+        //
+        // La propuesta difiere los ajustes finos de economía hasta tener este
+        // número: si el jugador termina la corrida con oro para dos o tres
+        // compras completas de tienda sin haber sacrificado defensa, el ingreso
+        // sobra y hay que recortarlo más. Con la mochila llena y el tablero
+        // completo, el oro deja de ser un recurso y pasa a ser un marcador.
+        //
+        // Es el oro AL MORIR, así que un número alto en corridas cortas dice otra
+        // cosa: que el jugador imaginario no supo en qué gastarlo, no que sobre.
+        GD.Print($"── oro sin gastar al terminar:  peor {peorOro} · media {sumaOro / corridas} · mejor {mejorOro} ──");
     }
 
     internal readonly record struct Resultado(int Ticks, int Wave, int HpTorre, int Gold, RunState State, int Defenders, int ClasesRoster, int Backpack);
@@ -448,7 +466,16 @@ public static class CorredorHeadless
             // congelado, las vueltas de más no cuestan ticks.
             if (partida.WaitingForWaveStart)
             {
-                if (!ColocarUnoEnPreparacion(partida, log, pendientes))
+                // ⚠ El orden importa: primero el tablero, después la tienda. Al
+                // revés, la tienda se lleva el oro de la próxima colocación y el
+                // jugador imaginario termina con la mochila llena y el mapa
+                // vacío — que es peor que cualquiera de las dos cosas sola.
+                //
+                // Se arranca la oleada recién cuando no queda nada por hacer.
+                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
+                bool compro = !puso && ComprarLoQuePueda(partida, log);
+
+                if (!puso && !compro)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -575,7 +602,16 @@ public static class CorredorHeadless
             // reloj está congelado, las vueltas de más no cuestan ticks.
             if (partida.WaitingForWaveStart)
             {
-                if (!ColocarUnoEnPreparacion(partida, log, pendientes))
+                // ⚠ El orden importa: primero el tablero, después la tienda. Al
+                // revés, la tienda se lleva el oro de la próxima colocación y el
+                // jugador imaginario termina con la mochila llena y el mapa
+                // vacío — que es peor que cualquiera de las dos cosas sola.
+                //
+                // Se arranca la oleada recién cuando no queda nada por hacer.
+                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
+                bool compro = !puso && ComprarLoQuePueda(partida, log);
+
+                if (!puso && !compro)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -645,6 +681,21 @@ public static class CorredorHeadless
 
         for (int i = 0; i < opciones.Length; i++)
         {
+            // ⚠ La oferta de Oro del jefe también entra por acá (Drops_v2), y el
+            // bot la resuelve de la forma más tonta que sirve: se queda con el
+            // que COMPLETA UN PLANO si hay alguno, y si no con el primero.
+            //
+            // No intenta valuar comportamientos, y es a propósito: un bot que
+            // eligiera bien los Oro mediría el techo del juego y esta herramienta
+            // mide el PISO. Lo que sí tiene que hacer es no romperse.
+            if (opciones[i].Kind == ChoiceType.Perk)
+            {
+                if (mejorPuntaje == int.MinValue)
+                    mejor = i;
+
+                continue;
+            }
+
             var stats = CargadorDatos.Actual.StatsOf(opciones[i].DefenderClass);
 
             // Daño por cien ticks, para que la cadencia pese tanto como el golpe.
@@ -715,6 +766,47 @@ public static class CorredorHeadless
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Compra de la tienda lo primero que entre en el bolsillo y en la mochila.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Existe para que el oro sin gastar SIGNIFIQUE algo.</b> Sin esta
+    /// política el jugador imaginario no compraba nunca, así que terminaba con
+    /// miles de oro y ese número no medía la economía: medía que el bot no sabía
+    /// gastarlo. Economia_Propuesta difiere los ajustes de ingreso hasta tener
+    /// esa medición, y con un bot que no compra la medición es basura.</para>
+    ///
+    /// <para>La heurística es deliberadamente tonta —lo primero que alcance— por
+    /// lo mismo que el resto: mide el piso del juego, no el techo.</para>
+    ///
+    /// <para>⚠ Comprar <b>no consume RNG</b>: el stock ya lo generó la seed al
+    /// abrir la preparación, y la acción solo marca la oferta como vendida. Por
+    /// eso se puede agregar a la política sin correr la secuencia y sin invalidar
+    /// nada de lo que la revalidación reproduce.</para>
+    /// </remarks>
+    private static bool ComprarLoQuePueda(Run partida, ActionLog log)
+    {
+        // ⚠ Con la mochila llena no se compra NADA, y no es una optimización: la
+        // compra rebota sin gastar oro, la oferta sigue en el stock y sigue
+        // siendo accesible, así que el bucle de preparación la volvería a
+        // encolar para siempre. La corrida se colgaría con el reloj congelado.
+        if (partida.Backpack.Ocupados >= CargadorDatos.Actual.Curves.Defenders.BackpackSlots)
+            return false;
+
+        var stock = partida.Shop.Stock;
+
+        for (int i = 0; i < stock.Count; i++)
+        {
+            if (stock[i].Sold || stock[i].Price > partida.Gold)
+                continue;
+
+            log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.Buy, i, 0, 0));
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

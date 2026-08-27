@@ -22,7 +22,19 @@ public enum PerkTier
     Unique = 3,
 }
 
-/// <summary>Qué toca un perk numérico.</summary>
+/// <summary>Qué hace un perk.</summary>
+/// <remarks>
+/// <para>Del 1 al 3 son <b>números</b> —Bronce y Plata— y del 10 en adelante son
+/// <b>comportamientos</b> —Oro y Único—. Es la misma línea que divide el catálogo
+/// en <see cref="PerkTier"/>, escrita acá para que el <c>switch</c> del tick no
+/// tenga que consultarla.</para>
+///
+/// <para>⚠ <b>Un comportamiento se aplica SOLO sobre el golpe directo.</b> Nada de
+/// lo que sale de él —eco, splash, cadena, rebote, DoT, transferencia de
+/// overkill— vuelve a disparar un comportamiento. Es la primera regla de
+/// <c>Estados_v2</c> y existe para que no haya cadenas recursivas: sin ella,
+/// Cadena crea Cadena y el daño de una oleada apretada explota.</para>
+/// </remarks>
 public enum PerkEffect
 {
     None = 0,
@@ -30,45 +42,113 @@ public enum PerkEffect
     Cadence = 2,
     Range = 3,
 
-    /// <summary>Comportamiento: el disparo rebota a un segundo enemigo.</summary>
+    // -------------------------------------------------------------------------
+    //  Oro — comportamiento. Lo comparten 2-3 clases
+    // -------------------------------------------------------------------------
+
+    /// <summary>El disparo rebota a UN enemigo cercano por ruta.</summary>
     Ricochet = 10,
 
-    /// <summary>Comportamiento: el golpe daña también alrededor del objetivo.</summary>
+    /// <summary>El golpe daña también a los cercanos por ruta, con techo.</summary>
     Splash = 11,
 
-    /// <summary>Comportamiento: el objetivo queda más lento un rato.</summary>
+    /// <summary>El objetivo camina más lento un rato. No apila: gana el más fuerte.</summary>
     Slow = 12,
 
-    /// <summary>Comportamiento: cada tantos golpes, uno pega mucho más.</summary>
+    /// <summary>Cada N golpes DE ESE DEFENSOR, uno pega mucho más.</summary>
     CriticalHit = 13,
 
-    /// <summary>Comportamiento: envenena, daño por tick durante un rato.</summary>
+    /// <summary>Veneno: daño repartido en ticks, con presupuesto conservado.</summary>
     Poison = 14,
 
-    /// <summary>Comportamiento: cada tantos golpes, uno atraviesa la defensa.</summary>
-    Piercing = 15,
+    /// <summary>Cadena acotada: salta a hasta dos enemigos, cada vez por menos.</summary>
+    Chain = 16,
+
+    /// <summary>Quemadura al objetivo y una versión menor a los cercanos.</summary>
+    Burn = 17,
+
+    /// <summary>El golpeado le hace menos daño a la Torre si llega.</summary>
+    Weaken = 18,
+
+    /// <summary>Cada N golpes, el objetivo recibe más daño DIRECTO de todos.</summary>
+    Sunder = 19,
+
+    /// <summary>Golpes seguidos al mismo objetivo suben el daño, con techo.</summary>
+    Focus = 30,
+
+    /// <summary>Marca al objetivo: las OTRAS clases le pegan más fuerte.</summary>
+    HuntMark = 31,
+
+    /// <summary>Sangrado: parte del golpe se cobra en ticks.</summary>
+    Bleed = 32,
+
+    /// <summary>Cada N golpes inmoviliza, con período refractario y tope.</summary>
+    Root = 33,
+
+    /// <summary>Cada N golpes empuja al enemigo hacia atrás por la ruta.</summary>
+    Seismic = 34,
+
+    /// <summary>Cada N ataques, aura de cadencia a los defensores cercanos.</summary>
+    Inspire = 35,
+
+    /// <summary>Marca de botín: si muere marcado, suelta oro extra, con tope.</summary>
+    Loot = 36,
+
+    /// <summary>Más daño directo contra enemigos por debajo de un umbral de vida.</summary>
+    Opportunist = 37,
+
+    /// <summary>Más daño directo contra los que ya están mordiendo la Torre.</summary>
+    ThresholdGuard = 38,
+
+    /// <summary>Cada N golpes, un eco diferido por una fracción del daño.</summary>
+    ArcaneEcho = 39,
+
+    /// <summary>Al matar, parte del overkill salta al vecino de ruta.</summary>
+    Overpenetration = 40,
+
+    /// <summary>Más daño directo contra enemigos por encima de un umbral de vida.</summary>
+    FirstStrike = 41,
+
+    /// <summary>Sin objetivo durante un rato, el próximo golpe sale cargado.</summary>
+    Charge = 42,
 
     // -------------------------------------------------------------------------
     //  Únicos — no caen ni se compran: salen de fusionar dos Oro con un plano
     // -------------------------------------------------------------------------
+    //
+    //  ⚠ Cada Único COMBINA los dos Oro de su receta con las magnitudes
+    //  REBAJADAS. Un Único que sumara dos Oro completos en un solo slot sería
+    //  estrictamente mejor que tener los dos, y la mitad del premio —el slot que
+    //  se libera— dejaría de ser la mitad del premio.
+    //
+    //  Por eso llevan dos números: `magnitude` y `magnitudeB` de perks.json.
 
-    /// <summary>Ricochet que además atraviesa.</summary>
+    /// <summary>Cazador: Concentración + Sobrepenetración.</summary>
     Perforation = 20,
 
-    /// <summary>Splash que además ralentiza.</summary>
+    /// <summary>Mago: Onda Expansiva + Escarcha.</summary>
     FrostWave = 21,
 
-    /// <summary>Crítico que además hace splash.</summary>
+    /// <summary>Paladín: Guardia del Umbral + Quebranto.</summary>
     WrathOfGod = 22,
 
-    /// <summary>Ricochet en cadena, sin tope de rebotes cercanos.</summary>
+    /// <summary>Asesino: Hemorragia + Oportunista.</summary>
     Apocalypse = 23,
 
-    /// <summary>Veneno que además ralentiza.</summary>
+    /// <summary>Druida: Raíces + Tormenta de Fuego.</summary>
     TerribleHunger = 24,
 
-    /// <summary>Splash grande que pega dos veces.</summary>
+    /// <summary>Clérigo: Inspiración + Quebranto.</summary>
     DivineStorm = 25,
+
+    /// <summary>Bardo: Inspiración + Debilidad.</summary>
+    Blindness = 26,
+
+    /// <summary>Guerrero: Golpe Sísmico + Quebranto.</summary>
+    Strength = 27,
+
+    /// <summary>Ladrón: Saqueo + Sobrepenetración.</summary>
+    Invisibility = 28,
 }
 
 /// <summary>
@@ -90,8 +170,22 @@ public sealed class PerkDefinition
 
     public required PerkEffect Effect { get; init; }
 
-    /// <summary>Cuánto suma, en puntos porcentuales. Cero si es comportamiento.</summary>
+    /// <summary>Cuánto pega, en puntos porcentuales.</summary>
     public int Magnitude { get; init; }
+
+    /// <summary>
+    /// El <b>segundo</b> número, para los perks que combinan dos cosas.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lo usan los Únicos, que son la fusión de dos Oro: Onda de Frío hace
+    /// splash por <see cref="Magnitude"/> y ralentiza por esto. Sin el segundo
+    /// número habría que partir la definición entre <c>perks.json</c> y
+    /// <c>combate.json</c>, y el que balancea tendría que mirar dos archivos para
+    /// entender un solo perk.</para>
+    ///
+    /// <para>Cero en los perks que hacen una sola cosa.</para>
+    /// </remarks>
+    public int MagnitudeB { get; init; }
 
     /// <summary>
     /// Qué clases lo pueden equipar. Vacío = cualquiera.
