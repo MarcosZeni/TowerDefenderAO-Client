@@ -31,6 +31,36 @@ namespace TowerOfArgentum.Herramientas;
 /// Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --balance 20
 /// </code>
 /// </remarks>
+
+/// <summary>
+/// Qué tan bien juega el jugador imaginario.
+/// </summary>
+/// <remarks>
+/// <para>⚠ <b>Un solo bot no alcanza para balancear.</b> <c>Resumen_Balance</c>
+/// pide tres cotas —bot/piso 30-40, competente 60-75, build optimizada 90-100— y
+/// con una sola política no hay con qué contestar dos de las tres. Peor: cuando
+/// esa única política tenía un bug, el número que daba se leía como «el piso del
+/// juego» en vez de «el techo del bot», y así se casi-cambia la curva por un
+/// plan de colocación que se quedaba sin casilleros.</para>
+///
+/// <para>Las políticas se diferencian por <b>lo que el jugador sabe hacer</b>, no
+/// por números: el piso no es el competente con menos oro, es alguien que cubre
+/// mal el mapa y no usa la tienda.</para>
+/// </remarks>
+internal enum Politica
+{
+    /// <summary>
+    /// Cubre la ruta salteado, no compra en la tienda, no compra niveles y no
+    /// tira nada de la mochila. Sabe poner y sabe equipar, y nada más.
+    /// </summary>
+    Piso = 0,
+
+    /// <summary>
+    /// Llena el tablero, compra lo que entre, equipa armas, destraba la mochila y
+    /// gasta el sobrante en niveles. No compone: no persigue planos ni sinergias.
+    /// </summary>
+    Normal = 1,
+}
 public static class CorredorHeadless
 {
     /// <summary>
@@ -218,7 +248,17 @@ public static class CorredorHeadless
 
                 case "--balance":
                     int corridas = (i + 1 < args.Length && int.TryParse(args[i + 1], out int n)) ? n : 10;
-                    Balance(corridas);
+
+                    // Sin política nombrada corren las dos, que es lo que hace
+                    // falta casi siempre: una sola cota no dice nada.
+                    Politica? sola = (i + 2 < args.Length ? args[i + 2] : "") switch
+                    {
+                        "piso" => Politica.Piso,
+                        "normal" => Politica.Normal,
+                        _ => null,
+                    };
+
+                    Balance(corridas, sola);
                     return true;
             }
         }
@@ -383,9 +423,31 @@ public static class CorredorHeadless
     /// perks de los NPCs— así que la dispersión del resultado mide cuánto pesa
     /// la suerte contra la habilidad.
     /// </remarks>
-    private static void Balance(int corridas)
+    private static void Balance(int corridas, Politica? sola)
     {
-        GD.Print($"── Balance · {corridas} corridas ──────────────────────");
+        if (sola is { } una)
+        {
+            BalanceDe(corridas, una);
+            return;
+        }
+
+        // ⚠ Las dos de una, y en este orden: primero la cota de abajo. El número
+        // que importa es la DISTANCIA entre las dos —cuánto paga jugar mejor—, y
+        // leerla exige tenerlas juntas en la misma pantalla.
+        BalanceDe(corridas, Politica.Piso);
+        GD.Print("");
+        BalanceDe(corridas, Politica.Normal);
+
+        GD.Print("");
+        GD.Print("── Objetivos de Resumen_Balance ────────────────────");
+        GD.Print("   bot/piso 30-40 · competente 60-75 · build optimizada 90-100");
+    }
+
+    private static void BalanceDe(int corridas, Politica politica)
+    {
+        string nombre = politica == Politica.Piso ? "piso" : "normal";
+
+        GD.Print($"── Balance · {nombre} · {corridas} corridas ───────────");
 
         int suma = 0, peor = int.MaxValue, mejor = 0;
         int sumaOro = 0, peorOro = int.MaxValue, mejorOro = 0;
@@ -393,7 +455,7 @@ public static class CorredorHeadless
         for (int i = 0; i < corridas; i++)
         {
             ulong seed = (ulong)(i + 1) * 2_654_435_761UL;
-            var r = Correr(seed, ConAcciones(seed));
+            var r = Correr(seed, ConAcciones(seed), politica);
 
             suma += r.Wave;
             if (r.Wave < peor) peor = r.Wave;
@@ -408,7 +470,7 @@ public static class CorredorHeadless
                      $"oro {r.Gold,6} · {r.State}");
         }
 
-        GD.Print($"── oleada:  peor {peor} · media {suma / corridas} · mejor {mejor} ──");
+        GD.Print($"── {nombre} · oleada:  peor {peor} · media {suma / corridas} · mejor {mejor} ──");
 
         // ⚠ EL ORO SIN GASTAR ES LA MEDICIÓN QUE PIDE Economia_Propuesta.
         //
@@ -418,9 +480,9 @@ public static class CorredorHeadless
         // sobra y hay que recortarlo más. Con la mochila llena y el tablero
         // completo, el oro deja de ser un recurso y pasa a ser un marcador.
         //
-        // Es el oro AL MORIR, así que un número alto en corridas cortas dice otra
-        // cosa: que el jugador imaginario no supo en qué gastarlo, no que sobre.
-        GD.Print($"── oro sin gastar al terminar:  peor {peorOro} · media {sumaOro / corridas} · mejor {mejorOro} ──");
+        // ⚠ En «piso» este número NO mide la economía: esa política no compra
+        // nada, así que lo que reporta es cuánto ingresa, no cuánto sobra.
+        GD.Print($"── {nombre} · oro sin gastar:  peor {peorOro} · media {sumaOro / corridas} · mejor {mejorOro} ──");
     }
 
     internal readonly record struct Resultado(int Ticks, int Wave, int HpTorre, int Gold, RunState State, int Defenders, int ClasesRoster, int Backpack);
@@ -440,7 +502,7 @@ public static class CorredorHeadless
         var partida = new Run(seed, Layouts.Choose(seed, datos), log, datos);
         partida.Empezar();
 
-        var pendientes = new Queue<(int Tick, Cell Cell)>(ColocacionesPlaneadas(seed, partida.Map));
+        var pendientes = new Queue<(int Tick, Cell Cell)>(ColocacionesPlaneadas(seed, partida.Map, Politica.Normal));
 
         GD.Print($"── Traza · seed {seed} ────────────────────────────");
         GD.Print($"  ruta: {partida.Route.Length / Ints.ThousandthsPerCell} celdas");
@@ -568,8 +630,8 @@ public static class CorredorHeadless
     /// siendo re-simulable: el servidor puede tomar ese log y reproducirlo sin
     /// saber nada de esta política.</para>
     /// </remarks>
-    private static Resultado Correr(ulong seed, ActionLog log)
-        => Correr(seed, log, null, null);
+    private static Resultado Correr(ulong seed, ActionLog log, Politica politica = Politica.Normal)
+        => Correr(seed, log, null, null, politica);
 
     /// <summary>
     /// La misma corrida, pero sobre un mapa cualquiera.
@@ -581,13 +643,14 @@ public static class CorredorHeadless
     /// jugarlos.
     /// </remarks>
     internal static Resultado Correr(
-        ulong seed, ActionLog log, Map? mapa, IEnumerable<(int Tick, Cell Cell)>? plan)
+        ulong seed, ActionLog log, Map? mapa, IEnumerable<(int Tick, Cell Cell)>? plan,
+        Politica politica = Politica.Normal)
     {
         var partida = new Run(seed, mapa ?? Layouts.Choose(seed, CargadorDatos.Actual), log, CargadorDatos.Actual);
         partida.Empezar();
 
         var pendientes = new Queue<(int Tick, Cell Cell)>(
-            plan ?? ColocacionesPlaneadas(seed, partida.Map));
+            plan ?? ColocacionesPlaneadas(seed, partida.Map, politica));
 
         while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
@@ -617,15 +680,23 @@ public static class CorredorHeadless
                 //
                 // Se arranca la oleada recién cuando no queda nada por hacer.
                 bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
-                bool compro = !puso && ComprarLoQuePueda(partida, log);
+
+                // ⚠ Las tres de abajo son lo que SEPARA las políticas. El piso
+                // sabe poner y equipar; comprar, destrabar la mochila y gastar el
+                // sobrante en niveles son cosas que un jugador aprende después, y
+                // meterlas en la misma política borraba la cota de abajo.
+                bool avanzado = politica == Politica.Normal;
+
+                bool compro = !puso && avanzado && ComprarLoQuePueda(partida, log);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
-                bool libero = !puso && !compro && LiberarMochila(partida, log);
+                bool libero = !puso && !compro && avanzado && LiberarMochila(partida, log);
 
                 // Último: el sumidero del sobrante. Poner un defensor más siempre
                 // vale más que un nivel comprado.
-                bool subio = !puso && !compro && !libero && SubirNivelSiSobra(partida, log);
+                bool subio = !puso && !compro && !libero && avanzado
+                             && SubirNivelSiSobra(partida, log);
 
                 if (!puso && !compro && !libero && !subio)
                 {
@@ -1022,21 +1093,27 @@ public static class CorredorHeadless
     /// <para>La clase queda sin decidir acá: se resuelve al momento de poner,
     /// contra el roster que haya tocado.</para>
     /// </remarks>
-    private static List<(int Tick, Cell Cell)> ColocacionesPlaneadas(ulong seed, Map mapa)
+    private static List<(int Tick, Cell Cell)> ColocacionesPlaneadas(
+        ulong seed, Map mapa, Politica politica)
     {
         var rng = new Rng(seed ^ 0xA5A5_5A5AUL);
 
         var plan = new List<(int, Cell)>();
         var usadas = new HashSet<Cell>();
 
-        // ⚠ UNA CELDA DE PASO Y TODOS LOS VECINOS, no una de cada tres.
+        // ⚠ EL PASO Y LOS VECINOS SON LA POLÍTICA, no una constante.
         //
-        // Con paso 3 y un solo vecino por parada, el plan tenía ~11 lugares en
-        // una ruta de 33 celdas y el bot moría con 8 defensores puestos, la
-        // mochila llena y 13.000 de oro sin gastar. Eso no medía el piso del
-        // juego: medía que el plan se quedaba sin casilleros. Un jugador malo
-        // pone mal, no deja de poner.
-        long paso = Ints.ThousandthsPerCell;
+        // Normal recorre la ruta celda por celda y toma TODOS los vecinos
+        // colocables: llena el tablero, que es lo que hace cualquiera que ya
+        // entendió el juego. Piso salta de a dos celdas y toma UNO, así que cubre
+        // la ruta salteado y deja la mitad del tablero vacío.
+        //
+        // La diferencia no es cosmética: con paso 3 y un vecino —lo que había
+        // antes para todos— el plan tenía ~11 lugares en una ruta de 33 celdas, el
+        // bot moría con 8 defensores en un tablero de 40 y ese número se leía como
+        // «el piso del juego» cuando era el techo del plan.
+        bool lleno = politica == Politica.Normal;
+        long paso = (lleno ? 1 : 2) * Ints.ThousandthsPerCell;
 
         // ⚠ DESDE LA TORRE hacia la entrada, no al revés.
         //
@@ -1060,6 +1137,9 @@ public static class CorredorHeadless
                 int retraso = rng.Between(0, Ints.SecondsToTicks(4));
 
                 plan.Add((plan.Count * Ints.SecondsToTicks(8) + retraso, v));
+
+                if (!lleno)
+                    break;
             }
         }
 
@@ -1116,7 +1196,7 @@ public static class CorredorHeadless
             int aperturas = 0;
             bool yaContada = false;
             var pendientes = new Queue<(int Tick, Cell Cell)>(
-                ColocacionesPlaneadas(seed, mapa));
+                ColocacionesPlaneadas(seed, mapa, Politica.Normal));
 
             while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
             {
