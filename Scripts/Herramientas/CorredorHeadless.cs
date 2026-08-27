@@ -6,33 +6,6 @@ using TowerOfArgentum.Simulacion;
 namespace TowerOfArgentum.Herramientas;
 
 /// <summary>
-/// Corre corridas sin render y reporta qué pasó.
-/// </summary>
-/// <remarks>
-/// <para>Sale casi gratis porque la simulación ya es determinista y no depende
-/// del render: no hay nada que simular "de mentira", es la misma
-/// <see cref="Partida"/> que corre el juego.</para>
-///
-/// <para>Sirve para dos cosas distintas:</para>
-///
-/// <list type="number">
-/// <item><b>Verificar el determinismo.</b> Misma seed y mismas acciones tienen
-/// que dar el mismo número de ticks, exacto. Es el chequeo del que cuelga todo
-/// lo demás: si esto falla, el anticheat del servidor acusa a jugadores
-/// honestos.</item>
-/// <item><b>Balancear.</b> Cien oleadas no se pueden ajustar jugándolas a mano
-/// doscientas veces. Con esto se corren N corridas con una política scripteada y
-/// se mira hasta dónde llegan.</item>
-/// </list>
-///
-/// <para>Se invoca headless, sin abrir ventana:</para>
-/// <code>
-/// Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --determinismo
-/// Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --balance 20
-/// </code>
-/// </remarks>
-
-/// <summary>
 /// Qué tan bien juega el jugador imaginario.
 /// </summary>
 /// <remarks>
@@ -60,7 +33,48 @@ internal enum Politica
     /// gasta el sobrante en niveles. No compone: no persigue planos ni sinergias.
     /// </summary>
     Normal = 1,
+
+    /// <summary>
+    /// Todo lo de <see cref="Normal"/> y además <b>compone</b>: arranca con los
+    /// nueve planos aprendidos, elige los Oro del jefe que completan una receta y
+    /// fusiona apenas puede.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Los planos son la única progresión permanente del juego, así que «build
+    /// optimizada» quiere decir <b>cuenta veterana</b>: sin ellos solo se puede
+    /// armar una de las nueve recetas —la que viene con <c>"initial": true</c>— y
+    /// la cota de arriba mediría a un jugador nuevo jugando bien, que no es lo
+    /// que <c>Resumen_Balance</c> pregunta.
+    /// </remarks>
+    Techo = 2,
 }
+
+/// <summary>
+/// Corre corridas sin render y reporta qué pasó.
+/// </summary>
+/// <remarks>
+/// <para>Sale casi gratis porque la simulación ya es determinista y no depende
+/// del render: no hay nada que simular "de mentira", es la misma
+/// <see cref="Partida"/> que corre el juego.</para>
+///
+/// <para>Sirve para dos cosas distintas:</para>
+///
+/// <list type="number">
+/// <item><b>Verificar el determinismo.</b> Misma seed y mismas acciones tienen
+/// que dar el mismo número de ticks, exacto. Es el chequeo del que cuelga todo
+/// lo demás: si esto falla, el anticheat del servidor acusa a jugadores
+/// honestos.</item>
+/// <item><b>Balancear.</b> Cien oleadas no se pueden ajustar jugándolas a mano
+/// doscientas veces. Con esto se corren N corridas con una política scripteada y
+/// se mira hasta dónde llegan.</item>
+/// </list>
+///
+/// <para>Se invoca headless, sin abrir ventana:</para>
+/// <code>
+/// Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --determinismo
+/// Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --balance 20
+/// </code>
+/// </remarks>
 public static class CorredorHeadless
 {
     /// <summary>
@@ -249,12 +263,13 @@ public static class CorredorHeadless
                 case "--balance":
                     int corridas = (i + 1 < args.Length && int.TryParse(args[i + 1], out int n)) ? n : 10;
 
-                    // Sin política nombrada corren las dos, que es lo que hace
+                    // Sin política nombrada corren las tres, que es lo que hace
                     // falta casi siempre: una sola cota no dice nada.
                     Politica? sola = (i + 2 < args.Length ? args[i + 2] : "") switch
                     {
                         "piso" => Politica.Piso,
                         "normal" => Politica.Normal,
+                        "techo" => Politica.Techo,
                         _ => null,
                     };
 
@@ -431,12 +446,14 @@ public static class CorredorHeadless
             return;
         }
 
-        // ⚠ Las dos de una, y en este orden: primero la cota de abajo. El número
-        // que importa es la DISTANCIA entre las dos —cuánto paga jugar mejor—, y
-        // leerla exige tenerlas juntas en la misma pantalla.
+        // ⚠ Las tres de una, y de abajo hacia arriba. El número que importa es la
+        // DISTANCIA entre las cotas —cuánto paga jugar mejor y cuánto paga
+        // componer—, y leerla exige tenerlas juntas en la misma pantalla.
         BalanceDe(corridas, Politica.Piso);
         GD.Print("");
         BalanceDe(corridas, Politica.Normal);
+        GD.Print("");
+        BalanceDe(corridas, Politica.Techo);
 
         GD.Print("");
         GD.Print("── Objetivos de Resumen_Balance ────────────────────");
@@ -445,7 +462,12 @@ public static class CorredorHeadless
 
     private static void BalanceDe(int corridas, Politica politica)
     {
-        string nombre = politica == Politica.Piso ? "piso" : "normal";
+        string nombre = politica switch
+        {
+            Politica.Piso => "piso",
+            Politica.Techo => "techo",
+            _ => "normal",
+        };
 
         GD.Print($"── Balance · {nombre} · {corridas} corridas ───────────");
 
@@ -513,7 +535,7 @@ public static class CorredorHeadless
         while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
             if (partida.WaitingForChoice)
-                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
+                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, Politica.Normal)));
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -551,7 +573,11 @@ public static class CorredorHeadless
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
                 }
 
-                EquiparLoQuePueda(partida, log);
+                // Ver la nota del mismo lugar en Correr: no se equipa en la vuelta
+                // en que se tiró algo, o el índice apunta a otra cosa.
+                if (!libero)
+                    EquiparLoQuePueda(partida, log, Politica.Normal);
+
                 partida.Advance();
                 continue;
             }
@@ -572,7 +598,7 @@ public static class CorredorHeadless
                 }
             }
 
-            EquiparLoQuePueda(partida, log);
+            EquiparLoQuePueda(partida, log, Politica.Normal);
             partida.Advance();
 
             if (partida.Wave != oleadaAnterior)
@@ -647,6 +673,21 @@ public static class CorredorHeadless
         Politica politica = Politica.Normal)
     {
         var partida = new Run(seed, mapa ?? Layouts.Choose(seed, CargadorDatos.Actual), log, CargadorDatos.Actual);
+
+        // ⚠ Los planos van ANTES de Empezar: el sorteo de los Oro del jefe pesa
+        // ×3 a la pareja de una receta conocida, así que aprenderlos después
+        // cambiaría la oferta a mitad de corrida en vez de desde el arranque.
+        //
+        // Los planos son la única progresión permanente del juego, y por eso
+        // «build optimizada» quiere decir cuenta veterana: sin ellos solo se puede
+        // armar una de las nueve recetas y la cota de arriba mediría a un jugador
+        // nuevo jugando bien, que no es lo que Resumen_Balance pregunta.
+        if (politica == Politica.Techo)
+        {
+            foreach (var plano in CargadorDatos.Actual.Blueprints.All)
+                partida.AprenderPlano(plano.Key);
+        }
+
         partida.Empezar();
 
         var pendientes = new Queue<(int Tick, Cell Cell)>(
@@ -654,11 +695,19 @@ public static class CorredorHeadless
 
         while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
-            // Elegir siempre la primera opción. Es una política mala a propósito:
-            // mide el piso del juego, no el techo. Una política que elige bien
-            // diría cuán alto se puede llegar, y las dos cotas hacen falta.
-            if (partida.WaitingForChoice)
-                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
+            // ⚠ Con la mochila llena, EL ORO DEL JEFE SE PIERDE.
+            //
+            // `Run.Choose` lo guarda con `StorePerk`, y si no entra se descarta en
+            // silencio —la UI de verdad abre el diálogo de «tirá uno» antes de
+            // llegar ahí—. El bot no lo abría, así que llegaba a cada jefe con
+            // 15/15 y perdía los ocho Oro de la corrida: el sistema de
+            // comportamientos, los planos y la fusión no se activaban NUNCA.
+            //
+            // Medido: `techo` y `normal` daban resultados idénticos byte a byte,
+            // con el peso de sinergia disparando 53 veces en seis corridas. Los
+            // Oro que ofrecía el jefe no cambiaban nada porque ninguno entraba.
+            if (partida.WaitingForChoice && !HacerLugarParaElOro(partida, log))
+                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, politica)));
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -681,30 +730,46 @@ public static class CorredorHeadless
                 // Se arranca la oleada recién cuando no queda nada por hacer.
                 bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
 
-                // ⚠ Las tres de abajo son lo que SEPARA las políticas. El piso
-                // sabe poner y equipar; comprar, destrabar la mochila y gastar el
+                // ⚠ Las de abajo son lo que SEPARA las políticas. El piso sabe
+                // poner y equipar; comprar, destrabar la mochila y gastar el
                 // sobrante en niveles son cosas que un jugador aprende después, y
-                // meterlas en la misma política borraba la cota de abajo.
-                bool avanzado = politica == Politica.Normal;
+                // meterlas todas en una sola política borraba la cota de abajo.
+                bool avanzado = politica != Politica.Piso;
 
-                bool compro = !puso && avanzado && ComprarLoQuePueda(partida, log);
+                // Fusionar va PRIMERO de las avanzadas: saca dos Oro de la mochila
+                // y devuelve un Único en un solo slot, así que destraba lugar en
+                // los dos lados a la vez. Solo el techo compone.
+                bool fusiono = !puso && politica == Politica.Techo
+                               && FusionarSiPuede(partida, log);
+
+                bool compro = !puso && !fusiono && avanzado && ComprarLoQuePueda(partida, log);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
-                bool libero = !puso && !compro && avanzado && LiberarMochila(partida, log);
+                bool libero = !puso && !fusiono && !compro && avanzado
+                              && LiberarMochila(partida, log);
 
                 // Último: el sumidero del sobrante. Poner un defensor más siempre
                 // vale más que un nivel comprado.
-                bool subio = !puso && !compro && !libero && avanzado
+                bool subio = !puso && !fusiono && !compro && !libero && avanzado
                              && SubirNivelSiSobra(partida, log);
 
-                if (!puso && !compro && !libero && !subio)
+                if (!puso && !fusiono && !compro && !libero && !subio)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
                 }
 
-                EquiparLoQuePueda(partida, log);
+                // ⚠ NO se equipa en la misma vuelta que se fusionó o se tiró algo.
+                //
+                // Las acciones se aplican en orden al avanzar, pero los índices de
+                // mochila se calculan TODOS contra el estado de antes: una fusión
+                // saca dos ítems y un descarte saca uno, así que el índice del
+                // equipar que va detrás apunta a otra cosa. Comprar sí es seguro
+                // —el ítem entra al final y no corre a los de antes—.
+                if (!fusiono && !libero)
+                    EquiparLoQuePueda(partida, log, politica);
+
                 partida.Advance();
                 continue;
             }
@@ -735,7 +800,7 @@ public static class CorredorHeadless
 
             // Equipar lo primero que sirva de la mochila, para que los drops no
             // se junten sin usarse.
-            EquiparLoQuePueda(partida, log);
+            EquiparLoQuePueda(partida, log, politica);
 
             partida.Advance();
         }
@@ -760,25 +825,32 @@ public static class CorredorHeadless
     /// pero es lo que haría cualquiera mirando la pantalla, que es exactamente lo
     /// que tiene que medir esto.</para>
     /// </remarks>
-    private static int MejorOpcion(Run partida)
+    private static int MejorOpcion(Run partida, Politica politica)
     {
         var opciones = partida.OpenChoices;
         int mejor = 0;
         int mejorPuntaje = int.MinValue;
+        int mejorPerk = -1;
 
         for (int i = 0; i < opciones.Length; i++)
         {
-            // ⚠ La oferta de Oro del jefe también entra por acá (Drops_v2), y el
-            // bot la resuelve de la forma más tonta que sirve: se queda con el
-            // que COMPLETA UN PLANO si hay alguno, y si no con el primero.
+            // ⚠ La oferta de Oro del jefe también entra por acá (Drops_v2).
             //
-            // No intenta valuar comportamientos, y es a propósito: un bot que
-            // eligiera bien los Oro mediría el techo del juego y esta herramienta
-            // mide el PISO. Lo que sí tiene que hacer es no romperse.
+            // Piso y normal se quedan con el primero: no intentan valuar
+            // comportamientos, y es a propósito, porque elegir bien los Oro mide
+            // el techo del juego y esas dos políticas miden otra cosa.
+            //
+            // El techo sí compone: prefiere el Oro que COMPLETA una receta que ya
+            // tiene a medias. Es la mitad de lo que hace que los Únicos sean un
+            // objetivo de build y no una lotería —la otra mitad es el peso ×3 del
+            // sorteo, que ya vive en la simulación—.
             if (opciones[i].Kind == ChoiceType.Perk)
             {
-                if (mejorPuntaje == int.MinValue)
-                    mejor = i;
+                if (mejorPerk < 0)
+                    mejorPerk = i;
+
+                if (politica == Politica.Techo && CompletaUnPlano(partida, opciones[i].PerkId))
+                    mejorPerk = i;
 
                 continue;
             }
@@ -802,7 +874,172 @@ public static class CorredorHeadless
             }
         }
 
-        return mejor;
+        // Una pantalla trae SOLO ofertas de Oro o SOLO clases, nunca mezcladas,
+        // así que si hubo alguna de perk esa es la respuesta.
+        return mejorPerk >= 0 ? mejorPerk : mejor;
+    }
+
+    /// <summary>
+    /// ¿Este Oro es la pareja de una receta que el jugador ya tiene a medias?
+    /// </summary>
+    /// <remarks>
+    /// <para>Mira la mochila y lo equipado, igual que la simulación al armar la
+    /// oferta. No filtra por plano aprendido porque el techo los aprende todos al
+    /// arrancar; con una política que no lo hiciera habría que chequearlo, y esa
+    /// política todavía no existe.</para>
+    /// </remarks>
+    private static bool CompletaUnPlano(Run partida, int idPerk)
+    {
+        foreach (var plano in CargadorDatos.Actual.Blueprints.All)
+        {
+            if (plano.GoldA == idPerk && Tiene(partida, plano.GoldB))
+                return true;
+
+            if (plano.GoldB == idPerk && Tiene(partida, plano.GoldA))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>¿Tiene este perk, en la mochila o equipado?</summary>
+    private static bool Tiene(Run partida, int idPerk)
+    {
+        foreach (var cosa in partida.Backpack.Items)
+        {
+            if (cosa.Kind == ItemType.Perk && cosa.Id == idPerk)
+                return true;
+        }
+
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            foreach (int p in ficha.Perks)
+            {
+                if (p == idPerk)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Fusiona el primer par de Oro de la mochila que forme una receta. Devuelve
+    /// <c>true</c> si fusionó.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Los Únicos no caen y no se compran: se fabrican.</b> Una política
+    /// que no fusiona nunca ve uno, así que la cota de arriba mediría el juego sin
+    /// su mecánica de composición — que es justamente lo que la cota de arriba
+    /// tiene que medir.</para>
+    ///
+    /// <para>Se chequean acá las mismas condiciones que <c>Run.Fuse</c>: los dos
+    /// tienen que ser Oro, tiene que existir la receta, y tiene que haber una
+    /// clase del roster que pueda usar el Único. Una acción que rebota no saca
+    /// nada de la mochila, y el bucle de preparación —con el reloj congelado— la
+    /// volvería a emitir para siempre.</para>
+    ///
+    /// <para>El primero que sirve, no el mejor: la política elige QUÉ Oro juntar
+    /// en la pantalla del jefe, y una vez que los dos están en la mochila no hay
+    /// nada que decidir.</para>
+    /// </remarks>
+    /// <summary>
+    /// Tira algo de la mochila llena cuando el jefe está ofreciendo Oro. Devuelve
+    /// <c>true</c> si tiró —y entonces todavía no se elige, se elige la vuelta que
+    /// viene, con lugar—.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Un Oro que no entra se pierde en silencio</b>, y son ocho en toda
+    /// la corrida: es la única fuente de comportamientos, la entrada a los planos y
+    /// la condición para que exista la fusión. Sin esto el bot llegaba a cada jefe
+    /// con 15/15 y los perdía todos.</para>
+    ///
+    /// <para>Se tira el de tier más bajo, y <b>nunca un Oro o un Único</b>: hacer
+    /// lugar para un comportamiento tirando otro comportamiento no hace lugar,
+    /// mueve el problema. Si en la mochila solo hay Oro y Únicos no se tira nada y
+    /// se elige igual — perder el nuevo es mejor que perder uno que ya está.</para>
+    /// </remarks>
+    private static bool HacerLugarParaElOro(Run partida, ActionLog log)
+    {
+        var opciones = partida.OpenChoices;
+
+        if (opciones.Length == 0 || opciones[0].Kind != ChoiceType.Perk)
+            return false;
+
+        if (partida.Backpack.Ocupados < CargadorDatos.Actual.Curves.Defenders.BackpackSlots)
+            return false;
+
+        var cosas = partida.Backpack.Items;
+        var perks = CargadorDatos.Actual.Perks;
+
+        int peor = -1;
+        var peorTier = PerkTier.Unique;
+
+        for (int i = 0; i < cosas.Count; i++)
+        {
+            // Un arma de más es lo primero que sobra: la ranura de equipo es una
+            // sola por clase y la segunda no espera nada.
+            if (cosas[i].Kind != ItemType.Perk)
+            {
+                peor = i;
+                break;
+            }
+
+            var tier = perks.Get(cosas[i].Id).Tier;
+
+            if (tier is PerkTier.Gold or PerkTier.Unique)
+                continue;
+
+            if (peor < 0 || tier < peorTier)
+            {
+                peor = i;
+                peorTier = tier;
+            }
+        }
+
+        if (peor < 0)
+            return false;
+
+        log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.Discard, peor, 0, 0));
+
+        return true;
+    }
+
+    private static bool FusionarSiPuede(Run partida, ActionLog log)
+    {
+        var cosas = partida.Backpack.Items;
+        var perks = CargadorDatos.Actual.Perks;
+
+        for (int a = 0; a < cosas.Count; a++)
+        {
+            if (cosas[a].Kind != ItemType.Perk || perks.Get(cosas[a].Id).Tier != PerkTier.Gold)
+                continue;
+
+            for (int b = a + 1; b < cosas.Count; b++)
+            {
+                if (cosas[b].Kind != ItemType.Perk || perks.Get(cosas[b].Id).Tier != PerkTier.Gold)
+                    continue;
+
+                var plano = CargadorDatos.Actual.Blueprints.Find(cosas[a].Id, cosas[b].Id);
+                if (plano is null)
+                    continue;
+
+                var unico = perks.Get(plano.ResultingUnique);
+
+                foreach (var ficha in partida.Roster.Classes)
+                {
+                    if (!unico.WorksFor(ficha.DefenderClass))
+                        continue;
+
+                    log.Agregar(new PlayerAction(
+                        partida.TickDeAccion, ActionType.Fuse, a, b, (int)ficha.DefenderClass));
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -852,7 +1089,19 @@ public static class CorredorHeadless
     /// <para>Una acción por llamada, y la llamada se repite en cada vuelta: así el
     /// estado que mira siempre es el de después de aplicar la anterior.</para>
     /// </remarks>
-    private static void EquiparLoQuePueda(Run partida, ActionLog log)
+    /// <summary>
+    /// ¿Quedan al menos tres lugares en la mochila?
+    /// </summary>
+    /// <remarks>
+    /// Es la válvula del techo, que guarda los Oro esperando la pareja de una
+    /// receta. Guardar sin límite termina con la mochila trabada de Oro, y una
+    /// mochila trabada apaga la tienda: se dejan de comprar perks y armas a cambio
+    /// de esperar una receta que puede no salir.
+    /// </remarks>
+    private static bool HayLugarDeSobra(Run partida)
+        => CargadorDatos.Actual.Curves.Defenders.BackpackSlots - partida.Backpack.Ocupados >= 3;
+
+    private static void EquiparLoQuePueda(Run partida, ActionLog log, Politica politica)
     {
         var cosas = partida.Backpack.Items;
 
@@ -862,9 +1111,24 @@ public static class CorredorHeadless
             {
                 var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
 
+                // ⚠ El techo GUARDA los Oro en vez de equiparlos apenas caen.
+                //
+                // Con nueve clases y una ranura de comportamiento cada una, cada
+                // Oro encuentra siempre dónde entrar, así que ninguno se queda en
+                // la mochila y NUNCA se junta un par: medido, la fusión disparaba
+                // 0,7 veces por corrida. Guardarlos es lo que hace que las recetas
+                // se puedan armar, y es lo que haría un jugador que persigue un
+                // Único.
+                //
+                // La válvula es la presión de mochila: con dos lugares o menos se
+                // equipan igual, porque una mochila trabada de Oro apaga la tienda
+                // y no compra nada a cambio.
+                if (politica == Politica.Techo && def.Tier == PerkTier.Gold && HayLugarDeSobra(partida))
+                    continue;
+
                 foreach (var ficha in partida.Roster.Classes)
                 {
-                    if (ficha.HasFreeSlot && def.WorksFor(ficha.DefenderClass))
+                    if (PuedeEquipar(ficha, def))
                     {
                         log.Agregar(new PlayerAction(
                             partida.TickDeAccion, ActionType.EquipPerk, i, (int)ficha.DefenderClass, 0));
@@ -888,6 +1152,42 @@ public static class CorredorHeadless
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// ¿<c>Run.EquipPerk</c> va a aceptar este perk en esta clase?
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Las mismas cuatro condiciones que la simulación, no menos.</b>
+    /// Antes acá se chequeaban dos —slot libre y que la clase lo pueda usar— y las
+    /// otras dos las rebotaba <c>Run</c> en silencio. Una acción rebotada no saca
+    /// el perk de la mochila, así que <see cref="EquiparLoQuePueda"/> la volvía a
+    /// emitir en la vuelta siguiente, y en la siguiente: el mismo perk imposible
+    /// escribiéndose en el log para siempre.</para>
+    ///
+    /// <para>La ranura de comportamiento es UNA —un Oro con un Oro puesto rebota—
+    /// y el apilado tiene tope por tier: Bronce 3, Plata 2, Oro y Único 1.</para>
+    /// </remarks>
+    private static bool PuedeEquipar(RosterClass ficha, PerkDefinition def)
+    {
+        if (!ficha.HasFreeSlot || !def.WorksFor(ficha.DefenderClass))
+            return false;
+
+        bool comportamiento = def.Tier is PerkTier.Gold or PerkTier.Unique;
+        int yaTiene = 0;
+
+        foreach (int id in ficha.Perks)
+        {
+            var puesto = CargadorDatos.Actual.Perks.Get(id);
+
+            if (comportamiento && puesto.Tier is PerkTier.Gold or PerkTier.Unique)
+                return false;
+
+            if (id == def.Id)
+                yaTiene++;
+        }
+
+        return yaTiene < def.MaxStacked;
     }
 
     /// <summary>
@@ -1103,7 +1403,7 @@ public static class CorredorHeadless
 
         // ⚠ EL PASO Y LOS VECINOS SON LA POLÍTICA, no una constante.
         //
-        // Normal recorre la ruta celda por celda y toma TODOS los vecinos
+        // Normal y techo recorren la ruta celda por celda y toman TODOS los vecinos
         // colocables: llena el tablero, que es lo que hace cualquiera que ya
         // entendió el juego. Piso salta de a dos celdas y toma UNO, así que cubre
         // la ruta salteado y deja la mitad del tablero vacío.
@@ -1112,7 +1412,7 @@ public static class CorredorHeadless
         // antes para todos— el plan tenía ~11 lugares en una ruta de 33 celdas, el
         // bot moría con 8 defensores en un tablero de 40 y ese número se leía como
         // «el piso del juego» cuando era el techo del plan.
-        bool lleno = politica == Politica.Normal;
+        bool lleno = politica != Politica.Piso;
         long paso = (lleno ? 1 : 2) * Ints.ThousandthsPerCell;
 
         // ⚠ DESDE LA TORRE hacia la entrada, no al revés.
@@ -1201,7 +1501,7 @@ public static class CorredorHeadless
             while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
             {
                 if (partida.WaitingForChoice)
-                    log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida)));
+                    log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, Politica.Normal)));
 
                 if (partida.WaitingForWaveStart)
                 {
