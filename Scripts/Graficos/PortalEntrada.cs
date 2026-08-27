@@ -38,6 +38,11 @@ public partial class PortalEntrada : Node2D
 
     public override void _Ready()
     {
+        // Sin animaciones el portal es solo el resplandor quieto: sigue marcando
+        // de dónde salen los bichos, que es su trabajo.
+        if (!Configuracion.AnimarEfectos)
+            return;
+
         var brasas = new CpuParticles2D
         {
             Amount = 72,
@@ -79,8 +84,13 @@ public partial class PortalEntrada : Node2D
     {
         // Late despacio, con el reloj de pared. Dos senos de período distinto para
         // que el latido no se sienta metronómico.
-        float t = RelojFino.Ms / 1000f;
-        float latido = 0.82f + (0.12f * Mathf.Sin(t * 2.1f)) + (0.06f * Mathf.Sin(t * 0.7f));
+        float latido = 0.82f;
+
+        if (Configuracion.AnimarEfectos)
+        {
+            float t = RelojFino.Ms / 1000f;
+            latido += (0.12f * Mathf.Sin(t * 2.1f)) + (0.06f * Mathf.Sin(t * 0.7f));
+        }
 
         // De adentro para afuera, cada anillo más tenue: un degradé dibujado a
         // mano sale más barato que una textura de resplandor y no hay que traerla.

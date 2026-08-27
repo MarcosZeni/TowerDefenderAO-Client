@@ -420,11 +420,22 @@ public partial class Juego : Node2D
         }
     }
 
+    /// <summary>
+    /// Las teclas de la corrida, todas remapeables desde el menú de opciones.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Se traduce <b>tecla → acción</b> con <see cref="Configuracion"/> en vez
+    /// de comparar contra <c>Key.Space</c> y compañía: si las constantes
+    /// quedaran acá, el remapeo del menú no haría nada y el bug sería mudo.
+    /// </remarks>
     private void AtenderTecla(InputEventKey tecla)
     {
-        switch (tecla.Keycode)
+        if (Configuracion.AtajoDe(tecla.Keycode) is not { } atajo)
+            return;
+
+        switch (atajo)
         {
-            case Key.Space:
+            case Atajo.Pausa:
                 // ⚠ En pausa se puede MIRAR pero no ACTUAR.
                 //
                 // El problema: si los ticks no avanzan, pausar es tiempo de pensar
@@ -440,23 +451,23 @@ public partial class Juego : Node2D
                 _pausado = !_pausado;
                 break;
 
-            case Key.Key1: _velocidad = 1; break;
-            case Key.Key2: _velocidad = 2; break;
-            case Key.Key3: _velocidad = 4; break;
+            case Atajo.Velocidad1: _velocidad = 1; break;
+            case Atajo.Velocidad2: _velocidad = 2; break;
+            case Atajo.Velocidad3: _velocidad = 4; break;
 
             // Cicla el roster en vez de mapear tecla a clase fija: las clases
             // tocan al azar, así que "W = mago" solo funciona si te tocó el mago.
-            case Key.Q: CambiarClase(-1); break;
-            case Key.E: CambiarClase(+1); break;
+            case Atajo.ClaseAnterior: CambiarClase(-1); break;
+            case Atajo.ClaseSiguiente: CambiarClase(+1); break;
 
             // Tab abre la mochila. Es un overlay y NO frena la corrida: pausar es
             // tiempo de pensar gratis en una tabla de velocidad, y equipar tiene
             // que costar algo (INTERFAZ.md §5).
-            case Key.Tab:
+            case Atajo.Mochila:
                 Mochila?.Alternar();
                 break;
 
-            case Key.Enter:
+            case Atajo.AdelantarOleada:
                 // Adelantar oleada: existe por el ranking. Sin esto, el desempate
                 // por ticks no mide nada porque todos los que ganan tardan igual.
                 if (PuedeActuar)
@@ -708,7 +719,9 @@ public partial class Juego : Node2D
         // La animación sale del tick, igual que la del bicho. Con animar en falso
         // va siempre el cuadro 0: el de estar parado.
         long ms = (long)Partida.Tick * MsPorTick;
-        var textura = CargadorGraficos.Textura(completa, animar ? (int)(ms / g.MsPorFrame) : 0);
+
+        bool mueve = animar && Configuracion.AnimarArmas;
+        var textura = CargadorGraficos.Textura(completa, mueve ? (int)(ms / g.MsPorFrame) : 0);
 
         if (textura is null)
             return false;

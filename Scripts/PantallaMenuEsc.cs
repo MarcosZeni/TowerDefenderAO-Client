@@ -31,12 +31,24 @@ public partial class PantallaMenuEsc : Control
     private bool _abierto;
     private int _bajoElCursor = -1;
 
+    /// <summary>El panel de opciones, que este menú abre y esconde.</summary>
+    private readonly PantallaOpciones _opciones;
+
     private const int Ancho = 520;
     private const int AltoBoton = 74;
 
-    public PantallaMenuEsc(Juego juego)
+    public PantallaMenuEsc(Juego juego, PantallaOpciones opciones)
     {
         _juego = juego;
+        _opciones = opciones;
+
+        // Al cerrarse opciones, el menú vuelve a la vista: el jugador entró por
+        // acá y tiene que salir por acá.
+        opciones.Cerrado += () =>
+        {
+            if (_abierto)
+                Visible = true;
+        };
     }
 
     public override void _Ready()
@@ -54,12 +66,13 @@ public partial class PantallaMenuEsc : Control
     }
 
     /// <summary>
-    /// Los tres botones, de arriba para abajo. El orden es por frecuencia de uso:
+    /// Los botones, de arriba para abajo. El orden es por frecuencia de uso:
     /// lo que más se aprieta, más cerca de donde ya está el mouse.
     /// </summary>
     private static readonly (string Titulo, string Detalle)[] _botones =
     [
         ("SEGUIR JUGANDO", "o ESC de nuevo"),
+        ("OPCIONES", "ventana · sonido · animaciones · teclas"),
         ("GUARDAR Y SALIR AL MENÚ", "la corrida queda para continuar"),
         ("GUARDAR Y CERRAR EL JUEGO", "cierra la ventana"),
     ];
@@ -146,12 +159,20 @@ public partial class PantallaMenuEsc : Control
                 break;
 
             case 1:
+                // El menú se esconde pero NO se cierra: el reloj sigue congelado
+                // mientras se toquetean las opciones, y al volver de opciones
+                // reaparece. Sin esto, abrir opciones despausaría la corrida.
+                Visible = false;
+                _opciones.Abrir();
+                break;
+
+            case 2:
                 _juego.GuardarCorrida();
                 Alternar(false);
                 SalirAlMenu?.Invoke();
                 break;
 
-            case 2:
+            case 3:
                 _juego.GuardarCorrida();
                 GetTree().Quit();
                 break;
@@ -186,11 +207,6 @@ public partial class PantallaMenuEsc : Control
                 new Color(0.58f, 0.58f, 0.56f));
         }
 
-        // Lo que va a vivir acá y todavía no existe. Listado apagado a propósito:
-        // el lugar primero, el contenido después.
-        Texto("pronto: ventana · sonido · animaciones · teclas",
-            Escala.LienzoAncho / 2f - 220, RectBoton(_botones.Length - 1).End.Y + 56, 17,
-            new Color(0.45f, 0.45f, 0.43f));
     }
 
     private void Texto(string s, float x, float y, int tamano, Color color)

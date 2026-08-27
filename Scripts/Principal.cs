@@ -35,6 +35,7 @@ public partial class Principal : Node2D
         }
 
         Resolucion.AplicarGuardada();
+        Configuracion.Cargar();
         Diagnostico();
 
         _capaMenu = new CanvasLayer { Name = "CapaMenu", Layer = 5 };
@@ -172,9 +173,15 @@ public partial class Principal : Node2D
 
         // El menú de ESC, arriba de todo menos de la elección en la práctica: su
         // _Input cede el ESC cuando la elección o la mochila están abiertas.
-        var menuEsc = new PantallaMenuEsc(juego) { Name = "MenuEsc" };
+        //
+        // Opciones se agrega DESPUÉS para quedar encima del menú, y su _Input
+        // corre antes: mientras está abierto se queda con el ESC.
+        var opciones = new PantallaOpciones { Name = "Opciones" };
+
+        var menuEsc = new PantallaMenuEsc(juego, opciones) { Name = "MenuEsc" };
         menuEsc.SalirAlMenu += VolverAlMenu;
         capaModal.AddChild(menuEsc);
+        capaModal.AddChild(opciones);
 
         return raiz;
     }

@@ -54,8 +54,6 @@ public partial class CristalTorre : Node2D
             ? 0f
             : Mathf.Clamp((float)torre.Hp / torre.HpMaximo, 0f, 1f);
 
-        float t = RelojFino.Ms / 1000f;
-
         if (!torre.EnPie)
         {
             // Caído: no flota, no late, no gira. Queda gris y hundido, que es lo
@@ -63,6 +61,17 @@ public partial class CristalTorre : Node2D
             Dibujar(0f, 0f, new Color(0.34f, 0.32f, 0.36f), 0f);
             return;
         }
+
+        // Con las animaciones apagadas el cristal queda quieto y de tres cuartos,
+        // pero conserva el COLOR: el color es el medidor de HP, o sea información,
+        // no adorno. Lo que se apaga es el giro, el flote y el latido.
+        if (!Configuracion.AnimarEfectos)
+        {
+            Dibujar(0.6f, 0f, ColorDeVida(vida), 0.5f);
+            return;
+        }
+
+        float t = RelojFino.Ms / 1000f;
 
         // Late más rápido cuanto menos vida: a full es un respiro, en rojo es una
         // alarma. La frecuencia es lo que se percibe antes que el color.

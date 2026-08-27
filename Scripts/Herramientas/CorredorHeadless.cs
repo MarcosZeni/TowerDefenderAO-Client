@@ -111,6 +111,10 @@ public static class CorredorHeadless
                         i + 2 < args.Length ? args[i + 2] : "");
                     return true;
 
+                case "--exportar-balance":
+                    ExportadorBalance.Correr(i + 1 < args.Length ? args[i + 1] : "");
+                    return true;
+
                 case "--muestrear-piso":
                     MuestrearPiso.Correr(
                         i + 1 < args.Length ? args[i + 1] : "piso.png",

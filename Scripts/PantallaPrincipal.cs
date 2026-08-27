@@ -29,6 +29,9 @@ public partial class PantallaPrincipal : Control
 
     private Button _continuar = null!;
 
+    /// <summary>El panel de opciones. El mismo que abre el menú de ESC.</summary>
+    private PantallaOpciones _opciones = null!;
+
     public override void _Ready()
     {
         SetAnchorsPreset(LayoutPreset.FullRect);
@@ -64,7 +67,13 @@ public partial class PantallaPrincipal : Control
 
         caja.AddChild(Boton("Tienda de planos", () => _ = MostrarTiendaAsync()));
         caja.AddChild(Boton("Ranking", () => _ = MostrarRankingAsync()));
+        caja.AddChild(Boton("Opciones", () => _opciones.Abrir()));
         caja.AddChild(Boton("Salir de la cuenta", () => _ = SalirAsync()));
+
+        // ⚠ Cerrar el juego desde el menú. Antes solo se salía con la X o con
+        // Alt+F4; que un juego de pantalla completa no tenga salida propia es de
+        // las cosas que más rápido se notan.
+        caja.AddChild(Boton("Salir del juego", () => GetTree().Quit()));
 
         _mensaje = new Label { Text = "" };
         _mensaje.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.68f));
@@ -81,6 +90,11 @@ public partial class PantallaPrincipal : Control
 
         _panel.AddThemeConstantOverride("separation", 6);
         AddChild(_panel);
+
+        // Último hijo: su _Input corre antes que el del resto y queda dibujado
+        // encima de los botones, que es lo que un panel modal tiene que hacer.
+        _opciones = new PantallaOpciones { Name = "Opciones" };
+        AddChild(_opciones);
     }
 
     public override void _Notification(int que)
