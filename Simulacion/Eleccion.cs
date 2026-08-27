@@ -18,7 +18,7 @@ public readonly record struct Opcion(TipoOpcion Tipo, Clase Clase, int NivelResu
 /// </summary>
 /// <remarks>
 /// <para>Las clases <b>tocan al azar</b>: 1 de 3 al empezar, y después, cada
-/// <see cref="Balance.OleadasEntreElecciones"/> oleadas, elegir entre levelear
+/// <c>oleadasEntreElecciones</c> oleadas (<c>curvas.json</c>), elegir entre levelear
 /// una que ya se tiene o contratar otra.</para>
 ///
 /// <para>⚠ <b>Las trabajadoras quedan afuera</b> —leñador, minero, pescador,
@@ -31,20 +31,6 @@ public static class ArmadorEleccion
     [
         Clase.Mago, Clase.Clerigo, Clase.Guerrero, Clase.Asesino, Clase.Ladron,
         Clase.Bardo, Clase.Druida, Clase.Paladin, Clase.Cazador,
-    ];
-
-    /// <summary>
-    /// Las clases que pegan lo suficiente para sostener sola una defensa.
-    /// </summary>
-    /// <remarks>
-    /// Clérigo, bardo y druida son soporte: pegan poco a propósito, porque su
-    /// valor está en lo que le hacen al resto del equipo. Hasta que exista el
-    /// sistema de soporte no tienen con qué compensar, pero incluso después van a
-    /// seguir siendo malas <b>solas</b>, que es la situación del arranque.
-    /// </remarks>
-    private static readonly Clase[] Ofensivas =
-    [
-        Clase.Mago, Clase.Guerrero, Clase.Asesino, Clase.Ladron, Clase.Paladin, Clase.Cazador,
     ];
 
     /// <summary>
@@ -61,12 +47,20 @@ public static class ArmadorEleccion
     /// <para>Perder por una decisión propia es el juego; perder por el sorteo de
     /// la pantalla inicial, antes de tocar nada, es un bug de diseño.</para>
     /// </remarks>
-    public static Opcion[] Inicial(Aleatorio rng)
+    public static Opcion[] Inicial(Aleatorio rng, DatosBalance datos)
     {
         var salida = new Opcion[3];
 
+        // ⚠ Las ofensivas —las que no están marcadas «soporte» en clases.json—
+        // son las que pegan lo suficiente para sostener solas una defensa.
+        // Clérigo, bardo y druida pegan poco a propósito: su valor está en lo que
+        // le hacen al resto del equipo. Hasta que exista el sistema de soporte no
+        // tienen con qué compensar, pero incluso después van a seguir siendo malas
+        // SOLAS, que es la situación del arranque.
+        var ofensivas = datos.Clases.Ofensivas();
+
         // La garantizada sale primero, para que el resto se sortee sin ella.
-        var garantizada = Ofensivas[rng.Indice(Ofensivas.Length)];
+        var garantizada = ofensivas[rng.Indice(ofensivas.Length)];
         salida[0] = new Opcion(TipoOpcion.Contratar, garantizada, 1);
 
         var pozo = new List<Clase>(Todas);
@@ -107,13 +101,13 @@ public static class ArmadorEleccion
     /// levelear: del 7 en adelante ya no abre slots, así que sería una opción
     /// visiblemente peor que las otras dos y elegir dejaría de tener sentido.</para>
     /// </remarks>
-    public static Opcion[] Siguiente(Roster roster, Aleatorio rng)
+    public static Opcion[] Siguiente(Roster roster, Aleatorio rng, DatosBalance datos)
     {
         var candidatas = new List<Opcion>();
 
         foreach (var c in roster.Clases)
         {
-            if (c.Nivel < Balance.SlotsPerkPorClase)
+            if (c.Nivel < datos.Clases.SlotsPerkPorClase)
                 candidatas.Add(new Opcion(TipoOpcion.Levelear, c.Clase, c.Nivel + 1));
         }
 

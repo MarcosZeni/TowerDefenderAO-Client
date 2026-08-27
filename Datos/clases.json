@@ -1,0 +1,51 @@
+{
+  // ---------------------------------------------------------------------------
+  //  Las nueve clases de combate de Argentum Online.
+  //
+  //  ⚠ NO existe "arquero": el que tira flechas es el Cazador.
+  //  ⚠ Las trabajadoras quedan afuera —leñador, minero, pescador, herrero,
+  //    carpintero, sastre—: no pelean, y este juego es solo pelear.
+  //
+  //  REGLA DEL DAÑO: más alcance, menos golpe. Un melee ve pasar a cada bicho
+  //  una sola vez por delante; uno de rango cubre media ruta y le pega a todo lo
+  //  que camina por ella. Si encima pegara igual, el de rango jugaría solo.
+  //
+  //  ⚠ Este archivo es ENTRADA de la simulación y entra al hash de /run/start.
+  //  Cambiar un número acá vuelve irreplicables las corridas viejas: es una
+  //  TEMPORADA NUEVA del ranking. Ver DATOS.md §7.
+  // ---------------------------------------------------------------------------
+  "version": 1,
+
+  // Puntos porcentuales de daño que suma cada nivel por encima del 1.
+  //
+  // ⚠ Con daño base entero y chico, el truncamiento se come varios niveles:
+  // un cazador de 4 no sube nada en los niveles 2, 3 y 4 (4 × 1,08 = 4,32 → 4).
+  // Es la anomalía P0 de la propuesta V2 y se arregla escalando el daño
+  // internamente ×100, no subiendo este número.
+  "extraDanoPorNivel": 8,
+
+  // Nivel máximo y, a la vez, slots de perk por clase: cada nivel abre uno.
+  "slotsPerkPorClase": 6,
+
+  // Alcance en CELDAS. La simulación lo compara al cuadrado porque no calcula
+  // raíces (JUGABILIDAD.md §4.2).
+  //
+  // ⚠ alcance 1 NO cubre las diagonales: una celda en diagonal queda a
+  // √2 ≈ 1,41 y no entra. Por eso el mínimo del roster es 2.
+  //
+  // "soporte": pega poco a propósito, su valor está en lo que le hace al resto
+  // del equipo. Se usa para garantizar que la elección inicial traiga al menos
+  // una clase capaz de sostener sola una defensa.
+  "clases": [
+    // DPS = dano × 30 / cadencia.
+    { "clase": "Mago",     "costo": 100, "dano": 10, "alcance": 4, "cadencia": 30, "soporte": false },
+    { "clase": "Clerigo",  "costo":  80, "dano":  7, "alcance": 3, "cadencia": 24, "soporte": true  },
+    { "clase": "Guerrero", "costo":  60, "dano":  7, "alcance": 2, "cadencia": 18, "soporte": false },
+    { "clase": "Asesino",  "costo":  90, "dano": 12, "alcance": 2, "cadencia": 21, "soporte": false },
+    { "clase": "Ladron",   "costo":  50, "dano":  5, "alcance": 2, "cadencia": 18, "soporte": false },
+    { "clase": "Bardo",    "costo":  70, "dano":  6, "alcance": 3, "cadencia": 21, "soporte": true  },
+    { "clase": "Druida",   "costo":  85, "dano":  8, "alcance": 3, "cadencia": 27, "soporte": true  },
+    { "clase": "Paladin",  "costo":  95, "dano": 13, "alcance": 2, "cadencia": 24, "soporte": false },
+    { "clase": "Cazador",  "costo":  75, "dano":  4, "alcance": 6, "cadencia": 21, "soporte": false }
+  ]
+}

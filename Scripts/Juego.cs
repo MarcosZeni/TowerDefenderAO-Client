@@ -498,7 +498,7 @@ public partial class Juego : Node2D
         // Si falta el arte devuelve null y el mundo se dibuja como antes, sobre el
         // fondo pelado. Ver PisoHorneado.
         var piso = PisoHorneado.Para(
-            Areas.DeOleada(System.Math.Max(1, Partida.ProximaOleada)), Seed, Partida.Mapa);
+            CargadorDatos.Actual.Areas.DeOleada(System.Math.Max(1, Partida.ProximaOleada)), Seed, Partida.Mapa);
 
         if (piso is not null)
             DrawTexture(piso, Vector2.Zero);
@@ -821,14 +821,14 @@ public partial class Juego : Node2D
         if (_celdaMouse is not { } c)
             return;
 
-        var stats = Simulacion.Balance.StatsDe(_claseElegida);
+        var stats = CargadorDatos.Actual.StatsDe(_claseElegida);
         bool puede = Partida.PuedePoner(_claseElegida, c);
         var ocupada = Partida.DefensorEn(c);
 
         // El alcance de lo que se está por poner, o de lo que ya está ahí.
         int alcance = ocupada is null
             ? stats.AlcanceCeldas
-            : Simulacion.Balance.StatsDe(ocupada.Clase).AlcanceCeldas;
+            : CargadorDatos.Actual.StatsDe(ocupada.Clase).AlcanceCeldas;
 
         if (puede || ocupada is not null)
         {

@@ -8,11 +8,11 @@ namespace TowerOfArgentum.Herramientas;
 /// Exporta TODO el balance a un XLSX, para analizarlo con otras herramientas.
 /// </summary>
 /// <remarks>
-/// <para><b>Los números salen del código vivo, no de una transcripción.</b> Cada
-/// celda se calcula llamando a <see cref="Balance"/>, <see cref="CatalogoPerks"/>
-/// y <see cref="CargadorDatos"/> en runtime: si un número cambia en el código, el
-/// próximo export lo trae solo. Un documento escrito a mano se desincroniza en la
-/// primera semana.</para>
+/// <para><b>Los números salen de los datos vivos, no de una transcripción.</b>
+/// Cada celda se calcula leyendo <see cref="CargadorDatos.Actual"/> en runtime:
+/// si un número cambia en <c>Datos\*.json</c>, el próximo export lo trae solo.
+/// Un documento escrito a mano se desincroniza en la primera semana — esta hoja
+/// llegó a exportar un <c>RalentizarPiso -80</c> que ya no existía.</para>
 ///
 /// <para>El XLSX se arma a mano —es un zip con XML adentro— porque el proyecto no
 /// tiene ni va a tener una dependencia de Office: son ~80 líneas de escritura y
@@ -85,7 +85,7 @@ public static class ExportadorBalance
 
         foreach (var c in _clases)
         {
-            var s = Balance.StatsDe(c);
+            var s = CargadorDatos.Actual.StatsDe(c);
 
             double aps = 30.0 / s.CadenciaTicks;
             double dps = s.Dano * aps;
@@ -104,8 +104,8 @@ public static class ExportadorBalance
         return filas;
     }
 
-    /// <summary>Clérigo, bardo y druida: pegan poco a propósito (Eleccion.cs).</summary>
-    private static bool EsSoporte(Clase c) => c is Clase.Clerigo or Clase.Bardo or Clase.Druida;
+    /// <summary>Sale de la marca «soporte» de <c>clases.json</c>.</summary>
+    private static bool EsSoporte(Clase c) => CargadorDatos.Actual.Clases.De(c).Soporte;
 
     // -------------------------------------------------------------------------
     //  Hoja 2 — Progresión por nivel (1 a 6)
@@ -123,16 +123,16 @@ public static class ExportadorBalance
 
         foreach (var c in _clases)
         {
-            var s = Balance.StatsDe(c);
+            var s = CargadorDatos.Actual.StatsDe(c);
 
-            for (int nivel = 1; nivel <= Balance.SlotsPerkPorClase; nivel++)
+            for (int nivel = 1; nivel <= CargadorDatos.Actual.Clases.SlotsPerkPorClase; nivel++)
             {
                 // La MISMA cuenta que Roster.StatsDe: (nivel-1)*8 puntos
                 // porcentuales, sumados antes de multiplicar (Enteros).
-                int extra = (nivel - 1) * 8;
+                int extra = (nivel - 1) * CargadorDatos.Actual.Clases.ExtraDanoPorNivel;
                 int dano = Enteros.ConPorcentajes(s.Dano, extra);
 
-                int slots = Enteros.Limitar(nivel, 1, Balance.SlotsPerkPorClase);
+                int slots = Enteros.Limitar(nivel, 1, CargadorDatos.Actual.Clases.SlotsPerkPorClase);
                 int tier = nivel <= 2 ? 1 : nivel <= 4 ? 2 : 3;
 
                 filas.Add(
@@ -162,15 +162,17 @@ public static class ExportadorBalance
             ],
         ];
 
+        var cb = datos.Combate;
+
         foreach (var e in datos.Enemigos)
         {
             bool esJefe = datos.JefeDe(e.Area)?.Id == e.Id;
 
-            // Las mismas cuentas que la simulación:
-            // daño efectivo = max(1, (min+max)/2)          [Partida.FaseSpawn]
-            // costo = hp/4 + danoMax/2 + velocidad/8       [ArmadorOleadas.Costo]
-            int danoEfectivo = System.Math.Max(1, (e.DanoMin + e.DanoMax) / 2);
-            int costo = (e.Hp / 4) + (e.DanoMax / 2) + (e.Velocidad / 8);
+            // Las mismas cuentas que la simulación, pero LLAMÁNDOLAS, no
+            // transcriptas: el costo sale del mismo método que usa el armador de
+            // oleadas y el daño efectivo de las mismas constantes que el tick.
+            int danoEfectivo = System.Math.Max(cb.DanoMinimoEnemigo, (e.DanoMin + e.DanoMax) / cb.DivisorPromedioDanoEnemigo);
+            int costo = ArmadorOleadas.Costo(e.Id, datos);
 
             double celdasSeg = e.Velocidad * 30.0 / 1000.0;
 
@@ -203,17 +205,17 @@ public static class ExportadorBalance
             ],
         ];
 
-        for (int oleada = 1; oleada <= Balance.OleadasPorCorrida; oleada++)
+        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida; oleada++)
         {
             var receta = Balance.RecetaDe(oleada, datos);
 
             filas.Add(
             [
-                oleada, Areas.DeOleada(oleada), Areas.TieneJefe(oleada) ? "si" : "no",
+                oleada, CargadorDatos.Actual.Areas.DeOleada(oleada), CargadorDatos.Actual.Areas.TieneJefe(oleada) ? "si" : "no",
                 receta.Presupuesto, receta.BonusOro, receta.IntervaloSpawnTicks,
                 receta.ChancePerkNpc,
-                Balance.PresupuestoDropJefe(oleada),
-                Balance.PresupuestoItemTienda(oleada),
+                CargadorDatos.Actual.Curvas.PorOleada.PresupuestoDropJefe.En(oleada),
+                CargadorDatos.Actual.Curvas.PorOleada.PresupuestoItemTienda.En(oleada),
                 80 + (oleada * 6), 240 + (oleada * 18),
             ]);
         }
@@ -235,13 +237,15 @@ public static class ExportadorBalance
             ],
         ];
 
-        foreach (var p in CatalogoPerks.Todos)
+        var cd = CargadorDatos.Actual.Curvas;
+
+        foreach (var p in CargadorDatos.Actual.Perks.Todos)
         {
             string fuente = p.Tier switch
             {
-                TierPerk.Bronce => "drop comun 70% / tienda 65%",
-                TierPerk.Plata => "drop comun 30% / tienda 35%",
-                TierPerk.Oro => "SOLO el jefe de area (8 por corrida)",
+                TierPerk.Bronce => $"drop comun {cd.Drops.ChanceBronce}% / tienda {cd.Tienda.ChanceBronce}%",
+                TierPerk.Plata => $"drop comun {100 - cd.Drops.ChanceBronce}% / tienda {100 - cd.Tienda.ChanceBronce}%",
+                TierPerk.Oro => $"SOLO el jefe de area ({cd.Corrida.CantidadAreas} por corrida)",
                 _ => "SOLO fusion de dos Oro + plano",
             };
 
@@ -283,14 +287,14 @@ public static class ExportadorBalance
             ["Nombre", "OroA", "OroB", "UnicoResultante", "ConocidoDeArranque"],
         ];
 
-        foreach (var p in Planos.Todos)
+        foreach (var p in CargadorDatos.Actual.Planos.Todos)
         {
             filas.Add(
             [
                 p.Nombre,
-                p.OroA >= 0 ? CatalogoPerks.Por(p.OroA).Nombre : "?",
-                p.OroB >= 0 ? CatalogoPerks.Por(p.OroB).Nombre : "?",
-                p.UnicoResultante >= 0 ? CatalogoPerks.Por(p.UnicoResultante).Nombre : "?",
+                p.OroA >= 0 ? CargadorDatos.Actual.Perks.Por(p.OroA).Nombre : "?",
+                p.OroB >= 0 ? CargadorDatos.Actual.Perks.Por(p.OroB).Nombre : "?",
+                p.UnicoResultante >= 0 ? CargadorDatos.Actual.Perks.Por(p.UnicoResultante).Nombre : "?",
                 p.Inicial ? "si" : "no",
             ]);
         }
@@ -312,35 +316,38 @@ public static class ExportadorBalance
             ],
         ];
 
-        // Los tres pools de GeneradorArmas.TirarHabilidad, y las fórmulas de
-        // MagnitudDe, transcriptas 1:1 (p = presupuesto de la habilidad).
-        (HabilidadArma H, string Pool, string Formula, int Min, int Max)[] tabla =
-        [
-            (HabilidadArma.Splash, "comun", "20 + p/4", 20, 90),
-            (HabilidadArma.Rebote, "comun", "25 + p/4", 25, 100),
-            (HabilidadArma.Escarcha, "comun", "10 + p/8", 10, 45),
-            (HabilidadArma.Veneno, "comun", "15 + p/5", 15, 80),
-            (HabilidadArma.Critico, "rara (epica)", "120 + p/2", 120, 400),
-            (HabilidadArma.Francotirador, "rara (epica)", "15 + p/6", 15, 60),
-            (HabilidadArma.Carnicero, "rara (epica)", "20 + p/5", 20, 80),
-            (HabilidadArma.Sed, "rara (epica)", "2 + p/40", 2, 15),
-            (HabilidadArma.Doble, "rara (epica)", "100 fijo", 100, 100),
-            (HabilidadArma.Ejecutar, "rompe (legendaria)", "8 + p/40", 8, 25),
-            (HabilidadArma.Cadena, "rompe (legendaria)", "30 + p/8", 30, 70),
-            (HabilidadArma.Codicia, "rompe (legendaria)", "50 + p/6", 50, 200),
-            (HabilidadArma.Vampirismo, "rompe (legendaria)", "1 + p/50", 1, 8),
-        ];
+        // ⚠ Sale de la tabla viva. Antes estaba transcripta 1:1 y ya mentía en
+        // dos filas: Doble figuraba en el pool épico cuando había pasado a
+        // legendaria, y Cadena/Codicia tenían los topes viejos (70 y 200).
+        var tabla = CargadorDatos.Actual.Armas;
 
-        foreach (var t in tabla)
+        foreach (var h in tabla.Habilidades)
         {
+            var m = h.Magnitud;
+
+            string formula = m.Divisor == 0
+                ? $"{m.Base} fijo"
+                : $"{m.Base} + p/{m.Divisor}";
+
             filas.Add(
             [
-                t.H.ToString(), t.Pool, t.Formula, t.Min, t.Max,
-                GeneradorArmas.ExplicarHabilidad(t.H, 0).Replace("0", "M"),
+                h.Habilidad.ToString(),
+                PoolDe(h.Habilidad, tabla),
+                formula, m.Min, m.Max,
+                h.Explica.Replace("{m}", "M", System.StringComparison.Ordinal),
             ]);
         }
 
         return filas;
+    }
+
+    private static string PoolDe(HabilidadArma h, TablaArmas tabla)
+    {
+        if (System.Array.IndexOf(tabla.PoolRompen, h) >= 0) return "rompe (legendaria)";
+        if (System.Array.IndexOf(tabla.PoolRaro, h) >= 0) return "rara (epica)";
+        if (System.Array.IndexOf(tabla.PoolComun, h) >= 0) return "comun";
+
+        return "ninguno (no la tira nadie)";
     }
 
     // -------------------------------------------------------------------------
@@ -349,24 +356,34 @@ public static class ExportadorBalance
 
     private static List<object[]> GeneracionArmas_()
     {
+        var a = CargadorDatos.Actual.Armas;
+        var c = CargadorDatos.Actual.Curvas;
+
+        string Chance(RangoChance r) => $"clamp(presupuesto/{r.Divisor}, {r.Min}, {r.Max})%";
+
         return
         [
             ["Parametro", "Valor", "Notas"],
-            ["CostoPuntoDano", 2, "1 punto porcentual de daño cuesta 2 de presupuesto (se compra de a 5)"],
-            ["CostoPuntoCadencia", 3, "idem, de a 5"],
-            ["CostoPuntoAlcance", 4, "idem, de a 5"],
-            ["ChanceLegendaria", "min(presupuesto/200, 4)%", "techo 4%"],
-            ["ChanceEpica", "clamp(presupuesto/60, 2, 12)%", ""],
-            ["ChanceRara", "clamp(presupuesto/20, 10, 35)%", ""],
-            ["PresupuestoAHabilidad_Legendaria", "60%", "se aparta ANTES de comprar numeros"],
-            ["PresupuestoAHabilidad_Epica", "40%", ""],
-            ["PresupuestoAHabilidad_Rara", "25%", ""],
-            ["PresupuestoAHabilidad_Comun", "0%", "las comunes no tienen habilidad"],
-            ["ValorDeVenta", "presupuesto/2 * (1 + rareza)", "rareza: comun 0, rara 1, epica 2, legendaria 3"],
-            ["PrecioEnTienda", "Valor * 3", "Tienda.Renovar"],
-            ["PresupuestoDropJefe", "40 + oleada*6", "Balance.PresupuestoDropJefe"],
-            ["PresupuestoItemTienda", "30 + oleada*5", "Balance.PresupuestoItemTienda"],
-            ["StockTienda", "2 perks + 2 armas", "se renueva por oleada, no se acumula"],
+            ["PasoAfijo", a.Paso, "los numeros se compran de a esto, para que queden redondos"],
+            ["CostoPuntoDano", a.CostoDano, $"1 punto porcentual de daño cuesta esto (se compra de a {a.Paso})"],
+            ["CostoPuntoCadencia", a.CostoCadencia, "idem"],
+            ["CostoPuntoAlcance", a.CostoAlcance, "el mas caro: el alcance es el stat mas valioso de un TD"],
+            ["ChanceLegendaria", Chance(a.ChanceLegendaria), "tiradas ENCADENADAS, no exclusivas"],
+            ["ChanceEpica", Chance(a.ChanceEpica), "solo si fallo la legendaria"],
+            ["ChanceRara", Chance(a.ChanceRara), "solo si fallaron las dos de arriba"],
+            ["PresupuestoAHabilidad_Legendaria", $"{a.PorcentajeLegendaria}%", "se aparta ANTES de comprar numeros"],
+            ["PresupuestoAHabilidad_Epica", $"{a.PorcentajeEpica}%", ""],
+            ["PresupuestoAHabilidad_Rara", $"{a.PorcentajeRara}%", ""],
+            ["PresupuestoAHabilidad_Comun", $"{a.PorcentajeComun}%", "las comunes no tienen habilidad"],
+            ["ValorDeVenta", $"presupuesto/{a.DivisorValor} * (1 + rareza)", "rareza: comun 0, rara 1, epica 2, legendaria 3"],
+            ["PrecioEnTienda", $"Valor * {a.MultiplicadorPrecioTienda}", ""],
+            ["PresupuestoDropJefe", Recta(c.PorOleada.PresupuestoDropJefe), "n = oleada"],
+            ["PresupuestoItemTienda", Recta(c.PorOleada.PresupuestoItemTienda), "n = oleada"],
+            ["StockTienda", $"{c.Tienda.PerksEnStock} perks + {c.Tienda.ArmasEnStock} armas", "se renueva por oleada, no se acumula"],
+            ["PoolComun", string.Join(", ", a.PoolComun), ""],
+            ["PoolRaro", string.Join(", ", a.PoolRaro), "solo epicas"],
+            ["PoolRompen", string.Join(", ", a.PoolRompen), "solo legendarias"],
+            ["ClasesDelArma", 1, "una sola, sorteada del roster: un arma para una clase que no tenes es mochila tirada"],
             ["TiendaVendeOro", "NO", "el jefe es la unica fuente de perks Oro"],
             ["ArmasSonPorcentuales", "si", "Dano/Cadencia/Alcance del arma son puntos % sobre la base de la clase"],
         ];
@@ -376,51 +393,134 @@ public static class ExportadorBalance
     //  Hoja 9 — Constantes sueltas, con su archivo
     // -------------------------------------------------------------------------
 
+    /// <remarks>
+    /// ⚠ <b>Cada fila sale del dato vivo, ninguna está escrita a mano.</b> La
+    /// versión anterior de esta hoja transcribía los números y se desincronizó en
+    /// una semana: llegó a exportar un <c>RalentizarPiso -80</c> que ya no existía
+    /// y un techo de perk de velocidad de 120 cuando el real era 64. La columna
+    /// «Archivo» apunta al JSON que hay que editar, no al <c>.cs</c>.
+    /// </remarks>
     private static List<object[]> Constantes()
     {
+        var d = CargadorDatos.Actual;
+        var c = d.Curvas;
+        var k = d.Combate;
+
         return
         [
             ["Constante", "Valor", "Archivo", "Notas"],
-            ["TicksPorSegundo", Enteros.TicksPorSegundo, "Enteros.cs", "paso fijo, congelado"],
-            ["TorreHpInicial", Balance.TorreHpInicial, "Balance.cs", ""],
-            ["TorreDano", Balance.TorreDano, "Balance.cs", "al MAS VIEJO de los que la muerden, uno por turno"],
-            ["TorreCadenciaTicks", Balance.TorreCadenciaTicks, "Balance.cs", "1 golpe por segundo"],
-            ["OleadasPorCorrida", Balance.OleadasPorCorrida, "Balance.cs", "TERMINA ahi, sin modo sin fin"],
-            ["OleadasEntreElecciones", Balance.OleadasEntreElecciones, "Balance.cs", ""],
-            ["OroPorEnemigoAdelantado", Balance.OroPorEnemigoAdelantado, "Balance.cs", "tope 400 por llamada (Partida.Adelantar)"],
-            ["SlotsPerkPorClase", Balance.SlotsPerkPorClase, "Balance.cs", "tambien es el nivel maximo"],
-            ["LugaresMochila", Balance.LugaresMochila, "Balance.cs", "compartidos perks + armas"],
-            ["SlotsEquipoPorClase", Balance.SlotsEquipoPorClase, "Balance.cs", "solo el arma"],
-            ["ChanceDropComun", Balance.ChanceDropComun, "Balance.cs", "%. 70% bronce / 30% plata"],
-            ["PorcentajeVenta", Balance.PorcentajeVenta, "Balance.cs", "vender defensor devuelve esto del costo"],
-            ["OroInicial", "2 * costo de la clase elegida", "Partida.Elegir", "se entrega al elegir la primera clase"],
-            ["ExtraDanoPorNivel", 8, "Roster.StatsDe", "puntos porcentuales por nivel arriba de 1"],
-            ["NivelMaximo", 6, "Eleccion.Siguiente", "no se ofrece levelear mas alla"],
-            ["MaxNpcsPorOleada", 60, "Oleadas.cs", "el presupuesto sobrante va a perks de NPC"],
-            ["CostoPerkVidaNpc", 12, "Oleadas.cs", "del presupuesto de la oleada"],
-            ["CostoPerkVelocidadNpc", 10, "Oleadas.cs", ""],
-            ["EscalonPerkVidaNpc", 50, "Oleadas.cs", "+50% HP por escalon, SIN tope"],
-            ["EscalonPerkVelocidadNpc", 10, "Oleadas.cs", "+10% por escalon"],
-            ["MaxPerkVelocidadNpc", 120, "Oleadas.cs", "techo +120% velocidad"],
-            ["PerkVidaInicialNpc", 50, "Oleadas.Armar", "el 50/50 de la primera tirada"],
-            ["PerkVelocidadInicialNpc", 30, "Oleadas.Armar", ""],
-            ["PesoAreaActual", 40, "Balance.PermitidosDe", "peso de sorteo por bicho"],
-            ["PesoAreaAnterior", 15, "Balance.PermitidosDe", ""],
-            ["CostoNpcFormula", "hp/4 + danoMax/2 + velocidad/8", "Oleadas.Costo", "entero, trunca"],
-            ["PresupuestoOleadaFormula", "35 + 9*n*n", "Balance.RecetaDe", ""],
-            ["BonusOroFormula", "10 + 6*n", "Balance.RecetaDe", ""],
-            ["IntervaloSpawnFormula", "clamp(45 - n/3, 8, 45) ticks", "Balance.RecetaDe", ""],
-            ["ChancePerkNpcFormula", "clamp(n/2, 0, 30) %", "Balance.RecetaDe", ""],
-            ["VidaExtraJefe", "sobrante/4 en % de HP", "Oleadas.Armar", "el presupuesto no gastado engorda al jefe"],
-            ["SplashRadio", "2 celdas DE RUTA", "Partida.AplicarSplash", "distancia recorrida, no euclidea"],
-            ["RalentizarPiso", -80, "Partida.Ralentizar", "% de velocidad; permanente, sin duracion"],
-            ["CriticoCadaN", 7, "Partida", "Tick % 7 == 0, compartido por TODOS los criticos"],
-            ["PenetranteDivisor", 4, "Partida.AplicarComportamiento", "magnitud/4 mientras no exista defensa"],
-            ["SedTecho", 300, "Partida.AjustarDanoPorHabilidad", "% max de bonus por muertes"],
-            ["UltimaOleadaPorArea", "12,24,37,50,62,75,87,100", "Datos.Areas", ""],
+
+            ["TicksPorSegundo", Enteros.TicksPorSegundo, "Enteros.cs", "paso fijo, congelado; NO es configurable"],
+            ["MilesimasPorCelda", Enteros.MilesimasPorCelda, "Enteros.cs", "unidad de toda distancia de ruta"],
+            ["DatosVersion", d.Version, "enemigos.json", "la temporada del ranking"],
+            ["DatosHash", d.Hash, "todos", "cubre bestiario + 6 tablas + layouts"],
+
+            // --- La Torre ---
+            ["TorreHpInicial", c.Torre.HpInicial, "curvas.json", ""],
+            ["TorreDano", c.Torre.Dano, "curvas.json", "al MAS VIEJO de los que la muerden, uno por turno"],
+            ["TorreCadenciaTicks", c.Torre.CadenciaTicks, "curvas.json", "el cooldown solo corre si hay a quien pegarle"],
+
+            // --- La corrida ---
+            ["OleadasPorCorrida", c.Corrida.OleadasPorCorrida, "curvas.json", "TERMINA ahi, sin modo sin fin"],
+            ["CantidadAreas", c.Corrida.CantidadAreas, "curvas.json", ""],
+            ["UltimaOleadaPorArea", string.Join(",", c.Corrida.UltimaOleadaPorArea), "curvas.json", "cada una trae jefe"],
+            ["OleadasEntreElecciones", c.Corrida.OleadasEntreElecciones, "curvas.json", ""],
+            ["SegundosDePreparacion", c.Corrida.SegundosDePreparacion, "curvas.json", "reloj de pared, no ticks de simulacion"],
+            ["NombreJefeFinal", c.Jefe.NombreJefeFinal, "curvas.json", "el jefe del area final se elige por nombre, no por HP"],
+
+            // --- Defensores ---
+            ["SlotsPerkPorClase", d.Clases.SlotsPerkPorClase, "clases.json", "tambien es el nivel maximo"],
+            ["ExtraDanoPorNivel", d.Clases.ExtraDanoPorNivel, "clases.json", "puntos porcentuales por nivel arriba de 1"],
+            ["LugaresMochila", c.Defensores.LugaresMochila, "curvas.json", "compartidos perks + armas"],
+            ["SlotsEquipoPorClase", c.Defensores.SlotsEquipoPorClase, "curvas.json", "solo el arma"],
+            ["PorcentajeVentaDefensor", c.Defensores.PorcentajeVentaDefensor, "curvas.json", "vender defensor devuelve esto del costo"],
+            ["PorcentajeVentaArma", c.Defensores.PorcentajeVentaArma, "curvas.json", "vender arma de la mochila devuelve esto del Valor"],
+
+            // --- Economia ---
+            ["FichasDeOroInicial", c.Economia.FichasDeOroInicial, "curvas.json", "oro inicial = esto x costo de la clase que toco primero"],
+            ["OroPorEnemigoAdelantado", c.Economia.OroPorEnemigoAdelantado, "curvas.json", ""],
+            ["TopeOroPorAdelantar", c.Economia.TopeOroPorAdelantar, "curvas.json", "por llamada"],
+
+            // --- Presupuesto de oleada ---
+            ["PresupuestoFormula", $"{c.Presupuesto.Base} + {c.Presupuesto.Cuadratico}*n*n", "curvas.json", "antes del tope por pool"],
+            ["CapEquivalenteMin", c.Presupuesto.CapEquivalenteMin, "curvas.json", "bichos promedio del pool al empezar el area"],
+            ["CapEquivalenteMax", c.Presupuesto.CapEquivalenteMax, "curvas.json", "al terminarla; sube lineal"],
+            ["MaxNpcsPorOleada", c.Oleada.MaxNpcs, "curvas.json", "el presupuesto sobrante va a perks de NPC"],
+            ["PesoAreaActual", c.Oleada.PesoAreaActual, "curvas.json", "peso de sorteo por bicho"],
+            ["PesoAreaAnterior", c.Oleada.PesoAreaAnterior, "curvas.json", ""],
+            ["CostoNpcFormula",
+                $"hp/{c.Oleada.DivisorHp} + danoMax/{c.Oleada.DivisorDanoMax} + velocidad/{c.Oleada.DivisorVelocidad}",
+                "curvas.json", "entero, trunca"],
+
+            // --- Curvas por oleada ---
+            ["BonusOroFormula", Recta(c.PorOleada.BonusOroLimpiar), "curvas.json", "por limpiar la oleada"],
+            ["PresupuestoDropJefeFormula", Recta(c.PorOleada.PresupuestoDropJefe), "curvas.json", "LINEAL contra la cuadratica de la oleada, a proposito"],
+            ["PresupuestoItemTiendaFormula", Recta(c.PorOleada.PresupuestoItemTienda), "curvas.json", "mas chico que el del jefe"],
+            ["IntervaloSpawnFormula",
+                $"clamp({c.PorOleada.IntervaloBase} - n/{c.PorOleada.IntervaloDivisor}, {c.PorOleada.IntervaloMin}, {c.PorOleada.IntervaloMax}) ticks",
+                "curvas.json", ""],
+            ["ChancePerkNpcFormula",
+                $"clamp(n/{c.PorOleada.ChancePerkDivisor}, {c.PorOleada.ChancePerkMin}, {c.PorOleada.ChancePerkMax}) %",
+                "curvas.json", ""],
+
+            // --- Perks de NPC ---
+            ["CostoPerkVidaNpc", c.PerksNpc.CostoVida, "curvas.json", "del presupuesto de la oleada"],
+            ["CostoPerkVelocidadNpc", c.PerksNpc.CostoVelocidad, "curvas.json", ""],
+            ["EscalonPerkVidaNpc", c.PerksNpc.EscalonVida, "curvas.json", "puntos porcentuales de HP por escalon"],
+            ["EscalonPerkVelocidadNpc", c.PerksNpc.EscalonVelocidad, "curvas.json", ""],
+            ["MaxPerkVidaNpc", c.PerksNpc.MaxVida, "curvas.json", "techo por NPC"],
+            ["MaxPerkVelocidadNpc", c.PerksNpc.MaxVelocidad, "curvas.json", "un bicho que vuela no se puede matar"],
+            ["ChanceVidaEnLaTiradaNpc", c.PerksNpc.ChanceVidaEnLaTirada, "curvas.json", "% que va a vida; el resto a velocidad"],
+            ["ChanceVelocidadEnSobranteNpc", c.PerksNpc.ChanceVelocidadEnSobrante, "curvas.json", "al repartir el presupuesto no gastado"],
+            ["VidaExtraJefe",
+                $"min(sobrante/{c.Jefe.DivisorVidaExtra}, {c.Jefe.MaxVidaExtra}) en % de HP",
+                "curvas.json", "CON TECHO: el jefe es fuerte por diseno, no por residuo"],
+
+            // --- Drops y tienda ---
+            ["ChanceDropComun", c.Drops.ChanceComun, "curvas.json", "%; no sube con la oleada, sube la CALIDAD"],
+            ["ChanceBronceEnDrop", c.Drops.ChanceBronce, "curvas.json", "% bronce; el resto plata"],
+            ["ChanceBronceEnTienda", c.Tienda.ChanceBronce, "curvas.json", ""],
+            ["PerksEnStock", c.Tienda.PerksEnStock, "curvas.json", "no se acumula entre oleadas"],
+            ["ArmasEnStock", c.Tienda.ArmasEnStock, "curvas.json", ""],
+            ["PrecioPerkBronceFormula", Recta(c.Tienda.PrecioPerkBronce), "curvas.json", ""],
+            ["PrecioPerkPlataFormula", Recta(c.Tienda.PrecioPerkPlata), "curvas.json", "el triple: se paga el SLOT, no solo el numero"],
+
+            // --- El tick ---
+            ["DanoEnemigoFormula",
+                $"max({k.DanoMinimoEnemigo}, (danoMin + danoMax)/{k.DivisorPromedioDanoEnemigo})",
+                "combate.json", "promedio, no tirada: una tirada por golpe correría el RNG"],
+            ["SlowTope", k.TopeSlowPorciento, "combate.json", "% max; no apila, gana el mas fuerte"],
+            ["SlowDuracionTicks", k.DuracionSlowTicks, "combate.json", "TEMPORAL; cada aplicacion refresca"],
+            ["VentanaSaltoRicochet", $"{k.VentanaSaltoRicochetCeldas} celdas DE RUTA", "combate.json", "del objetivo ANTERIOR, no del defensor"],
+            ["RadioSplash", $"{k.RadioSplashCeldas} celdas DE RUTA", "combate.json", "distancia recorrida, no euclidea"],
+            ["RebotesRicochet", k.RebotesRicochet, "combate.json", "saltos extra ademas del golpe directo"],
+            ["RebotesPerforacion", k.RebotesPerforacion, "combate.json", ""],
+            ["RebotesApocalipsis", k.RebotesApocalipsis, "combate.json", ""],
+            ["MaxSecundariosSplashOro", k.MaxSecundariosSplashOro, "combate.json", ""],
+            ["MaxSecundariosOndaDeFrio", k.MaxSecundariosOndaDeFrio, "combate.json", ""],
+            ["MaxSecundariosIraDeDiosTormentaDivina", k.MaxSecundariosDivino, "combate.json", ""],
+            ["SlowTerribleHambre", k.SlowTerribleHambre, "combate.json", "el Unico envenena y ademas ralentiza"],
+            ["PenetranteDivisor", k.DivisorPenetrante, "combate.json", "magnitud/N mientras no exista defensa que penetrar"],
+            ["CriticoCadaN", k.GolpesPorCritico, "combate.json", "contador POR DEFENSOR, no Tick % N"],
+
+            // --- Habilidades de arma ---
+            ["MaxSecundariosSplashArma", k.MaxSecundariosSplashArma, "combate.json", ""],
+            ["RebotesReboteArma", k.RebotesReboteArma, "combate.json", ""],
+            ["MaxSecundariosCadena", k.MaxSecundariosCadena, "combate.json", ""],
+            ["SedTecho", k.TopeBonusSed, "combate.json", "% max ACUMULADO por oleada; se reinicia al terminarla"],
+            ["UmbralEjecutarTropa", k.UmbralEjecutarTropa, "combate.json", "TECHO: el umbral real es min(magnitud, esto)"],
+            ["UmbralEjecutarJefe", k.UmbralEjecutarJefe, "combate.json", ""],
+            ["JefeFinalInmuneAEjecutar", k.JefeFinalInmuneAEjecutar ? "si" : "no", "combate.json", "matarlo es como se gana la corrida"],
+            ["CooldownVampirismoTicks", k.CooldownVampirismoTicks, "combate.json", "un proc por CLASE, no por defensor"],
+            ["DuracionMarcaCodiciaTicks", k.DuracionMarcaCodiciaTicks, "combate.json", "se cobra al morir, no al golpear"],
+
+            // --- Reglas que no son un numero ---
             ["AlcanceAlCuadrado", "si", "todo el combate", "sin raices; alcance 1 NO cubre diagonales"],
+            ["ComportamientosNoApilan", "si", "Roster.StatsDe", "gana el tier mas alto; el arma pisa al perk"],
         ];
     }
+
+    private static string Recta(CurvaLineal c) => $"{c.Base} + {c.PorOleada}*n";
 
     // -------------------------------------------------------------------------
     //  Hoja 10 — Matchups: clase (nivel 1 y 6, sin perks) contra cada enemigo
@@ -440,8 +540,8 @@ public static class ExportadorBalance
 
         foreach (var c in _clases)
         {
-            var s = Balance.StatsDe(c);
-            int danoNv6 = Enteros.ConPorcentajes(s.Dano, 40);
+            var s = CargadorDatos.Actual.StatsDe(c);
+            int danoNv6 = Enteros.ConPorcentajes(s.Dano, (CargadorDatos.Actual.Clases.SlotsPerkPorClase - 1) * CargadorDatos.Actual.Clases.ExtraDanoPorNivel);
 
             foreach (var e in datos.Enemigos)
             {

@@ -211,9 +211,9 @@ public partial class PantallaMochila : Control
     private void DibujarMochila(Partida partida)
     {
         var mochila = partida.Mochila;
-        bool llena = mochila.Ocupados >= Simulacion.Balance.LugaresMochila;
+        bool llena = mochila.Ocupados >= CargadorDatos.Actual.Curvas.Defensores.LugaresMochila;
 
-        Texto($"MOCHILA  {mochila.Ocupados} / {Simulacion.Balance.LugaresMochila}",
+        Texto($"MOCHILA  {mochila.Ocupados} / {CargadorDatos.Actual.Curvas.Defensores.LugaresMochila}",
             180, 260, 30, llena ? new Color(0.95f, 0.6f, 0.3f) : Blanco);
 
         if (llena)
@@ -224,7 +224,7 @@ public partial class PantallaMochila : Control
                 470, 260, 18, new Color(0.95f, 0.6f, 0.3f));
         }
 
-        for (int i = 0; i < Simulacion.Balance.LugaresMochila; i++)
+        for (int i = 0; i < CargadorDatos.Actual.Curvas.Defensores.LugaresMochila; i++)
         {
             var r = RectLugar(i);
             bool ocupado = i < mochila.Cosas.Count;
@@ -242,7 +242,7 @@ public partial class PantallaMochila : Control
 
             if (cosa.Tipo == TipoCosa.Perk)
             {
-                var def = CatalogoPerks.Por(cosa.Id);
+                var def = CargadorDatos.Actual.Perks.Por(cosa.Id);
 
                 DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 6), ColorDe(def.Tier));
                 TextoAjustado(def.Nombre, r.Position.X + 8, r.Position.Y + 34, 15, Blanco, LugarLado - 16);
@@ -322,7 +322,7 @@ public partial class PantallaMochila : Control
         if (cosa.Tipo == TipoCosa.Arma)
             return true;
 
-        var def = CatalogoPerks.Por(cosa.Id);
+        var def = CargadorDatos.Actual.Perks.Por(cosa.Id);
 
         if (!def.SirveA(ficha.Clase) || !ficha.TieneSlotLibre)
             return false;
@@ -349,7 +349,7 @@ public partial class PantallaMochila : Control
 
         Texto($"{PantallaEleccion.NombreDe(clase)} · nivel {ficha.Nivel}", 1200, 260, 26, Blanco);
 
-        for (int s = 0; s < Simulacion.Balance.SlotsPerkPorClase; s++)
+        for (int s = 0; s < CargadorDatos.Actual.Clases.SlotsPerkPorClase; s++)
         {
             var r = RectSlot(s);
             bool abierto = s < ficha.SlotsAbiertos;
@@ -369,7 +369,7 @@ public partial class PantallaMochila : Control
             if (!lleno)
                 continue;
 
-            var def = CatalogoPerks.Por(ficha.Perks[s]);
+            var def = CargadorDatos.Actual.Perks.Por(ficha.Perks[s]);
             DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 5), ColorDe(def.Tier));
             TextoAjustado(def.Nombre, r.Position.X + 6, r.Position.Y + 34, 14, Blanco, 74);
         }

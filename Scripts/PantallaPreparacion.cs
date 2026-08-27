@@ -149,7 +149,7 @@ public partial class PantallaPreparacion : Control
         DrawRect(new Rect2(0, y0, Escala.LienzoAncho, 3), new Color(0.85f, 0.72f, 0.30f));
 
         DrawString(fuente, new Vector2(28, y0 + 40),
-            $"Oleada {partida.ProximaOleada} de {Balance.OleadasPorCorrida}",
+            $"Oleada {partida.ProximaOleada} de {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida}",
             HorizontalAlignment.Left, -1, 30, new Color(0.92f, 0.90f, 0.84f));
 
         DrawString(fuente, new Vector2(28, y0 + 72),

@@ -216,7 +216,7 @@ public partial class PantallaPrincipal : Control
 
         _panel.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
 
-        foreach (var plano in Simulacion.Planos.Todos)
+        foreach (var plano in CargadorDatos.Actual.Planos.Todos)
         {
             bool aprendido = System.Array.IndexOf(_planos, plano.Nombre) >= 0;
 

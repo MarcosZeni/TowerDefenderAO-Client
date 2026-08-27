@@ -71,6 +71,44 @@ public sealed class DatosBalance
 
     public required IReadOnlyList<DatoEnemigo> Enemigos { get; init; }
 
+    // -------------------------------------------------------------------------
+    //  Las tablas que antes vivían escritas en el código
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ Todas son ENTRADA de la simulación y todas entran al hash, igual que el
+    //  bestiario y los layouts. Cuelgan de acá y no de una clase estática por el
+    //  mismo motivo por el que la simulación no lee disco: el servidor arma este
+    //  objeto de otra fuente al revalidar, y con tablas estáticas tendría que
+    //  compilar los mismos números adentro del binario.
+
+    /// <summary>Las nueve clases y la curva de nivel. Sale de <c>clases.json</c>.</summary>
+    public required TablaClases Clases { get; init; }
+
+    /// <summary>El catálogo de perks. Sale de <c>perks.json</c>.</summary>
+    public required TablaPerks Perks { get; init; }
+
+    /// <summary>Las recetas de fusión. Sale de <c>planos.json</c>.</summary>
+    public required TablaPlanos Planos { get; init; }
+
+    /// <summary>Los parámetros del generador de armas. Sale de <c>generador-armas.json</c>.</summary>
+    public required TablaArmas Armas { get; init; }
+
+    /// <summary>La Torre, la corrida, la economía y las oleadas. Sale de <c>curvas.json</c>.</summary>
+    public required DatoCurvas Curvas { get; init; }
+
+    /// <summary>Los números del tick. Sale de <c>combate.json</c>.</summary>
+    public required DatoCombate Combate { get; init; }
+
+    /// <summary>El reparto de las 100 oleadas entre las 8 áreas.</summary>
+    /// <remarks>
+    /// Se deriva de <see cref="Curvas"/> al indexar, para que no haya dos copias
+    /// del mismo array que puedan discrepar.
+    /// </remarks>
+    public TablaAreas Areas { get; private set; } = new([100]);
+
+    /// <summary>Atajo a los stats base de una clase.</summary>
+    public DatoClase StatsDe(Clase clase) => Clases.De(clase);
+
     /// <summary>
     /// Los layouts entre los que elige la seed.
     /// </summary>
@@ -100,19 +138,25 @@ public sealed class DatosBalance
             : Layouts[rng.Rango(0, Layouts.Count)];
 
     private readonly Dictionary<int, DatoEnemigo> _porId = [];
-    private readonly List<DatoEnemigo>[] _porArea = new List<DatoEnemigo>[9];
+
+    /// <summary>Índice 0 sin usar: las áreas se cuentan desde 1.</summary>
+    private List<DatoEnemigo>[] _porArea = [];
 
     /// <summary>Arma los índices. Se llama una vez, al cargar.</summary>
     public void Indexar()
     {
-        for (int a = 0; a <= 8; a++)
+        Areas = new TablaAreas(Curvas.Corrida.UltimaOleadaPorArea);
+
+        _porArea = new List<DatoEnemigo>[Curvas.Corrida.CantidadAreas + 1];
+
+        for (int a = 0; a < _porArea.Length; a++)
             _porArea[a] = [];
 
         foreach (var e in Enemigos)
         {
             _porId[e.Id] = e;
 
-            if (e.Area is >= 1 and <= 8)
+            if (e.Area >= 1 && e.Area < _porArea.Length)
                 _porArea[e.Area].Add(e);
         }
     }
@@ -120,7 +164,7 @@ public sealed class DatosBalance
     public DatoEnemigo? Por(int id) => _porId.GetValueOrDefault(id);
 
     public IReadOnlyList<DatoEnemigo> DeArea(int area)
-        => area is >= 1 and <= 8 ? _porArea[area] : [];
+        => area >= 1 && area < _porArea.Length ? _porArea[area] : [];
 
     /// <summary>
     /// El jefe de un área: el más duro de esa área.
@@ -137,72 +181,26 @@ public sealed class DatosBalance
         if (lista.Count == 0)
             return null;
 
-        // ⚠ El jefe del área 8 es el DRAGÓN ROJO, por nombre y no por HP.
+        // ⚠ El jefe de la ÚLTIMA área se elige por NOMBRE y no por HP.
         //
         // Es la única excepción a "el jefe es el más duro del área", y es
         // deliberada: matarlo es cómo se gana la corrida, y ese momento tiene que
         // ser reconocible. Por HP crudo el más duro del área 8 es el Golem, que
         // como final de cien oleadas no dice nada.
         //
-        // Si el bestiario no lo trae —porque cambió el filtro del importador— se
-        // cae al más duro, que es lo correcto: mejor un final genérico que una
-        // corrida que no se puede terminar.
-        if (area == 8)
+        // El nombre sale de curvas.json («jefe.nombreJefeFinal»). Si el bestiario
+        // no lo trae —porque cambió el filtro del importador— se cae al más duro,
+        // que es lo correcto: mejor un final genérico que una corrida que no se
+        // puede terminar.
+        if (area == Curvas.Corrida.CantidadAreas && Curvas.Jefe.NombreJefeFinal.Length > 0)
         {
             foreach (var e in lista)
             {
-                if (e.Nombre.Contains("Dragón Rojo", System.StringComparison.OrdinalIgnoreCase))
+                if (e.Nombre.Contains(Curvas.Jefe.NombreJefeFinal, System.StringComparison.OrdinalIgnoreCase))
                     return e;
             }
         }
 
         return lista[^1];
     }
-}
-
-/// <summary>
-/// El reparto de las 100 oleadas entre las 8 áreas.
-/// </summary>
-/// <remarks>
-/// <para>⚠ <b>Las oleadas se numeran 1 a 100 corridas, no por área.</b> El área
-/// es una propiedad de la oleada, no un contador que se reinicia. Numerarlas por
-/// área haría imposible leer el ranking: "oleada 7" no diría nada sin saber de
-/// qué área.</para>
-///
-/// <para>El reparto no es exactamente parejo —12 o 13 oleadas por área— porque
-/// 100 no divide en 8. Las áreas del medio se llevan la de más, que es donde el
-/// jugador ya entendió el juego y todavía tiene margen para experimentar.</para>
-/// </remarks>
-public static class Areas
-{
-    /// <summary>La última oleada de cada área. La 8ª termina en 100.</summary>
-    private static readonly int[] _ultimaOleada = [12, 24, 37, 50, 62, 75, 87, 100];
-
-    public static int DeOleada(int oleada)
-    {
-        for (int i = 0; i < _ultimaOleada.Length; i++)
-        {
-            if (oleada <= _ultimaOleada[i])
-                return i + 1;
-        }
-
-        return 8;
-    }
-
-    /// <summary>
-    /// ¿Esta oleada cierra un área? Entonces trae jefe.
-    /// </summary>
-    /// <remarks>
-    /// <b>El jefe es la única fuente de perks de Oro</b>, así que hay exactamente
-    /// ocho oportunidades por corrida de conseguir uno. Eso es lo que hace que
-    /// matar al jefe valga más que sobrevivirlo, y lo que le pone techo a cuántos
-    /// Oro puede juntar un jugador — que a su vez es lo que hace que la fusión
-    /// sea una decisión y no un trámite.
-    /// </remarks>
-    public static bool TieneJefe(int oleada) => System.Array.IndexOf(_ultimaOleada, oleada) >= 0;
-
-    public static int UltimaOleadaDe(int area) => _ultimaOleada[area - 1];
-
-    public static int PrimeraOleadaDe(int area)
-        => area <= 1 ? 1 : _ultimaOleada[area - 2] + 1;
 }

@@ -77,16 +77,23 @@ public sealed class ClaseEnRoster
     /// <para>Del nivel 7 en adelante ya no abre nada: para meter otro perk hay
     /// que reemplazar, y el reemplazado se destruye.</para>
     /// </remarks>
-    public int SlotsAbiertos => Enteros.Limitar(Nivel, 1, Balance.SlotsPerkPorClase);
+    public int SlotsAbiertos => Enteros.Limitar(Nivel, 1, MaxNivel);
 
     public bool TieneSlotLibre => Perks.Count < SlotsAbiertos;
+
+    /// <summary>
+    /// Nivel máximo, que es también la cantidad de slots. Sale de
+    /// <c>clases.json</c> y lo pone <see cref="Roster.Contratar"/>.
+    /// </summary>
+    public required int MaxNivel { get; init; }
 }
 
 /// <summary>
 /// El roster del jugador: qué clases tiene y cómo están.
 /// </summary>
-public sealed class Roster
+public sealed class Roster(DatosBalance datos)
 {
+    private readonly DatosBalance _datos = datos;
     private readonly List<ClaseEnRoster> _clases = [];
 
     public IReadOnlyList<ClaseEnRoster> Clases => _clases;
@@ -107,7 +114,7 @@ public sealed class Roster
         if (Tiene(clase))
             return;
 
-        _clases.Add(new ClaseEnRoster { Clase = clase });
+        _clases.Add(new ClaseEnRoster { Clase = clase, MaxNivel = _datos.Clases.SlotsPerkPorClase });
     }
 
     public void Levelear(Clase clase)
@@ -144,7 +151,7 @@ public sealed class Roster
     /// </remarks>
     public StatsEfectivos StatsDe(Clase clase, Mochila mochila)
     {
-        var b = Balance.StatsDe(clase);
+        var b = _datos.StatsDe(clase);
         var ficha = Buscar(clase);
 
         if (ficha is null)
@@ -153,7 +160,7 @@ public sealed class Roster
                 EfectoPerk.Ninguno, 0, HabilidadArma.Ninguna, 0);
 
         // Cada nivel sube los stats base, aparte de abrir un slot.
-        int porNivel = (ficha.Nivel - 1) * 8;
+        int porNivel = (ficha.Nivel - 1) * _datos.Clases.ExtraDanoPorNivel;
 
         int extraDano = porNivel;
         int extraCadencia = 0;
@@ -168,7 +175,7 @@ public sealed class Roster
 
         foreach (int idPerk in ficha.Perks)
         {
-            var p = CatalogoPerks.Por(idPerk);
+            var p = _datos.Perks.Por(idPerk);
 
             switch (p.Efecto)
             {

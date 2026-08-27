@@ -1,0 +1,43 @@
+{
+  // ---------------------------------------------------------------------------
+  //  Los planos de fusión: dos perks de Oro se consumen y sale un Único.
+  //
+  //  ⚠ EL ÚNICO OCUPA UN SOLO SLOT. El slot liberado es la mitad del premio.
+  //
+  //  El plano se compra UNA VEZ, con la billetera, desde el menú principal, y
+  //  queda aprendido para siempre en esa cuenta. Junto con la billetera, es la
+  //  ÚNICA PROGRESIÓN PERMANENTE DEL PROYECTO: todo lo demás muere con la corrida.
+  //
+  //  ⚠ LA LISTA ES FINITA, Y ESA ES LA REGLA. Es la condición que hace tolerable
+  //  la ventaja del veterano: tiene techo. Por eso no se agrega equipo permanente
+  //  ni nada que escale sin fin. Agregar planos sin freno rompe esa promesa.
+  //
+  //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA.
+  // ---------------------------------------------------------------------------
+  "version": 1,
+
+  // Se referencian POR NOMBRE y no por id: un id pegado a mano quedaría
+  // apuntando a otro perk en cuanto alguien agregue uno, y el síntoma sería una
+  // fusión que produce algo que no es. Los nombres tienen que existir tal cual
+  // en perks.json —el validador (--validar) lo verifica.
+  //
+  // "oroA" y "oroB" tienen que ser de tier oro; "nombre" es a la vez el nombre
+  // del plano y el del único que produce, así que tiene que ser un tier unico.
+  // El orden de oroA/oroB no importa al fusionar.
+  //
+  // "inicial": true = se sabe sin comprar nada.
+  // ⚠ Tiene que haber AL MENOS UNA inicial. Sin eso un jugador nuevo nunca ve un
+  // Único y la fusión —la salida de los Oro repetidos— le resulta invisible
+  // hasta que gasta oro en algo que no entiende para qué sirve.
+  "planos": [
+    { "nombre": "Perforación",             "oroA": "Ricochet",          "oroB": "Golpe Certero",     "inicial": true  },
+    { "nombre": "Onda de Frío",            "oroA": "Escarcha",          "oroB": "Onda Expansiva",    "inicial": false },
+    { "nombre": "Ira de Dios",             "oroA": "Onda Expansiva",    "oroB": "Misil Mágico",      "inicial": false },
+    { "nombre": "Apocalipsis",             "oroA": "Ricochet",          "oroB": "Envenenar",         "inicial": false },
+    { "nombre": "Terrible Hambre de Igôr", "oroA": "Envenenar",         "oroB": "Escarcha",          "inicial": false },
+    { "nombre": "Tormenta Divina",         "oroA": "Tormenta de Fuego", "oroB": "Dardo Mágico",      "inicial": false },
+    { "nombre": "Ceguera",                 "oroA": "Torpeza",           "oroB": "Descarga Eléctrica","inicial": false },
+    { "nombre": "Fuerza",                  "oroA": "Golpe Certero",     "oroB": "Onda Expansiva",    "inicial": false },
+    { "nombre": "Invisibilidad",           "oroA": "Torpeza",           "oroB": "Golpe Certero",     "inicial": false }
+  ]
+}

@@ -84,7 +84,7 @@ public partial class PantallaFinDeCorrida : Control
             _juego.RunId,
             partida.Estado == EstadoPartida.Gano,
             partida.Oleada,
-            Areas.DeOleada(partida.Oleada),
+            CargadorDatos.Actual.Areas.DeOleada(partida.Oleada),
             partida.Tick,
             log);
 
@@ -135,7 +135,7 @@ public partial class PantallaFinDeCorrida : Control
         {
             // "Llegaste a la N de 100" y no solo "oleada N": el 100 es el final
             // real de la corrida, y verlo dice cuánto falta.
-            Texto($"Llegaste a la oleada {partida.Oleada} de {Simulacion.Balance.OleadasPorCorrida}.",
+            Texto($"Llegaste a la oleada {partida.Oleada} de {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida}.",
                 x, y, 22, Blanco);
         }
 
@@ -143,7 +143,7 @@ public partial class PantallaFinDeCorrida : Control
 
         int segundos = partida.Tick / Enteros.TicksPorSegundo;
 
-        Texto($"área {Areas.DeOleada(partida.Oleada)} · " +
+        Texto($"área {CargadorDatos.Actual.Areas.DeOleada(partida.Oleada)} · " +
               $"{segundos / 60:00}:{segundos % 60:00} · {partida.Tick} ticks",
             x, y, 21, Gris);
 

@@ -37,7 +37,7 @@ public sealed class Tienda
     /// eso, la tienda se vuelve una lista creciente que hay que revisar entera
     /// cada vez, y elegir deja de ser una decisión para volverse una tarea.</para>
     /// </remarks>
-    public void Renovar(int oleada, Roster roster, Mochila mochila, Aleatorio rng)
+    public void Renovar(int oleada, Roster roster, Mochila mochila, Aleatorio rng, DatosBalance datos)
     {
         _stock.Clear();
         OleadaDelStock = oleada;
@@ -47,31 +47,34 @@ public sealed class Tienda
         if (clases.Count == 0)
             return;
 
-        // Dos perks y dos piezas de equipo. Cuatro es lo que entra en pantalla sin
-        // scroll y lo que se puede comparar de un vistazo.
-        for (int i = 0; i < 2; i++)
+        var cfg = datos.Curvas.Tienda;
+
+        // Cuántos entran en pantalla sin scroll y se pueden comparar de un
+        // vistazo. Sale de curvas.json («tienda»).
+        for (int i = 0; i < cfg.PerksEnStock; i++)
         {
             // ⚠ La tienda NO vende Oro: el jefe es la única fuente. Si lo
             // vendiera, matar al jefe dejaría de ser especial y el jugador con oro
             // podría saltear la parte difícil del juego.
-            var tier = rng.Ocurre(65) ? TierPerk.Bronce : TierPerk.Plata;
-            var perk = CatalogoPerks.Tirar(tier, clases, rng);
+            var tier = rng.Ocurre(cfg.ChanceBronce) ? TierPerk.Bronce : TierPerk.Plata;
+            var perk = datos.Perks.Tirar(tier, clases, rng);
 
             if (perk is not null)
-                _stock.Add(new OfertaTienda(TipoCosa.Perk, perk.Id, PrecioDePerk(tier, oleada), false));
+                _stock.Add(new OfertaTienda(TipoCosa.Perk, perk.Id, cfg.PrecioDePerk(tier, oleada), false));
         }
 
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < cfg.ArmasEnStock; i++)
         {
             var arma = GeneradorArmas.Generar(
-                Balance.PresupuestoItemTienda(oleada), clases, rng, mochila.ProximoIdArma);
+                datos.Curvas.PorOleada.PresupuestoItemTienda.En(oleada),
+                clases, rng, mochila.ProximoIdArma, datos.Armas);
 
             int id = mochila.RegistrarArma(arma);
 
             // El precio sale del valor del arma, que sale de su presupuesto y de
             // su rareza: una legendaria cuesta lo que vale sin que haya que
             // decidirlo aparte.
-            _stock.Add(new OfertaTienda(TipoCosa.Arma, id, arma.Valor * 3, false));
+            _stock.Add(new OfertaTienda(TipoCosa.Arma, id, arma.Valor * datos.Armas.MultiplicadorPrecioTienda, false));
         }
     }
 
@@ -92,18 +95,4 @@ public sealed class Tienda
         return true;
     }
 
-    /// <summary>
-    /// Cuánto cuesta un perk de la tienda.
-    /// </summary>
-    /// <remarks>
-    /// Sube con la oleada porque el oro también: un precio fijo sería caro al
-    /// principio e irrelevante al final. El Plata cuesta el triple que el Bronce,
-    /// no el doble, porque además de ser más grande <b>ocupa uno de los mismos
-    /// seis slots</b>: lo que se paga es el lugar, no solo el número.
-    /// </remarks>
-    private static int PrecioDePerk(TierPerk tier, int oleada)
-    {
-        int baseP = tier == TierPerk.Bronce ? 80 : 240;
-        return baseP + (oleada * (tier == TierPerk.Bronce ? 6 : 18));
-    }
 }

@@ -643,7 +643,7 @@ public static class CorredorHeadless
 
         for (int i = 0; i < opciones.Length; i++)
         {
-            var stats = Simulacion.Balance.StatsDe(opciones[i].Clase);
+            var stats = CargadorDatos.Actual.StatsDe(opciones[i].Clase);
 
             // Daño por cien ticks, para que la cadencia pese tanto como el golpe.
             int puntaje = stats.Dano * 100 / System.Math.Max(1, stats.CadenciaTicks);
@@ -680,7 +680,7 @@ public static class CorredorHeadless
 
         foreach (var ficha in partida.Roster.Clases)
         {
-            int costo = Simulacion.Balance.StatsDe(ficha.Clase).Costo;
+            int costo = CargadorDatos.Actual.StatsDe(ficha.Clase).Costo;
 
             if (costo > mejorCosto && costo <= partida.Oro)
             {
@@ -701,7 +701,7 @@ public static class CorredorHeadless
             if (cosas[i].Tipo != TipoCosa.Perk)
                 continue;
 
-            var def = CatalogoPerks.Por(cosas[i].Id);
+            var def = CargadorDatos.Actual.Perks.Por(cosas[i].Id);
 
             foreach (var ficha in partida.Roster.Clases)
             {

@@ -1,0 +1,158 @@
+{
+  // ---------------------------------------------------------------------------
+  //  El generador de armas. El arma es el ÚNICO ítem con stats del juego.
+  //
+  //  ⚠ Armadura, casco y escudo NO DAN NADA: son el frame que cambia cuando la
+  //  clase sube de nivel. Todo el poder del equipo vive en el arma.
+  //
+  //  ⚠ ESTO NO ES "armas.json", Y ESA DISTINCIÓN IMPORTA. DATOS.md §2 prohíbe
+  //  armas.json / escudos.json / cascos.json: son un catálogo de ÍTEMS, que
+  //  existe en Austral porque su muñeco se compone por capas. Acá un defensor es
+  //  un sprite. Este archivo no lista ítems —las armas se GENERAN— sino los
+  //  parámetros del generador.
+  //
+  //  Las armas no se escriben: se compran con un presupuesto que sube con la
+  //  oleada. Es el cuarto uso del mismo patrón —oleada, drop, tienda, arma— y por
+  //  el mismo motivo: un presupuesto es la única forma de que el contenido
+  //  generado tenga un techo conocido.
+  //
+  //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA.
+  // ---------------------------------------------------------------------------
+  "version": 1,
+
+  // --- Los números que se compran con lo que no se fue en la habilidad -------
+  //
+  // Todos son PUNTOS PORCENTUALES sobre la base de la clase, y se compran de a
+  // "paso" (5) para que los números queden redondos y legibles en la UI.
+  // El alcance es el más caro porque es el stat más valioso de un tower defense.
+  "afijos": {
+    "paso": 5,
+    "costoPuntoDano": 2,
+    "costoPuntoCadencia": 3,
+    "costoPuntoAlcance": 4
+  },
+
+  // --- La rareza ------------------------------------------------------------
+  //
+  // ⚠ Las tiradas están ENCADENADAS, no son exclusivas: primero legendaria, si
+  // falla épica, si falla rara, si falla común. La probabilidad efectiva de las
+  // de abajo es menor que su número.
+  //
+  // chance = limitar(presupuesto / divisor, min, max), en porcentaje entero.
+  //
+  // La chance de legendaria sube con el presupuesto, o sea con la oleada: en la
+  // oleada 10 una legendaria arruinaría el resto de la corrida, y en la 90 es el
+  // premio por haber llegado. El techo de 4 es a propósito — si saliera seguido
+  // dejaría de romper el juego y pasaría a ser el juego.
+  "rareza": {
+    "legendaria": { "divisor": 200, "min": 0,  "max":  4 },
+    "epica":      { "divisor":  60, "min": 2,  "max": 12 },
+    "rara":       { "divisor":  20, "min": 10, "max": 35 }
+  },
+
+  // Qué parte del presupuesto se aparta para la habilidad, en porcentaje.
+  //
+  // ⚠ Se decide ANTES de gastar. Al revés —gastar en números y ver qué sobra—
+  // las legendarias saldrían siempre con números flojos, porque la habilidad se
+  // comería el resto.
+  "porcentajeAHabilidad": {
+    "legendaria": 60,
+    "epica": 40,
+    "rara": 25,
+    "comun": 0
+  },
+
+  // Valor de venta = presupuesto / divisorValor × (1 + rareza), con rareza 0..3.
+  // El precio en la tienda es ese valor × multiplicadorPrecioTienda.
+  "valor": {
+    "divisorValor": 2,
+    "multiplicadorPrecioTienda": 3
+  },
+
+  // --- Los tres pools de habilidades ----------------------------------------
+  //
+  // ⚠ LAS QUE ROMPEN EL JUEGO SOLO SALEN EN LEGENDARIAS. Es lo que las hace
+  // valer: si Cadena pudiera aparecer en una rara, el jugador la tendría en la
+  // oleada 15 y el resto de la corrida sería una formalidad.
+  //
+  // ⚠ Doble está en "rompen" y no en "raras" (propuesta V2): un segundo golpe
+  // completo es ×2 de DPS plano, y desde el pool épico dominaba todo lo demás.
+  "pools": {
+    "comun":  ["Splash", "Rebote", "Escarcha", "Veneno"],
+    "rara":   ["Critico", "Francotirador", "Carnicero", "Sed"],
+    "rompen": ["Ejecutar", "Cadena", "Codicia", "Vampirismo", "Doble"]
+  },
+
+  // --- Cuánto pega cada habilidad -------------------------------------------
+  //
+  // magnitud = limitar(base + presupuestoDeLaHabilidad / divisor, min, max).
+  // divisor 0 = valor fijo, no escala con el presupuesto.
+  //
+  // Cada una tiene su propia escala porque significan cosas distintas: un 40% de
+  // splash es un porcentaje del daño, un 40% de ejecutar sería un umbral de vida
+  // que mata todo. Los topes están para que ninguna se vuelva absoluta.
+  //
+  // "nombre" es el sufijo que se le pega al arma; sale de los 41 hechizos reales
+  // de Dat\Hechizos.dat de Austral. "explica" es la línea de la UI; el {m} se
+  // reemplaza por la magnitud.
+  "habilidades": [
+    { "habilidad": "Splash",        "base": 20, "divisor": 4,  "min": 20, "max":  90,
+      "nombre": "de Tormenta de Fuego",  "explica": "daña a los que están cerca, {m}% del golpe" },
+
+    { "habilidad": "Rebote",        "base": 25, "divisor": 4,  "min": 25, "max": 100,
+      "nombre": "de Descarga Eléctrica", "explica": "rebota a otro enemigo, {m}% del golpe" },
+
+    { "habilidad": "Escarcha",      "base": 10, "divisor": 8,  "min": 10, "max":  45,
+      "nombre": "de Inmovilizar",        "explica": "deja al objetivo {m}% más lento" },
+
+    { "habilidad": "Veneno",        "base": 15, "divisor": 5,  "min": 15, "max":  80,
+      "nombre": "de Envenenar",          "explica": "envenena por {m}% del golpe" },
+
+    // ⚠ El Crítico del ARMA REEMPLAZA el daño por este porcentaje; el perk de
+    // Oro Golpe Certero SUMA daño extra. No son la misma mecánica.
+    { "habilidad": "Critico",       "base": 120, "divisor": 2, "min": 120, "max": 400,
+      "nombre": "de Fuerza",             "explica": "cada 7 golpes, uno pega {m}% más" },
+
+    { "habilidad": "Francotirador", "base": 15, "divisor": 6,  "min": 15, "max":  60,
+      "nombre": "de Flecha Mágica",      "explica": "hasta {m}% más daño según la distancia" },
+
+    { "habilidad": "Carnicero",     "base": 20, "divisor": 5,  "min": 20, "max":  80,
+      "nombre": "de Terrible Hambre",    "explica": "hasta {m}% más daño de cerca" },
+
+    { "habilidad": "Sed",           "base":  2, "divisor": 40, "min":  2, "max":  15,
+      "nombre": "de Ira de Dios",        "explica": "+{m}% de daño por muerte, se reinicia cada oleada" },
+
+    { "habilidad": "Doble",         "base": 100, "divisor": 0, "min": 100, "max": 100,
+      "nombre": "de Celeridad",          "explica": "dispara dos veces" },
+
+    // ⚠ El umbral de Ejecutar tiene techo bajo a propósito. Al 25% ya mata casi
+    // todo lo que sobrevivió a un golpe; al 50% haría irrelevante el daño del
+    // arma y la única estadística sería la cadencia.
+    { "habilidad": "Ejecutar",      "base":  8, "divisor": 40, "min":  8, "max":  25,
+      "nombre": "de Apocalipsis",        "explica": "MATA de un golpe por debajo del {m}% de vida" },
+
+    { "habilidad": "Cadena",        "base": 30, "divisor": 8,  "min": 30, "max":  60,
+      "nombre": "de Tormenta Divina",    "explica": "le pega a TODOS los que tenga en alcance, {m}% del golpe" },
+
+    { "habilidad": "Codicia",       "base": 25, "divisor": 8,  "min": 25, "max":  75,
+      "nombre": "de Habilidad Ilimitada","explica": "+{m}% de oro por cada enemigo que mata" },
+
+    { "habilidad": "Vampirismo",    "base":  1, "divisor": 50, "min":  1, "max":   8,
+      "nombre": "de Curación Celestial", "explica": "cura {m} de vida a la Torre por golpe" }
+  ],
+
+  // El nombre base sale de qué número quedó más alto, así que un arma generada
+  // nunca promete algo que no hace.
+  "nombresBase": {
+    "dano": "Arma afilada",
+    "cadencia": "Arma ágil",
+    "alcance": "Arma certera"
+  },
+
+  // Sufijo cuando el arma no tiene habilidad pero sí rareza.
+  "sufijoRareza": {
+    "rara": "templada",
+    "epica": "rúnica",
+    "legendaria": "legendaria"
+  }
+}

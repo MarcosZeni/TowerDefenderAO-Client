@@ -184,7 +184,7 @@ public partial class PantallaEleccion : Control
         Texto(NombreDe(opcion.Clase), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
 
         y += 50;
-        var stats = Simulacion.Balance.StatsDe(opcion.Clase);
+        var stats = CargadorDatos.Actual.StatsDe(opcion.Clase);
         Texto($"{stats.Dano} de daño · alcance {stats.AlcanceCeldas} · {stats.Costo} de oro",
             x, y, 19, new Color(0.7f, 0.7f, 0.68f));
 
@@ -209,10 +209,10 @@ public partial class PantallaEleccion : Control
             // ⚠ Esta línea es la que hace que la elección sea una elección. Sin
             // ella, contratar parece siempre mejor porque trae algo visiblemente
             // nuevo, y levelear parece "solo números".
-            int slotsDespues = System.Math.Min(opcion.NivelResultante, Simulacion.Balance.SlotsPerkPorClase);
+            int slotsDespues = System.Math.Min(opcion.NivelResultante, CargadorDatos.Actual.Clases.SlotsPerkPorClase);
 
             Texto(slotsDespues > slotsAntes
-                    ? $"Abre el slot de perk {slotsDespues} de {Simulacion.Balance.SlotsPerkPorClase}."
+                    ? $"Abre el slot de perk {slotsDespues} de {CargadorDatos.Actual.Clases.SlotsPerkPorClase}."
                     : "Ya tiene los 6 slots abiertos.",
                 x, y, 21, new Color(0.95f, 0.85f, 0.5f));
         }

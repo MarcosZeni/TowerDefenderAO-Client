@@ -146,64 +146,62 @@ public sealed class Arma
 /// </remarks>
 public static class GeneradorArmas
 {
-    /// <summary>Cuánto cuesta un punto porcentual de cada número.</summary>
-    private const int CostoDano = 2;
-
-    private const int CostoCadencia = 3;
-
-    private const int CostoAlcance = 4;
-
     /// <summary>
     /// Genera un arma con ese presupuesto.
     /// </summary>
     /// <param name="presupuesto">Sube con la oleada: un arma tardía es mejor.</param>
     /// <param name="clases">Las del roster. El arma va a servir para alguna.</param>
-    public static Arma Generar(int presupuesto, IReadOnlyList<Clase> clases, Aleatorio rng, int idNuevo)
+    /// <param name="tabla">
+    /// Los parámetros del generador, de <c>generador-armas.json</c>. Entran por
+    /// parámetro y no de una constante porque son entrada de la simulación: el
+    /// servidor arma la misma arma con la misma seed al revalidar.
+    /// </param>
+    public static Arma Generar(
+        int presupuesto, IReadOnlyList<Clase> clases, Aleatorio rng, int idNuevo, TablaArmas tabla)
     {
-        var rareza = TirarRareza(presupuesto, rng);
+        var rareza = TirarRareza(presupuesto, rng, tabla);
 
         // ⚠ La rareza se decide ANTES de gastar, y de ella sale cuánto se va en
         // habilidad. Al revés —gastar en números y ver qué sobra— las legendarias
         // saldrían siempre con números flojos, porque la habilidad se comería el
         // resto.
-        int paraHabilidad = rareza switch
-        {
-            RarezaArma.Legendaria => presupuesto * 60 / 100,
-            RarezaArma.Epica => presupuesto * 40 / 100,
-            RarezaArma.Rara => presupuesto * 25 / 100,
-            _ => 0,
-        };
+        int paraHabilidad = presupuesto * tabla.PorcentajeAHabilidad(rareza) / 100;
 
         var habilidad = HabilidadArma.Ninguna;
         int magnitud = 0;
 
         if (paraHabilidad > 0)
         {
-            habilidad = TirarHabilidad(rareza, rng);
-            magnitud = MagnitudDe(habilidad, paraHabilidad);
+            habilidad = TirarHabilidad(rareza, rng, tabla);
+            magnitud = tabla.MagnitudDe(habilidad, paraHabilidad);
         }
 
         int restante = presupuesto - paraHabilidad;
         int dano = 0, cadencia = 0, alcance = 0;
 
-        while (restante >= CostoDano * 5)
+        int paso = tabla.Paso;
+        int costoDano = tabla.CostoDano * paso;
+        int costoCadencia = tabla.CostoCadencia * paso;
+        int costoAlcance = tabla.CostoAlcance * paso;
+
+        while (restante >= costoDano)
         {
             int cual = rng.Rango(0, 3);
 
             if (cual == 0)
             {
-                dano += 5;
-                restante -= CostoDano * 5;
+                dano += paso;
+                restante -= costoDano;
             }
-            else if (cual == 1 && restante >= CostoCadencia * 5)
+            else if (cual == 1 && restante >= costoCadencia)
             {
-                cadencia += 5;
-                restante -= CostoCadencia * 5;
+                cadencia += paso;
+                restante -= costoCadencia;
             }
-            else if (restante >= CostoAlcance * 5)
+            else if (restante >= costoAlcance)
             {
-                alcance += 5;
-                restante -= CostoAlcance * 5;
+                alcance += paso;
+                restante -= costoAlcance;
             }
             else
             {
@@ -224,7 +222,7 @@ public static class GeneradorArmas
         return new Arma
         {
             Id = idNuevo,
-            Nombre = Nombrar(rareza, habilidad, dano, cadencia, alcance),
+            Nombre = Nombrar(rareza, habilidad, dano, cadencia, alcance, tabla),
             Rareza = rareza,
             GraficoId = 0,
             Dano = dano,
@@ -233,7 +231,7 @@ public static class GeneradorArmas
             Habilidad = habilidad,
             Magnitud = magnitud,
             Clases = paraQuien,
-            Valor = presupuesto / 2 * (1 + (int)rareza),
+            Valor = presupuesto / tabla.DivisorValor * (1 + (int)rareza),
         };
     }
 
@@ -241,23 +239,21 @@ public static class GeneradorArmas
     /// Tira la rareza.
     /// </summary>
     /// <remarks>
+    /// <para>⚠ Las tiradas están <b>encadenadas</b>, no son exclusivas: primero
+    /// legendaria, si falla épica, si falla rara. La probabilidad efectiva de las
+    /// de abajo es menor que su número.</para>
+    ///
     /// <para>La chance de legendaria sube con el presupuesto, o sea con la oleada.
     /// Es a propósito: en la oleada 10 una legendaria arruinaría el resto de la
-    /// corrida, y en la 90 es el premio por haber llegado.</para>
-    ///
-    /// <para>Aun así el techo es 4%: una legendaria tiene que seguir siendo un
-    /// hallazgo. Si saliera seguido, dejaría de romper el juego y pasaría a ser
-    /// el juego.</para>
+    /// corrida, y en la 90 es el premio por haber llegado. Aun así tiene techo:
+    /// una legendaria tiene que seguir siendo un hallazgo. Si saliera seguido,
+    /// dejaría de romper el juego y pasaría a ser el juego.</para>
     /// </remarks>
-    private static RarezaArma TirarRareza(int presupuesto, Aleatorio rng)
+    private static RarezaArma TirarRareza(int presupuesto, Aleatorio rng, TablaArmas tabla)
     {
-        int chanceLegendaria = Enteros.Limitar(presupuesto / 200, 0, 4);
-        int chanceEpica = Enteros.Limitar(presupuesto / 60, 2, 12);
-        int chanceRara = Enteros.Limitar(presupuesto / 20, 10, 35);
-
-        if (rng.Ocurre(chanceLegendaria)) return RarezaArma.Legendaria;
-        if (rng.Ocurre(chanceEpica)) return RarezaArma.Epica;
-        if (rng.Ocurre(chanceRara)) return RarezaArma.Rara;
+        if (rng.Ocurre(tabla.ChanceLegendaria.En(presupuesto))) return RarezaArma.Legendaria;
+        if (rng.Ocurre(tabla.ChanceEpica.En(presupuesto))) return RarezaArma.Epica;
+        if (rng.Ocurre(tabla.ChanceRara.En(presupuesto))) return RarezaArma.Rara;
 
         return RarezaArma.Comun;
     }
@@ -270,68 +266,11 @@ public static class GeneradorArmas
     /// hace valer: si <c>Cadena</c> pudiera aparecer en una rara, el jugador la
     /// tendría en la oleada 15 y el resto de la corrida sería una formalidad.
     /// </remarks>
-    private static HabilidadArma TirarHabilidad(RarezaArma rareza, Aleatorio rng)
+    public static HabilidadArma TirarHabilidad(RarezaArma rareza, Aleatorio rng, TablaArmas tabla)
     {
-        HabilidadArma[] comunes =
-        [
-            HabilidadArma.Splash, HabilidadArma.Rebote,
-            HabilidadArma.Escarcha, HabilidadArma.Veneno,
-        ];
-
-        HabilidadArma[] raras =
-        [
-            HabilidadArma.Critico, HabilidadArma.Francotirador,
-            HabilidadArma.Carnicero, HabilidadArma.Sed,
-        ];
-
-        // ⚠ Doble subió a legendaria (propuesta V2): un segundo golpe completo
-        // es ×2 de DPS plano, y saliendo del pool épico dominaba todo lo demás.
-        HabilidadArma[] rompen =
-        [
-            HabilidadArma.Ejecutar, HabilidadArma.Cadena,
-            HabilidadArma.Codicia, HabilidadArma.Vampirismo, HabilidadArma.Doble,
-        ];
-
-        return rareza switch
-        {
-            RarezaArma.Legendaria => rompen[rng.Indice(rompen.Length)],
-            RarezaArma.Epica => raras[rng.Indice(raras.Length)],
-            _ => comunes[rng.Indice(comunes.Length)],
-        };
+        var pool = tabla.PoolDe(rareza);
+        return pool[rng.Indice(pool.Length)];
     }
-
-    /// <summary>
-    /// Cuánto pega la habilidad, con el presupuesto que le tocó.
-    /// </summary>
-    /// <remarks>
-    /// Cada una tiene su propia escala porque significan cosas distintas: un 40%
-    /// de splash es un porcentaje del daño, un 40% de ejecutar sería un umbral de
-    /// vida que mata todo. Los topes están para que ninguna se vuelva absoluta.
-    /// </remarks>
-    private static int MagnitudDe(HabilidadArma habilidad, int presupuesto) => habilidad switch
-    {
-        HabilidadArma.Splash => Enteros.Limitar(20 + (presupuesto / 4), 20, 90),
-        HabilidadArma.Rebote => Enteros.Limitar(25 + (presupuesto / 4), 25, 100),
-        HabilidadArma.Escarcha => Enteros.Limitar(10 + (presupuesto / 8), 10, 45),
-        HabilidadArma.Veneno => Enteros.Limitar(15 + (presupuesto / 5), 15, 80),
-
-        HabilidadArma.Critico => Enteros.Limitar(120 + (presupuesto / 2), 120, 400),
-        HabilidadArma.Francotirador => Enteros.Limitar(15 + (presupuesto / 6), 15, 60),
-        HabilidadArma.Carnicero => Enteros.Limitar(20 + (presupuesto / 5), 20, 80),
-        HabilidadArma.Sed => Enteros.Limitar(2 + (presupuesto / 40), 2, 15),
-        HabilidadArma.Doble => 100,
-
-        // ⚠ El umbral de ejecutar tiene techo bajo a propósito. Al 25% ya mata
-        // casi todo lo que sobrevivió a un golpe; al 50% haría irrelevante el
-        // daño del arma y la única estadística sería la cadencia.
-        HabilidadArma.Ejecutar => Enteros.Limitar(8 + (presupuesto / 40), 8, 25),
-
-        HabilidadArma.Cadena => Enteros.Limitar(30 + (presupuesto / 8), 30, 60),
-        HabilidadArma.Codicia => Enteros.Limitar(25 + (presupuesto / 8), 25, 75),
-        HabilidadArma.Vampirismo => Enteros.Limitar(1 + (presupuesto / 50), 1, 8),
-
-        _ => 0,
-    };
 
     /// <summary>
     /// El nombre, armado de lo que el arma realmente tiene.
@@ -342,66 +281,15 @@ public static class GeneradorArmas
     /// reales de <c>Hechizos.dat</c>.
     /// </remarks>
     private static string Nombrar(
-        RarezaArma rareza, HabilidadArma habilidad, int dano, int cadencia, int alcance)
+        RarezaArma rareza, HabilidadArma habilidad, int dano, int cadencia, int alcance, TablaArmas tabla)
     {
         string baseNombre =
-            dano >= cadencia && dano >= alcance ? "Arma afilada" :
-            cadencia >= alcance ? "Arma ágil" : "Arma certera";
+            dano >= cadencia && dano >= alcance ? tabla.NombreDano :
+            cadencia >= alcance ? tabla.NombreCadencia : tabla.NombreAlcance;
 
         if (habilidad == HabilidadArma.Ninguna)
-            return rareza == RarezaArma.Comun ? baseNombre : $"{baseNombre} {SufijoRareza(rareza)}";
+            return rareza == RarezaArma.Comun ? baseNombre : $"{baseNombre} {tabla.SufijoDe(rareza)}";
 
-        return $"{baseNombre} {NombreDeHabilidad(habilidad)}";
+        return $"{baseNombre} {tabla.NombreDeHabilidad(habilidad)}";
     }
-
-    private static string SufijoRareza(RarezaArma r) => r switch
-    {
-        RarezaArma.Rara => "templada",
-        RarezaArma.Epica => "rúnica",
-        RarezaArma.Legendaria => "legendaria",
-        _ => "",
-    };
-
-    public static string NombreDeHabilidad(HabilidadArma h) => h switch
-    {
-        HabilidadArma.Splash => "de Tormenta de Fuego",
-        HabilidadArma.Rebote => "de Descarga Eléctrica",
-        HabilidadArma.Escarcha => "de Inmovilizar",
-        HabilidadArma.Veneno => "de Envenenar",
-
-        HabilidadArma.Critico => "de Fuerza",
-        HabilidadArma.Francotirador => "de Flecha Mágica",
-        HabilidadArma.Carnicero => "de Terrible Hambre",
-        HabilidadArma.Sed => "de Ira de Dios",
-        HabilidadArma.Doble => "de Celeridad",
-
-        HabilidadArma.Ejecutar => "de Apocalipsis",
-        HabilidadArma.Cadena => "de Tormenta Divina",
-        HabilidadArma.Codicia => "de Habilidad Ilimitada",
-        HabilidadArma.Vampirismo => "de Curación Celestial",
-
-        _ => "",
-    };
-
-    /// <summary>Qué hace la habilidad, en una línea, para la UI.</summary>
-    public static string ExplicarHabilidad(HabilidadArma h, int magnitud) => h switch
-    {
-        HabilidadArma.Splash => $"daña a los que están cerca, {magnitud}% del golpe",
-        HabilidadArma.Rebote => $"rebota a otro enemigo, {magnitud}% del golpe",
-        HabilidadArma.Escarcha => $"deja al objetivo {magnitud}% más lento",
-        HabilidadArma.Veneno => $"envenena por {magnitud}% del golpe",
-
-        HabilidadArma.Critico => $"cada 7 golpes, uno pega {magnitud}% más",
-        HabilidadArma.Francotirador => $"hasta {magnitud}% más daño según la distancia",
-        HabilidadArma.Carnicero => $"hasta {magnitud}% más daño de cerca",
-        HabilidadArma.Sed => $"+{magnitud}% de daño por muerte, se reinicia cada oleada",
-        HabilidadArma.Doble => "dispara dos veces",
-
-        HabilidadArma.Ejecutar => $"MATA de un golpe por debajo del {magnitud}% de vida",
-        HabilidadArma.Cadena => $"le pega a TODOS los que tenga en alcance, {magnitud}% del golpe",
-        HabilidadArma.Codicia => $"+{magnitud}% de oro por cada enemigo que mata",
-        HabilidadArma.Vampirismo => $"cura {magnitud} de vida a la Torre por golpe",
-
-        _ => "",
-    };
 }

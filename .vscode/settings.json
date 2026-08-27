@@ -1,0 +1,21 @@
+{
+  // Los datos de balance de `Datos\` llevan comentarios A PROPÓSITO: un número
+  // de balance sin la explicación de por qué es ese número es un número que
+  // nadie se anima a tocar (DATOS.md §4).
+  //
+  // El juego los lee con `JsonCommentHandling.Skip`, así que los comentarios no
+  // molestan a nadie salvo al validador de VS Code, que trata todo `.json` como
+  // JSON estricto y marca la primera línea con «Comments are not permitted in
+  // JSON». Esto le dice que los abra como JSONC, que es lo que realmente son.
+  //
+  // ⚠ Está duplicado en `..\.vscode\settings.json` a propósito: VS Code solo lee
+  // el `.vscode` de la carpeta que se abrió como workspace, y este proyecto se
+  // abre a veces desde la raíz `TowerDefender\` y a veces desde `Client\`. Esta
+  // copia es la que se versiona —la raíz no es un repo—.
+  //
+  // ⚠ El glob NO incluye `Datos/layouts/`. Esos los escribe el editor de
+  // layouts, no una persona, y se leen con el parser estricto.
+  "files.associations": {
+    "**/Datos/*.json": "jsonc"
+  }
+}

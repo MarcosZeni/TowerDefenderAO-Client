@@ -22,8 +22,7 @@ public readonly record struct CompraNpc(int TipoId, int PerkVida, int PerkVeloci
 /// La receta de una oleada: cuánto se puede gastar y en qué.
 /// </summary>
 /// <remarks>
-/// Provisional en <see cref="Balance"/>; la versión final sale de
-/// <c>oleadas.json</c> por área (OLEADAS.md).
+/// La arma <see cref="Balance.RecetaDe"/> con las curvas de <c>curvas.json</c>.
 /// </remarks>
 public sealed class RecetaOleada
 {
@@ -64,58 +63,16 @@ public sealed class RecetaOleada
 /// </remarks>
 public static class ArmadorOleadas
 {
-    /// <summary>
-    /// Lo que cuesta ponerle un perk a un NPC, en puntos de presupuesto.
-    /// </summary>
-    /// <remarks>
-    /// <b>Que el perk se pague del mismo presupuesto es lo que impide que
-    /// buffear descontrole la dificultad</b>: una oleada con perks trae MENOS
-    /// bichos, no los mismos más fuertes. Así el presupuesto sigue siendo el
-    /// único número que hay que mirar para saber cuán dura es una oleada.
-    /// </remarks>
-    // ⚠ Números de la propuesta V2 (2026-08-27): escalones más chicos, más
-    // caros y CON TECHO. Los viejos (50%/12 sin tope) fabricaban muros de HP
-    // aleatorios en la mitad de la corrida.
-    private const int CostoPerkVida = 20;
-
-    private const int CostoPerkVelocidad = 15;
-
-    /// <summary>
-    /// Tope de NPCs por oleada.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Existe porque una oleada de mil bichos no es difícil: es
-    /// larga.</b> El presupuesto crece con el cuadrado de la oleada —de 59 en la
-    /// primera a 90.050 en la última, unas 1.500 veces— y el costo del bicho más
-    /// caro del tramo sube apenas unas pocas. Sin tope, la oleada 55 compraba
-    /// más de mil enemigos y tardaba media hora en desfilar, con la Torre
-    /// intacta todo el tiempo.</para>
-    ///
-    /// <para>Medido con el corredor headless: las corridas se quedaban clavadas
-    /// en la oleada 55 contra el techo de 700.000 ticks.</para>
-    /// </remarks>
-    private const int MaxNpcsPorOleada = 60;
-
-    /// <summary>
-    /// Cuánto suma cada escalón de perk de vida, en puntos porcentuales.
-    /// </summary>
-    /// <remarks>
-    /// Los escalones se acumulan sobre el mismo NPC: es la válvula por donde
-    /// sale el presupuesto que no entra en NPCs nuevos. Una oleada tardía trae
-    /// <b>los mismos 60 bichos, pero muy buffeados</b>, en vez de una marea.
-    /// </remarks>
-    private const int EscalonPerkVida = 25;
-
-    /// <summary>Techo del perk de vida: +200% por NPC (propuesta V2).</summary>
-    private const int MaxPerkVida = 200;
-
-    private const int EscalonPerkVelocidad = 8;
-
-    /// <summary>Techo del perk de velocidad: un bicho que vuela no se puede matar.</summary>
-    private const int MaxPerkVelocidad = 64;
+    // ⚠ Acá ya no hay números. Todos viven en `curvas.json` («perksNpc»,
+    // «oleada», «jefe») y llegan por DatosBalance. Lo que queda son las reglas
+    // de cómo se gasta el presupuesto, que es código y no configuración.
+    //
+    // Lo que esos números significan, y por qué son esos, está escrito en el
+    // propio curvas.json: es el lugar donde los va a leer el que balancea.
 
     public static OleadaArmada Armar(RecetaOleada receta, Aleatorio rng, DatosBalance datos)
     {
+        var cfg = datos.Curvas.PerksNpc;
         var npcs = new List<CompraNpc>();
         int restante = receta.Presupuesto;
 
@@ -133,7 +90,7 @@ public static class ArmadorOleadas
 
         // Regla 1: se gasta hasta que no alcance para el más barato — ahora con
         // el tope de cantidad. Lo que sobre se convierte en perks más abajo.
-        while (restante >= masBarato && npcs.Count < MaxNpcsPorOleada)
+        while (restante >= masBarato && npcs.Count < datos.Curvas.Oleada.MaxNpcs)
         {
             int tipoId = ElegirPorPeso(receta.Permitidos, rng);
             int costo = Costo(tipoId, datos);
@@ -156,15 +113,15 @@ public static class ArmadorOleadas
 
             if (rng.Ocurre(receta.ChancePerkNpc))
             {
-                if (rng.Ocurre(50) && restante >= CostoPerkVida)
+                if (rng.Ocurre(cfg.ChanceVidaEnLaTirada) && restante >= cfg.CostoVida)
                 {
-                    perkVida = EscalonPerkVida;
-                    restante -= CostoPerkVida;
+                    perkVida = cfg.EscalonVida;
+                    restante -= cfg.CostoVida;
                 }
-                else if (restante >= CostoPerkVelocidad)
+                else if (restante >= cfg.CostoVelocidad)
                 {
-                    perkVelocidad = EscalonPerkVelocidad;
-                    restante -= CostoPerkVelocidad;
+                    perkVelocidad = cfg.EscalonVelocidad;
+                    restante -= cfg.CostoVelocidad;
                 }
             }
 
@@ -175,7 +132,7 @@ public static class ArmadorOleadas
         // comprados. Es la misma regla de siempre —el perk se paga del
         // presupuesto— aplicada al sobrante: en las oleadas tardías eso es casi
         // todo el presupuesto, y de ahí sale la dificultad.
-        restante = RepartirSobranteEnPerks(npcs, restante, rng);
+        restante = RepartirSobranteEnPerks(npcs, restante, rng, cfg);
 
         if (hayJefe)
         {
@@ -183,7 +140,8 @@ public static class ArmadorOleadas
             // (propuesta V2): el jefe es fuerte por diseño, no por residuo del
             // presupuesto. Antes era sobrante/4 sin tope y en las áreas tardías
             // salían jefes con miles de por ciento de HP.
-            int vidaExtraJefe = System.Math.Min(restante / 8, 150);
+            var j = datos.Curvas.Jefe;
+            int vidaExtraJefe = System.Math.Min(restante / j.DivisorVidaExtra, j.MaxVidaExtra);
             npcs.Add(new CompraNpc(receta.JefeTipoId, vidaExtraJefe, 0, EsJefe: true));
         }
 
@@ -209,38 +167,39 @@ public static class ArmadorOleadas
     /// defensa que lo toque. La vida no necesita techo — más vida siempre es
     /// solo más tiempo bajo fuego.</para>
     /// </remarks>
-    private static int RepartirSobranteEnPerks(List<CompraNpc> npcs, int restante, Aleatorio rng)
+    private static int RepartirSobranteEnPerks(
+        List<CompraNpc> npcs, int restante, Aleatorio rng, DatoPerksNpc cfg)
     {
         if (npcs.Count == 0)
             return restante;
 
         // El jefe todavía no está en la lista, así que esto solo toca a la tropa.
-        while (restante >= CostoPerkVida)
+        while (restante >= cfg.CostoVida)
         {
             bool gastoAlgo = false;
 
-            for (int i = 0; i < npcs.Count && restante >= CostoPerkVida; i++)
+            for (int i = 0; i < npcs.Count && restante >= cfg.CostoVida; i++)
             {
                 var npc = npcs[i];
 
                 // La velocidad sale a veces y con techo; la vida es el destino
                 // por defecto del presupuesto.
                 bool aVelocidad =
-                    npc.PerkVelocidad < MaxPerkVelocidad &&
-                    restante >= CostoPerkVelocidad &&
-                    rng.Ocurre(25);
+                    npc.PerkVelocidad < cfg.MaxVelocidad &&
+                    restante >= cfg.CostoVelocidad &&
+                    rng.Ocurre(cfg.ChanceVelocidadEnSobrante);
 
                 // ⚠ La vida también tiene techo ahora (propuesta V2): un NPC
                 // topeado en las dos cosas se saltea, y si TODOS están topeados
                 // gastoAlgo queda en falso y el sobrante va al jefe.
-                if (!aVelocidad && npc.PerkVida >= MaxPerkVida)
+                if (!aVelocidad && npc.PerkVida >= cfg.MaxVida)
                     continue;
 
                 npcs[i] = aVelocidad
-                    ? npc with { PerkVelocidad = npc.PerkVelocidad + EscalonPerkVelocidad }
-                    : npc with { PerkVida = npc.PerkVida + EscalonPerkVida };
+                    ? npc with { PerkVelocidad = npc.PerkVelocidad + cfg.EscalonVelocidad }
+                    : npc with { PerkVida = npc.PerkVida + cfg.EscalonVida };
 
-                restante -= aVelocidad ? CostoPerkVelocidad : CostoPerkVida;
+                restante -= aVelocidad ? cfg.CostoVelocidad : cfg.CostoVida;
                 gastoAlgo = true;
             }
 
@@ -301,7 +260,9 @@ public static class ArmadorOleadas
 
         // La velocidad entra porque un bicho rápido pasa menos tiempo bajo fuego,
         // y eso lo hace más difícil sin tocarle una estadística de combate.
-        return (e.Hp / 4) + (e.DanoMax / 2) + (e.Velocidad / 8);
+        var c = datos.Curvas.Oleada;
+
+        return (e.Hp / c.DivisorHp) + (e.DanoMax / c.DivisorDanoMax) + (e.Velocidad / c.DivisorVelocidad);
     }
 }
 

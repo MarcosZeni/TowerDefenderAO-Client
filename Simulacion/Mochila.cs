@@ -34,7 +34,7 @@ public readonly record struct CosaGuardada(TipoCosa Tipo, int Id);
 /// distintos, sin pesos, sin dos bolsos: eso es Tetris de inventario, que es un
 /// juego distinto. Austral lo tiene porque es un MMO; un TD no lo necesita.</para>
 /// </remarks>
-public sealed class Mochila
+public sealed class Mochila(DatosBalance datos)
 {
     private readonly List<CosaGuardada> _cosas = [];
     private readonly Dictionary<int, Arma> _armas = [];
@@ -44,7 +44,10 @@ public sealed class Mochila
 
     public int Ocupados => _cosas.Count;
 
-    public bool Llena => _cosas.Count >= Balance.LugaresMochila;
+    /// <summary>Cuántos lugares tiene. Sale de <c>curvas.json</c>.</summary>
+    public int Tope { get; } = datos.Curvas.Defensores.LugaresMochila;
+
+    public bool Llena => _cosas.Count >= Tope;
 
     public Arma? ArmaPorId(int id) => _armas.GetValueOrDefault(id);
 

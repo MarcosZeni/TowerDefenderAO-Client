@@ -27,8 +27,19 @@ public static class ValidadorDatos
 
         var datos = CargadorDatos.Actual;
 
+        // ⚠ Primero de todo: si alguna de las siete tablas no cargó, lo demás va
+        // a validar los datos de emergencia y va a decir que está todo bien.
+        // El error del cargador es el único que importa mientras exista.
+        if (CargadorDatos.Problema.Length > 0)
+        {
+            GD.PrintErr($"  ✗ {CargadorDatos.Problema}");
+            GD.PrintErr("── NO SE PUDO CARGAR · el resto no se validó ──────");
+            return;
+        }
+
         ValidarBestiario(datos, problemas, avisos);
         ValidarApariencia(problemas, avisos);
+        ValidarTablas(datos, problemas, avisos);
         ValidarPerks(problemas, avisos);
         ValidarPlanos(problemas);
         ValidarLayouts(problemas, avisos);
@@ -43,6 +54,97 @@ public static class ValidadorDatos
         GD.Print(problemas.Count == 0
             ? $"── OK · {avisos.Count} aviso(s) ───────────────────────"
             : $"── {problemas.Count} PROBLEMA(S) ──────────────────────");
+    }
+
+    /// <summary>
+    /// Lo que los archivos de datos no pueden verificar solos.
+    /// </summary>
+    /// <remarks>
+    /// <para>El lector de <c>Tablas.cs</c> ya rechaza lo que está mal <b>dentro
+    /// de un archivo</b> —un id repetido, un plano que fusiona un Bronce, un
+    /// alcance 1—. Acá van los cruces <b>entre</b> archivos y las cosas que no
+    /// son errores pero conviene mirar.</para>
+    ///
+    /// <para>La diferencia importa: lo que rompe la simulación tira al cargar y
+    /// el juego ni abre; lo que solo es raro sale por acá como aviso y se juega
+    /// igual.</para>
+    /// </remarks>
+    private static void ValidarTablas(DatosBalance datos, List<string> problemas, List<string> avisos)
+    {
+        // Toda clase del enum tiene que estar en clases.json: si falta una, el
+        // juego funciona hasta que la elección la ofrece y ahí tira.
+        foreach (var clase in ArmadorEleccion.Todas)
+        {
+            try
+            {
+                datos.Clases.De(clase);
+            }
+            catch (DatosInvalidosException)
+            {
+                problemas.Add($"clases.json no define «{clase}», y la elección la puede ofrecer");
+            }
+        }
+
+        avisos.Add(
+            $"clases: {datos.Clases.Todas.Count} · {datos.Clases.Ofensivas().Length} ofensivas · " +
+            $"nivel máximo {datos.Clases.SlotsPerkPorClase} (+{datos.Clases.ExtraDanoPorNivel}% daño por nivel)");
+
+        // ⚠ El truncamiento entero se come mejoras enteras cuando el daño base es
+        // chico. Es la anomalía P0 de la propuesta V2 y no es un error de datos,
+        // pero es invisible: el jugador gasta oro en algo que no hace nada.
+        foreach (var c in datos.Clases.Todas)
+        {
+            int mudos = 0;
+
+            for (int nivel = 2; nivel <= datos.Clases.SlotsPerkPorClase; nivel++)
+            {
+                int anterior = Enteros.ConPorcentajes(c.Dano, (nivel - 2) * datos.Clases.ExtraDanoPorNivel);
+                int actual = Enteros.ConPorcentajes(c.Dano, (nivel - 1) * datos.Clases.ExtraDanoPorNivel);
+
+                if (actual == anterior)
+                    mudos++;
+            }
+
+            if (mudos > 0)
+            {
+                avisos.Add(
+                    $"{c.Clase}: daño base {c.Dano}, {mudos} de {datos.Clases.SlotsPerkPorClase - 1} niveles " +
+                    "NO suben nada por truncamiento entero");
+            }
+        }
+
+        // Lo mismo con los perks numéricos: un perk que no mueve el número en
+        // ninguna clase es un slot y un drop gastados en nada.
+        foreach (var p in datos.Perks.Todos)
+        {
+            if (p.Efecto is not (EfectoPerk.Dano or EfectoPerk.Alcance))
+                continue;
+
+            int sirveEn = 0;
+
+            foreach (var c in datos.Clases.Todas)
+            {
+                if (!p.SirveA(c.Clase))
+                    continue;
+
+                int baseValor = p.Efecto == EfectoPerk.Dano ? c.Dano : c.AlcanceCeldas;
+
+                if (Enteros.ConPorcentajes(baseValor, p.Magnitud) > baseValor)
+                    sirveEn++;
+            }
+
+            if (sirveEn == 0)
+                problemas.Add($"el perk «{p.Nombre}» (+{p.Magnitud}%) no cambia el número en NINGUNA clase: trunca a cero");
+        }
+
+        // El jefe final tiene que existir, o la corrida no se puede ganar.
+        int ultima = datos.Curvas.Corrida.CantidadAreas;
+        var jefeFinal = datos.JefeDe(ultima);
+
+        if (jefeFinal is null)
+            problemas.Add($"el área {ultima} no tiene jefe: la corrida no se puede terminar");
+        else
+            avisos.Add($"jefe final: «{jefeFinal.Nombre}» ({jefeFinal.Hp} HP) en la oleada {datos.Curvas.Corrida.OleadasPorCorrida}");
     }
 
     private static void ValidarBestiario(DatosBalance datos, List<string> problemas, List<string> avisos)
@@ -272,7 +374,7 @@ public static class ValidadorDatos
         var ids = new HashSet<int>();
         int oros = 0, unicos = 0;
 
-        foreach (var p in CatalogoPerks.Todos)
+        foreach (var p in CargadorDatos.Actual.Perks.Todos)
         {
             if (!ids.Add(p.Id))
                 problemas.Add($"id de perk repetido: {p.Id} ({p.Nombre})");
@@ -311,35 +413,35 @@ public static class ValidadorDatos
         if (oros < 2)
             problemas.Add($"hay {oros} perk(s) de Oro: la fusión necesita al menos dos para combinar");
 
-        avisos.Add($"catálogo: {CatalogoPerks.Todos.Count} perks ({oros} Oro, {unicos} Único)");
+        avisos.Add($"catálogo: {CargadorDatos.Actual.Perks.Todos.Count} perks ({oros} Oro, {unicos} Único)");
     }
 
     private static void ValidarPlanos(List<string> problemas)
     {
         bool hayInicial = false;
 
-        foreach (var plano in Planos.Todos)
+        foreach (var plano in CargadorDatos.Actual.Planos.Todos)
         {
             if (plano.Inicial)
                 hayInicial = true;
 
             foreach (int id in new[] { plano.OroA, plano.OroB })
             {
-                if (id < 0 || id >= CatalogoPerks.Todos.Count)
+                if (id < 0 || id >= CargadorDatos.Actual.Perks.Todos.Count)
                 {
                     problemas.Add($"el plano {plano.Nombre} referencia el perk {id}, que no existe");
                     continue;
                 }
 
-                if (CatalogoPerks.Por(id).Tier != TierPerk.Oro)
+                if (CargadorDatos.Actual.Perks.Por(id).Tier != TierPerk.Oro)
                     problemas.Add($"el plano {plano.Nombre} usa el perk {id}, que no es de Oro");
             }
 
-            if (plano.UnicoResultante < 0 || plano.UnicoResultante >= CatalogoPerks.Todos.Count)
+            if (plano.UnicoResultante < 0 || plano.UnicoResultante >= CargadorDatos.Actual.Perks.Todos.Count)
             {
                 problemas.Add($"el plano {plano.Nombre} produce el perk {plano.UnicoResultante}, que no existe");
             }
-            else if (CatalogoPerks.Por(plano.UnicoResultante).Tier != TierPerk.Unico)
+            else if (CargadorDatos.Actual.Perks.Por(plano.UnicoResultante).Tier != TierPerk.Unico)
             {
                 problemas.Add($"el plano {plano.Nombre} produce un perk que no es Único");
             }
@@ -450,7 +552,7 @@ public static class ValidadorDatos
         int npcsOleada1 = 0;
         int npcsOleada100 = 0;
 
-        for (int oleada = 1; oleada <= Balance.OleadasPorCorrida; oleada++)
+        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida; oleada++)
         {
             var receta = Balance.RecetaDe(oleada, datos);
 
@@ -469,7 +571,7 @@ public static class ValidadorDatos
                 problemas.Add($"la oleada {oleada} no compró ningún enemigo: se pasaría sola");
 
             if (oleada == 1) npcsOleada1 = armada.Npcs.Count;
-            if (oleada == Balance.OleadasPorCorrida) npcsOleada100 = armada.Npcs.Count;
+            if (oleada == CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida) npcsOleada100 = armada.Npcs.Count;
 
             // Una oleada larguísima no es difícil: es larga. El tope de compra
             // existe justamente para eso, así que si esto salta, el tope no está
@@ -481,15 +583,15 @@ public static class ValidadorDatos
         // Las ocho oleadas de jefe son las únicas que sueltan Oro. Si el reparto
         // de áreas cambiara y quedaran menos, la fusión se volvería inalcanzable.
         int conJefe = 0;
-        for (int oleada = 1; oleada <= Balance.OleadasPorCorrida; oleada++)
-            if (Areas.TieneJefe(oleada))
+        for (int oleada = 1; oleada <= CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida; oleada++)
+            if (CargadorDatos.Actual.Areas.TieneJefe(oleada))
                 conJefe++;
 
-        if (conJefe != Balance.CantidadAreas)
-            problemas.Add($"hay {conJefe} oleadas con jefe y {Balance.CantidadAreas} áreas: tiene que haber una por área");
+        if (conJefe != CargadorDatos.Actual.Curvas.Corrida.CantidadAreas)
+            problemas.Add($"hay {conJefe} oleadas con jefe y {CargadorDatos.Actual.Curvas.Corrida.CantidadAreas} áreas: tiene que haber una por área");
 
-        if (!Areas.TieneJefe(Balance.OleadasPorCorrida))
-            problemas.Add($"la oleada {Balance.OleadasPorCorrida} no tiene jefe: es como se gana la corrida");
+        if (!CargadorDatos.Actual.Areas.TieneJefe(CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida))
+            problemas.Add($"la oleada {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida} no tiene jefe: es como se gana la corrida");
 
         avisos.Add($"curva: oleada 1 trae {npcsOleada1} enemigos, la 100 trae {npcsOleada100}");
     }

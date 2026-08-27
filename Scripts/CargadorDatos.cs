@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Godot;
 using TowerOfArgentum.Simulacion;
 
@@ -21,25 +22,133 @@ namespace TowerOfArgentum;
 public static class CargadorDatos
 {
     private const string RutaEnemigos = "res://Datos/enemigos.json";
+    private const string RutaClases = "res://Datos/clases.json";
+    private const string RutaPerks = "res://Datos/perks.json";
+    private const string RutaPlanos = "res://Datos/planos.json";
+    private const string RutaArmas = "res://Datos/generador-armas.json";
+    private const string RutaCurvas = "res://Datos/curvas.json";
+    private const string RutaCombate = "res://Datos/combate.json";
+
+    /// <summary>
+    /// Todo lo que hay que leer, EN ESTE ORDEN.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El orden es parte del hash: se concatenan los textos tal como salen de
+    /// acá. Reordenar la lista cambia el hash sin cambiar un solo número, y el
+    /// servidor rechazaría a media población por nada.
+    /// </remarks>
+    private static readonly string[] _archivos =
+    [
+        RutaEnemigos, RutaClases, RutaPerks, RutaPlanos, RutaArmas, RutaCurvas, RutaCombate,
+    ];
 
     private static DatosBalance? _cache;
+
+    /// <summary>El último error de carga, para que la UI lo pueda mostrar.</summary>
+    public static string Problema { get; private set; } = "";
 
     /// <summary>Los datos de la temporada actual.</summary>
     public static DatosBalance Actual => _cache ??= Cargar();
 
+    /// <summary>Vuelve a leer todo del disco. La usan las herramientas offline.</summary>
+    public static void Olvidar() => _cache = null;
+
     private static DatosBalance Cargar()
     {
-        string json = LeerTexto(RutaEnemigos);
+        Problema = "";
 
-        if (string.IsNullOrEmpty(json))
+        try
         {
-            GD.PushError(
-                $"No se pudo leer {RutaEnemigos}. Corré el importador primero:\n" +
-                "  Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --importar-npcs");
+            return CargarOTirar();
+        }
+        catch (DatosInvalidosException e)
+        {
+            // ⚠ No se cae a valores por defecto. Un número de balance que se cae
+            // a un default es una corrida que mide otra cosa que las demás, y el
+            // jugador no se entera hasta que el ranking no le cierra. El hash
+            // queda en "sin-datos" y el servidor la rechaza AL ABRIRLA, que es
+            // infinitamente mejor que rechazarla después de tres horas.
+            Problema = e.Message;
+            GD.PushError($"Datos inválidos: {e.Message}");
 
             return Vacio();
         }
+    }
 
+    private static DatosBalance CargarOTirar()
+    {
+        var textos = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        var crudo = new StringBuilder();
+
+        foreach (string ruta in _archivos)
+        {
+            string texto = LeerTexto(ruta);
+
+            if (string.IsNullOrEmpty(texto))
+            {
+                throw new DatosInvalidosException(
+                    $"no se pudo leer {ruta}. Si falta enemigos.json, corré el importador:\n" +
+                    "  Godot_v4.8-dev3_mono_win64.exe --headless --path . -- --importar-npcs");
+            }
+
+            textos[ruta] = texto;
+            crudo.Append(texto);
+        }
+
+        var perks = LectorTablas.Perks(textos[RutaPerks]);
+        var (layouts, textoLayouts) = CargarLayouts();
+
+        var datos = new DatosBalance
+        {
+            Version = VersionDe(textos[RutaEnemigos]),
+
+            // ⚠ El hash cubre TODO lo que es entrada de la simulación: el
+            // bestiario, las seis tablas y los layouts.
+            //
+            // Un layout es entrada igual que un enemigo —cambiarle una celda
+            // cambia el recorrido, el tiempo de tiro y el resultado— y una curva
+            // es entrada igual que un layout. Lo que no entra al hash es lo que
+            // permite que dos corridas midan cosas distintas sin que nadie se
+            // entere.
+            //
+            // ⚠ Se hashea el TEXTO CRUDO, comentarios incluidos: cambiar un
+            // comentario cambia el hash. Es más estricto de lo necesario y está
+            // bien que lo sea — el costo de un falso positivo es reimportar; el
+            // de un falso negativo es un ranking que no mide lo mismo.
+            Hash = HashDe(crudo.ToString() + textoLayouts),
+
+            Enemigos = EnemigosDe(textos[RutaEnemigos]),
+            Layouts = layouts,
+
+            Clases = LectorTablas.Clases(textos[RutaClases]),
+            Perks = perks,
+            Planos = LectorTablas.Planos(textos[RutaPlanos], perks),
+            Armas = LectorTablas.Armas(textos[RutaArmas]),
+            Curvas = LectorTablas.Curvas(textos[RutaCurvas]),
+            Combate = LectorTablas.Combate(textos[RutaCombate]),
+        };
+
+        datos.Indexar();
+
+        GD.Print(
+            $"Datos v{datos.Version} · {datos.Enemigos.Count} enemigos · " +
+            $"{datos.Clases.Todas.Count} clases · {datos.Perks.Todos.Count} perks · " +
+            $"{datos.Planos.Todos.Count} planos · hash {datos.Hash[..12]}…");
+
+        return datos;
+    }
+
+    /// <summary>
+    /// El bestiario, tal como sale del importador.
+    /// </summary>
+    /// <remarks>
+    /// Es el único de los siete que sigue leyéndose con el deserializador de
+    /// objetos: lo escribe una máquina —el importador— así que no lleva
+    /// comentarios ni hace falta el control fino de errores que sí necesitan los
+    /// archivos que edita una persona.
+    /// </remarks>
+    private static List<DatoEnemigo> EnemigosDe(string json)
+    {
         var opciones = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         ArchivoEnemigos? archivo;
 
@@ -49,15 +158,11 @@ public static class CargadorDatos
         }
         catch (JsonException e)
         {
-            GD.PushError($"{RutaEnemigos} no es JSON válido: {e.Message}");
-            return Vacio();
+            throw new DatosInvalidosException($"{RutaEnemigos} no es JSON válido: {e.Message}");
         }
 
         if (archivo?.Enemigos is null || archivo.Enemigos.Count == 0)
-        {
-            GD.PushError($"{RutaEnemigos} no trae enemigos.");
-            return Vacio();
-        }
+            throw new DatosInvalidosException($"{RutaEnemigos} no trae enemigos.");
 
         var enemigos = new List<DatoEnemigo>(archivo.Enemigos.Count);
 
@@ -80,29 +185,20 @@ public static class CargadorDatos
             });
         }
 
-        var (layouts, textoLayouts) = CargarLayouts();
+        return enemigos;
+    }
 
-        var datos = new DatosBalance
+    private static int VersionDe(string json)
+    {
+        try
         {
-            Version = archivo.Version,
-
-            // ⚠ El hash cubre el bestiario Y los layouts.
-            //
-            // Un layout es entrada de la simulación igual que un enemigo: cambiarle
-            // una celda cambia el recorrido, el tiempo de tiro y el resultado. Si
-            // no entrara al hash, el servidor revalidaría con otros mapas y
-            // rechazaría corridas honestas.
-            Hash = HashDe(json + textoLayouts),
-
-            Enemigos = enemigos,
-            Layouts = layouts,
-        };
-
-        datos.Indexar();
-
-        GD.Print($"Datos v{datos.Version} · {enemigos.Count} enemigos · hash {datos.Hash[..12]}…");
-
-        return datos;
+            var opciones = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            return JsonSerializer.Deserialize<ArchivoEnemigos>(json, opciones)?.Version ?? 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
     }
 
     /// <summary>
@@ -179,11 +275,11 @@ public static class CargadorDatos
             if (contenido.Length == 0)
                 continue;
 
-            var filas = FilasDe(contenido);
+            var filas = FilasDe(contenido, out string motivo);
 
             if (filas is null)
             {
-                GD.PushWarning($"{nombre}: no tiene «filas»");
+                GD.PushWarning($"{nombre}: {motivo}, se saltea");
                 continue;
             }
 
@@ -204,45 +300,144 @@ public static class CargadorDatos
         return (mapas, texto.ToString());
     }
 
-    private static List<string>? FilasDe(string contenido)
+    /// <summary>
+    /// Las filas ASCII de un layout, o <c>null</c> con el motivo en
+    /// <paramref name="motivo"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ El motivo se devuelve en vez de escribir siempre el mismo aviso.
+    /// Antes un JSON roto y un archivo sin la clave <c>filas</c> devolvían los dos
+    /// <c>null</c>, y el aviso decía «no tiene filas» en los dos casos: quien
+    /// rompía una coma se pasaba un rato buscando una clave que estaba ahí.</para>
+    ///
+    /// <para>Se parsea con las mismas opciones que las tablas de balance —admite
+    /// comentarios y comas colgando— por consistencia y no porque haga falta:
+    /// estos archivos los escribe <c>EditorLayouts.tscn</c>, que los reescribe
+    /// enteros y borraría cualquier comentario que alguien les agregue.</para>
+    /// </remarks>
+    private static List<string>? FilasDe(string contenido, out string motivo)
     {
+        motivo = "";
+
+        System.Text.Json.Nodes.JsonNode? json;
+
         try
         {
-            var json = System.Text.Json.Nodes.JsonNode.Parse(contenido);
-            var filas = json?["filas"]?.AsArray();
-
-            if (filas is null)
-                return null;
-
-            var lista = new List<string>(filas.Count);
-
-            foreach (var f in filas)
-                lista.Add(f?.GetValue<string>() ?? "");
-
-            return lista;
+            json = System.Text.Json.Nodes.JsonNode.Parse(
+                contenido,
+                documentOptions: new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                });
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
+            motivo = $"no es JSON válido — {e.Message}";
             return null;
         }
+
+        JsonArray? filas;
+
+        try
+        {
+            filas = json?["filas"]?.AsArray();
+        }
+        catch (System.InvalidOperationException)
+        {
+            motivo = "«filas» no es una lista";
+            return null;
+        }
+
+        if (filas is null)
+        {
+            motivo = "no tiene «filas»";
+            return null;
+        }
+
+        var lista = new List<string>(filas.Count);
+
+        foreach (var f in filas)
+        {
+            if (f is null)
+            {
+                motivo = "«filas» tiene un elemento nulo";
+                return null;
+            }
+
+            try
+            {
+                lista.Add(f.GetValue<string>());
+            }
+            catch (System.Exception e) when (e is System.InvalidOperationException or System.FormatException)
+            {
+                motivo = "«filas» tiene un elemento que no es texto";
+                return null;
+            }
+        }
+
+        return lista;
     }
 
     /// <summary>
-    /// Datos vacíos, para que el juego no explote si falta el archivo.
+    /// Datos vacíos, para que el menú principal abra y pueda mostrar el error en
+    /// vez de que el juego se cierre con una excepción.
     /// </summary>
     /// <remarks>
-    /// El hash queda en <c>"sin-datos"</c>, que no va a coincidir con el del
-    /// servidor: la corrida se rechaza al abrirse en vez de jugarse con un
-    /// bestiario vacío y reportar un resultado sin sentido.
+    /// <para>⚠ <b>Estos números NO son un balance de reserva.</b> Son mínimos
+    /// deliberadamente absurdos —una clase, ningún perk, ningún enemigo— para que
+    /// sea imposible confundirlos con los de verdad y para que cualquier intento
+    /// de jugar falle rápido y fuerte.</para>
+    ///
+    /// <para>El hash queda en <c>"sin-datos"</c>, que no va a coincidir con el del
+    /// servidor: la corrida se rechaza <b>al abrirse</b> en vez de jugarse con
+    /// datos inventados y reportar un resultado sin sentido.</para>
     /// </remarks>
     private static DatosBalance Vacio()
     {
+        var perks = new TablaPerks([]);
+
         var datos = new DatosBalance
         {
             Version = 0,
             Hash = "sin-datos",
             Enemigos = [],
             Layouts = [],
+
+            Clases = new TablaClases(
+                [new DatoClase(Clase.Guerrero, 1, 1, 2, 30, false)],
+                extraDanoPorNivel: 0,
+                slotsPerkPorClase: 1),
+
+            Perks = perks,
+            Planos = new TablaPlanos([]),
+
+            Armas = new TablaArmas(
+                paso: 5, costoDano: 1, costoCadencia: 1, costoAlcance: 1,
+                new RangoChance(0, 0, 0), new RangoChance(0, 0, 0), new RangoChance(0, 0, 0),
+                porcLegendaria: 0, porcEpica: 0, porcRara: 0, porcComun: 0,
+                divisorValor: 1, multiplicadorPrecioTienda: 1,
+                [HabilidadArma.Ninguna], [HabilidadArma.Ninguna], [HabilidadArma.Ninguna],
+                [], "", "", "", "", "", ""),
+
+            Curvas = new DatoCurvas(
+                new DatoTorre(1, 1, 30),
+                new DatoCorrida(1, 1, [1], 1, 30),
+                new DatoDefensores(1, 1, 50, 100),
+                new DatoEconomia(1, 0, 0),
+                new DatoPresupuesto(0, 0, 1, 1),
+                new DatoCurvasPorOleada(
+                    new CurvaLineal(0, 0), new CurvaLineal(0, 0), new CurvaLineal(0, 0),
+                    30, 1, 30, 30, 1, 0, 0),
+                new DatoTienda(0, 0, 0, new CurvaLineal(0, 0), new CurvaLineal(0, 0)),
+                new DatoDrops(0, 0),
+                new DatoOleada(1, 1, 1, 1, 1, 1, 30),
+                new DatoPerksNpc(1, 1, 0, 0, 0, 0, 0, 0),
+                new DatoJefe(1, 0, "")),
+
+            Combate = new DatoCombate(
+                2, 1, 60, 90, 2, 2, 1, 2, 3, 4, 6, 6, 25, 4, 7,
+                4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60),
         };
 
         datos.Indexar();

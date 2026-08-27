@@ -72,7 +72,7 @@ public partial class Hud : Control
 
         // El "/ 100" va escrito a propósito: la corrida TERMINA en la 100, y eso
         // hay que comunicarlo desde la oleada 1, no descubrirlo al llegar.
-        Texto($"OLEADA  {p.Oleada} / {Balance.OleadasPorCorrida}",
+        Texto($"OLEADA  {p.Oleada} / {CargadorDatos.Actual.Curvas.Corrida.OleadasPorCorrida}",
             Escala.LienzoAncho - 384, 62, 28, Blanco);
 
         // El ranking desempata por ticks: si el cronómetro no se muestra, nadie
@@ -230,7 +230,7 @@ public partial class Hud : Control
             bool elegida = ficha.Clase == _juego.ClaseElegida;
 
             var r = RectDeFicha(i);
-            int costo = Simulacion.Balance.StatsDe(ficha.Clase).Costo;
+            int costo = CargadorDatos.Actual.StatsDe(ficha.Clase).Costo;
             bool alcanza = p.Oro >= costo;
 
             DrawRect(r, new Color(0.06f, 0.06f, 0.09f, 0.82f));
@@ -266,9 +266,9 @@ public partial class Hud : Control
         // La mochila: cuando está llena, cada drop obliga a destruir algo. Que se
         // vea el 15/15 antes de que pase es lo que convierte eso en una decisión
         // y no en una sorpresa.
-        bool llena = p.Mochila.Ocupados >= Simulacion.Balance.LugaresMochila;
+        bool llena = p.Mochila.Ocupados >= CargadorDatos.Actual.Curvas.Defensores.LugaresMochila;
 
-        Texto($"mochila {p.Mochila.Ocupados}/{Simulacion.Balance.LugaresMochila}",
+        Texto($"mochila {p.Mochila.Ocupados}/{CargadorDatos.Actual.Curvas.Defensores.LugaresMochila}",
             Escala.LienzoAncho - 220, Escala.LienzoAlto - 40, 19,
             llena ? new Color(0.95f, 0.6f, 0.3f) : Gris);
     }
