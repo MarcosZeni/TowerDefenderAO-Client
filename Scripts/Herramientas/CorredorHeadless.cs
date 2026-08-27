@@ -556,7 +556,7 @@ public static class CorredorHeadless
                 // vacío — que es peor que cualquiera de las dos cosas sola.
                 //
                 // Se arranca la oleada recién cuando no queda nada por hacer.
-                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
+                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes, Politica.Normal);
                 bool compro = !puso && ComprarLoQuePueda(partida, log);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
@@ -728,7 +728,7 @@ public static class CorredorHeadless
                 // vacío — que es peor que cualquiera de las dos cosas sola.
                 //
                 // Se arranca la oleada recién cuando no queda nada por hacer.
-                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
+                bool puso = ColocarUnoEnPreparacion(partida, log, pendientes, politica);
 
                 // ⚠ Las de abajo son lo que SEPARA las políticas. El piso sabe
                 // poner y equipar; comprar, destrabar la mochila y gastar el
@@ -788,7 +788,7 @@ public static class CorredorHeadless
 
                 if (partida.Tick >= tick)
                 {
-                    var clase = ClaseMasCara(partida);
+                    var clase = ClaseParaPoner(partida, politica);
 
                     if (clase is not null && partida.PuedePoner(clase.Value, celda))
                     {
@@ -1043,6 +1043,64 @@ public static class CorredorHeadless
     }
 
     /// <summary>
+    /// Qué clase poner en la próxima celda, o <c>null</c> si el oro no alcanza
+    /// para ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para>Piso y normal ponen <b>la más cara que puedan pagar</b>. Es una
+    /// heurística deliberadamente simple —más caro suele ser mejor— y como el
+    /// roster crece a ocho o nueve clases, el tablero termina repartido entre
+    /// todas.</para>
+    ///
+    /// <para>⚠ <b>El techo CONCENTRA en la mejor clase del roster</b>, y eso no es
+    /// un detalle: un perk vive en la ficha de la clase, así que un Oro puesto en
+    /// una clase que ocupa el 12% del tablero rinde el 12%. Medido: triplicar TODO
+    /// el catálogo de Oro con el tablero repartido movía la corrida una sola
+    /// oleada. Especializar es lo que convierte un comportamiento en una build, y
+    /// «build optimizada» es literalmente el nombre de esta cota.</para>
+    ///
+    /// <para>Se cae a la más cara que se pueda pagar cuando la favorita no entra
+    /// en el bolsillo: dejar la celda vacía esperando es peor que llenarla.</para>
+    /// </remarks>
+    private static DefenderClass? ClaseParaPoner(Run partida, Politica politica)
+    {
+        if (politica == Politica.Techo && ClaseFavorita(partida) is { } favorita
+            && CargadorDatos.Actual.StatsOf(favorita).Cost <= partida.Gold)
+        {
+            return favorita;
+        }
+
+        return ClaseMasCara(partida);
+    }
+
+    /// <summary>
+    /// La clase del roster con mejor daño por tick, pesado por alcance. Es el
+    /// mismo puntaje con el que la política elige en la pantalla de elección, así
+    /// que lo que contrata y lo que pone no se contradicen.
+    /// </summary>
+    private static DefenderClass? ClaseFavorita(Run partida)
+    {
+        DefenderClass? mejor = null;
+        int mejorPuntaje = -1;
+
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            var stats = CargadorDatos.Actual.StatsOf(ficha.DefenderClass);
+
+            int puntaje = stats.Damage * 100 / System.Math.Max(1, stats.CadenceTicks);
+            puntaje = puntaje * (100 + (stats.RangeCells * 15)) / 100;
+
+            if (puntaje > mejorPuntaje)
+            {
+                mejorPuntaje = puntaje;
+                mejor = ficha.DefenderClass;
+            }
+        }
+
+        return mejor;
+    }
+
+    /// <summary>
     /// La clase más cara del roster que el oro alcance a pagar.
     /// </summary>
     /// <remarks>
@@ -1126,14 +1184,13 @@ public static class CorredorHeadless
                 if (politica == Politica.Techo && def.Tier == PerkTier.Gold && HayLugarDeSobra(partida))
                     continue;
 
-                foreach (var ficha in partida.Roster.Classes)
+                var destino = DondeEquipar(partida, def, politica);
+
+                if (destino is { } clase)
                 {
-                    if (PuedeEquipar(ficha, def))
-                    {
-                        log.Agregar(new PlayerAction(
-                            partida.TickDeAccion, ActionType.EquipPerk, i, (int)ficha.DefenderClass, 0));
-                        return;
-                    }
+                    log.Agregar(new PlayerAction(
+                        partida.TickDeAccion, ActionType.EquipPerk, i, (int)clase, 0));
+                    return;
                 }
 
                 continue;
@@ -1152,6 +1209,50 @@ public static class CorredorHeadless
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// En qué clase conviene poner este perk, o <c>null</c> si no entra en ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para>Piso y normal usan la primera que lo acepte: es tosco y es lo que
+    /// tiene que ser, porque miden las cotas de abajo.</para>
+    ///
+    /// <para>⚠ El techo lo pone en la clase que <b>más defensores tiene en el
+    /// tablero</b>. Un perk vive en la ficha de la clase, así que su valor es
+    /// proporcional a cuántas unidades de esa clase están puestas: el mismo Oro en
+    /// una clase con doce defensores vale doce veces más que en una con uno. La
+    /// primera que lo acepte es, casi siempre, la primera que se contrató.</para>
+    /// </remarks>
+    private static DefenderClass? DondeEquipar(Run partida, PerkDefinition def, Politica politica)
+    {
+        DefenderClass? mejor = null;
+        int mejorPuestos = -1;
+
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            if (!PuedeEquipar(ficha, def))
+                continue;
+
+            if (politica != Politica.Techo)
+                return ficha.DefenderClass;
+
+            int puestos = 0;
+
+            foreach (var d in partida.Defenders)
+            {
+                if (d.DefenderClass == ficha.DefenderClass)
+                    puestos++;
+            }
+
+            if (puestos > mejorPuestos)
+            {
+                mejorPuestos = puestos;
+                mejor = ficha.DefenderClass;
+            }
+        }
+
+        return mejor;
     }
 
     /// <summary>
@@ -1517,7 +1618,7 @@ public static class CorredorHeadless
                     if (aperturas >= 3)
                         break;
 
-                    if (!ColocarUnoEnPreparacion(partida, log, pendientes))
+                    if (!ColocarUnoEnPreparacion(partida, log, pendientes, Politica.Normal))
                     {
                         log.Agregar(new PlayerAction(
                             partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -1626,13 +1727,13 @@ public static class CorredorHeadless
     /// queda en la preparación para siempre, porque el reloj no avanza.</para>
     /// </remarks>
     private static bool ColocarUnoEnPreparacion(
-        Run partida, ActionLog log, Queue<(int Tick, Cell Cell)> pendientes)
+        Run partida, ActionLog log, Queue<(int Tick, Cell Cell)> pendientes, Politica politica)
     {
         if (pendientes.Count == 0)
             return false;
 
         var (_, celda) = pendientes.Peek();
-        var clase = ClaseMasCara(partida);
+        var clase = ClaseParaPoner(partida, politica);
 
         // Sin clase asequible o sin lugar válido, no se insiste: se arranca la
         // oleada y se reintenta en la preparación siguiente, con más oro.
