@@ -475,7 +475,11 @@ public static class CorredorHeadless
                 bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
                 bool compro = !puso && ComprarLoQuePueda(partida, log);
 
-                if (!puso && !compro)
+                // Con la mochila trabada la compra rebota: hacer un lugar es lo que
+                // deja que el oro siga teniendo adónde ir.
+                bool libero = !puso && !compro && LiberarMochila(partida, log);
+
+                if (!puso && !compro && !libero)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -611,7 +615,11 @@ public static class CorredorHeadless
                 bool puso = ColocarUnoEnPreparacion(partida, log, pendientes);
                 bool compro = !puso && ComprarLoQuePueda(partida, log);
 
-                if (!puso && !compro)
+                // Con la mochila trabada la compra rebota: hacer un lugar es lo que
+                // deja que el oro siga teniendo adónde ir.
+                bool libero = !puso && !compro && LiberarMochila(partida, log);
+
+                if (!puso && !compro && !libero)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -745,27 +753,146 @@ public static class CorredorHeadless
         return mejor;
     }
 
+    /// <summary>
+    /// Equipa lo primero de la mochila que entre en algún lado: un perk en un
+    /// slot libre, o un arma en una clase que no tenga.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Las armas también.</b> Antes solo miraba perks, y las armas se
+    /// quedaban en la mochila para siempre: llenaban los 15 lugares, y con la
+    /// mochila llena <see cref="ComprarLoQuePueda"/> deja de comprar. El resultado
+    /// era un bot que a mitad de corrida no gastaba más, y un «oro sin gastar» que
+    /// medía eso y no la economía. Es el mismo error que el plan de colocaciones
+    /// que se quedaba sin casilleros.</para>
+    ///
+    /// <para>Se equipa <b>solo en una clase que no tenga arma</b>, nunca
+    /// recambiando: un swap devuelve la vieja a la mochila y el bucle de
+    /// preparación —que corre con el reloj congelado— podría no terminar nunca.
+    /// Cada acción de acá tiene que sacar algo de la mochila.</para>
+    ///
+    /// <para>Una acción por llamada, y la llamada se repite en cada vuelta: así el
+    /// estado que mira siempre es el de después de aplicar la anterior.</para>
+    /// </remarks>
     private static void EquiparLoQuePueda(Run partida, ActionLog log)
     {
         var cosas = partida.Backpack.Items;
 
         for (int i = 0; i < cosas.Count; i++)
         {
-            if (cosas[i].Kind != ItemType.Perk)
-                continue;
+            if (cosas[i].Kind == ItemType.Perk)
+            {
+                var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
 
-            var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
+                foreach (var ficha in partida.Roster.Classes)
+                {
+                    if (ficha.HasFreeSlot && def.WorksFor(ficha.DefenderClass))
+                    {
+                        log.Agregar(new PlayerAction(
+                            partida.TickDeAccion, ActionType.EquipPerk, i, (int)ficha.DefenderClass, 0));
+                        return;
+                    }
+                }
+
+                continue;
+            }
+
+            if (cosas[i].Kind != ItemType.Weapon)
+                continue;
 
             foreach (var ficha in partida.Roster.Classes)
             {
-                if (ficha.HasFreeSlot && def.WorksFor(ficha.DefenderClass))
+                if (ficha.Weapon < 0)
                 {
                     log.Agregar(new PlayerAction(
-                        partida.TickDeAccion, ActionType.EquipPerk, i, (int)ficha.DefenderClass, 0));
+                        partida.TickDeAccion, ActionType.Equip, i, (int)ficha.DefenderClass, 0));
                     return;
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Hace UN lugar en la mochila llena, y solo si hay algo en la tienda para
+    /// poner ahí. Devuelve <c>true</c> si liberó algo.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Solo se tira lo que no sirve.</b> Un perk que ninguna clase del
+    /// roster puede usar es basura —la clase no está y no va a estar— y un arma de
+    /// más cuando las nueve fichas ya tienen la suya es plata. Lo que sí entraría
+    /// en algún lado no se toca: <see cref="EquiparLoQuePueda"/> lo va a agarrar en
+    /// la vuelta siguiente.</para>
+    ///
+    /// <para>⚠ <b>Solo con algo comprable en el stock</b>, y no es un detalle de
+    /// eficiencia: sin esa condición el bucle liberaría un lugar, no compraría
+    /// nada, encontraría la mochila llena otra vez y seguiría hasta vaciarla.
+    /// Atado al stock, se corta solo —la tienda tiene cuatro ofertas y cada compra
+    /// las marca vendidas—.</para>
+    ///
+    /// <para>Existe por el mismo motivo que las armas en <c>EquiparLoQuePueda</c>:
+    /// con la mochila trabada el bot deja de comprar a mitad de corrida, y el «oro
+    /// sin gastar» mide eso en vez de la economía.</para>
+    /// </remarks>
+    private static bool LiberarMochila(Run partida, ActionLog log)
+    {
+        if (partida.Backpack.Ocupados < CargadorDatos.Actual.Curves.Defenders.BackpackSlots)
+            return false;
+
+        bool hayQueComprar = false;
+
+        foreach (var oferta in partida.Shop.Stock)
+        {
+            if (!oferta.Sold && oferta.Price <= partida.Gold)
+            {
+                hayQueComprar = true;
+                break;
+            }
+        }
+
+        if (!hayQueComprar)
+            return false;
+
+        var cosas = partida.Backpack.Items;
+
+        // 1) Un perk que ninguna clase del roster puede equipar nunca.
+        for (int i = 0; i < cosas.Count; i++)
+        {
+            if (cosas[i].Kind != ItemType.Perk)
+                continue;
+
+            var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
+            bool leSirveAAlguna = false;
+
+            foreach (var ficha in partida.Roster.Classes)
+            {
+                if (def.WorksFor(ficha.DefenderClass))
+                {
+                    leSirveAAlguna = true;
+                    break;
+                }
+            }
+
+            if (!leSirveAAlguna)
+            {
+                log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.Discard, i, 0, 0));
+                return true;
+            }
+        }
+
+        // 2) Un arma de más: si alguna ficha estuviera sin arma, EquiparLoQuePueda
+        //    ya la habría puesto, así que llegar acá quiere decir que sobran.
+        for (int i = 0; i < cosas.Count; i++)
+        {
+            if (cosas[i].Kind != ItemType.Weapon)
+                continue;
+
+            log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.SellGear, i, 0, 0));
+            return true;
+        }
+
+        // 3) Todo lo que queda le sirve a alguna clase y espera un slot que abre
+        //    al levelear. No se tira: la mochila queda trabada y eso es una
+        //    decisión del juego, no del bot.
+        return false;
     }
 
     /// <summary>
