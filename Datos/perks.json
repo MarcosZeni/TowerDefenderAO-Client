@@ -59,10 +59,14 @@
     { "id":  7, "key": "muneca",     "tier": "bronze", "effect": "Cadence", "magnitude": 10 },
 
     // --- Silver: más grandes -------------------------------------------------
-    // ⚠ halcon y ojoDeAguila HOY NO HACEN NADA en las clases de alcance 2
-    // (2 × 1,40 = 2,8 → 2 por truncamiento entero). Es la anomalía P0 de la
-    // propuesta V2: se arregla escalando el alcance interno ×1000, no subiendo
-    // estas magnitudes.
+    // ⚠ halcon y ojoDeAguila NO HACÍAN NADA en las clases de alcance 2
+    // (2 × 1,40 = 2,8 → 2 por truncamiento entero): plata, 240 de oro, uno de
+    // los seis slots, y cero efecto en las cuatro cuerpo a cuerpo. Era la
+    // anomalía P0 de la propuesta V2.
+    //
+    // Se arregló escalando el alcance interno ×1000 —milésimas de celda— y NO
+    // subiendo estas magnitudes. Lo mismo vale para «punteria» y «vista» de
+    // bronce, que antes tampoco movían el número en ninguna clase.
     { "id":  8, "key": "furia",       "tier": "silver", "effect": "Damage",  "magnitude": 35 },
     { "id":  9, "key": "celeridad",   "tier": "silver", "effect": "Cadence", "magnitude": 25 },
     { "id": 10, "key": "halcon",      "tier": "silver", "effect": "Range",   "magnitude": 40 },

@@ -154,9 +154,13 @@ public sealed class Roster(BalanceData datos)
         var b = _datos.StatsOf(clase);
         var ficha = Find(clase);
 
+        // ⚠ Incluso sin ficha se devuelve en la escala INTERNA. La UI llama acá
+        // para pintar el alcance del cursor antes de contratar la clase, y si un
+        // camino devolviera puntos y el otro centésimas, el círculo del cursor
+        // mediría cien veces menos que el real.
         if (ficha is null)
             return new EffectiveStats(
-                b.Damage, b.RangeCells, b.CadenceTicks,
+                Ints.ToHundredths(b.Damage), Ints.ToThousandths(b.RangeCells), b.CadenceTicks,
                 PerkEffect.None, 0, WeaponAbility.None, 0);
 
         // Cada nivel sube los stats base, aparte de abrir un slot.
@@ -223,12 +227,23 @@ public sealed class Roster(BalanceData datos)
         }
 
         return new EffectiveStats(
-            Damage: Ints.WithPercents(b.Damage, extraDano),
+            // ⚠ Se escala PRIMERO y se aplican los porcentajes DESPUÉS. Al revés
+            // —porcentajes sobre puntos enteros y después ×100— el truncamiento
+            // volvería a pasar exactamente donde pasaba antes, y la escala no
+            // habría servido de nada.
+            Damage: Ints.WithPercents(Ints.ToHundredths(b.Damage), extraDano),
 
-            // El alcance se redondea a celdas enteras: la grilla no tiene medias
-            // celdas, así que un +15% que no llega a sumar una celda no hace nada
-            // hasta que se apila con otro. Es intencional y hay que verlo en la UI.
-            RangeCells: System.Math.Max(1, Ints.WithPercents(b.RangeCells, extraAlcance)),
+            // El alcance vive en MILÉSIMAS de celda (propuesta V2). Antes se
+            // redondeaba a celdas enteras y un +15% sobre alcance 2 daba 2,3 que
+            // truncaba de vuelta a 2: los dos perks de alcance de bronce no hacían
+            // nada en 8 de las 9 clases, y Halcón —plata, 240 de oro, uno de los
+            // seis slots— no hacía nada en las cuatro cuerpo a cuerpo.
+            //
+            // El piso es una celda entera: menos que eso no cubre ni la celda de
+            // al lado y el defensor no dispararía nunca.
+            RangeMilli: System.Math.Max(
+                Ints.ThousandthsPerCell,
+                Ints.WithPercents(Ints.ToThousandths(b.RangeCells), extraAlcance)),
 
             // ⚠ La cadencia va al REVÉS: menos ticks es más rápido. Un +25% de
             // cadencia tiene que DIVIDIR el intervalo, no multiplicarlo. Es el
@@ -247,13 +262,18 @@ public sealed class Roster(BalanceData datos)
 
 /// <summary>Lo que un defensor de esa clase hace realmente, ahora.</summary>
 /// <remarks>
-/// Comportamiento y Habilidad son dos cosas distintas y nunca están las dos: el
-/// primero viene de un perk equipado, la segunda del arma, y el arma gana. Se
-/// devuelven por separado igual porque la UI muestra de dónde salió cada efecto.
+/// <para>Comportamiento y Habilidad son dos cosas distintas y nunca están las dos:
+/// el primero viene de un perk equipado, la segunda del arma, y el arma gana. Se
+/// devuelven por separado igual porque la UI muestra de dónde salió cada efecto.</para>
+///
+/// <para>⚠ <b>Los dos números están en escala interna, no en la de los datos.</b>
+/// <c>Damage</c> son centésimas de punto y <c>RangeMilli</c> milésimas de celda.
+/// Mostrarlos crudos dice "1040 de daño" cuando el defensor pega 10,4: para la UI
+/// están <c>Loc.Damage</c> y <c>Loc.Range</c>.</para>
 /// </remarks>
 public readonly record struct EffectiveStats(
     int Damage,
-    int RangeCells,
+    int RangeMilli,
     int CadenceTicks,
     PerkEffect Behavior,
     int BehaviorMagnitude,

@@ -378,8 +378,12 @@ public partial class PantallaMochila : Control
 
         var stats = partida.Roster.StatsOf(clase, partida.Backpack);
 
-        Text($"{Loc.Get("ui.mochila.dano")} {stats.Damage} · " +
-             $"{Loc.Get("ui.mochila.alcance")} {stats.RangeCells} · " +
+        // ⚠ Los dos vienen en escala interna —centésimas de punto y milésimas de
+        // celda—, así que pasan por Loc. Es la pantalla donde se ve si un perk de
+        // alcance sirvió: con el redondeo a celdas enteras de antes, equipar
+        // Halcón no movía este número ni un poco.
+        Text($"{Loc.Get("ui.mochila.dano")} {Loc.Damage(stats.Damage)} · " +
+             $"{Loc.Get("ui.mochila.alcance")} {Loc.Range(stats.RangeMilli)} · " +
              $"{Loc.Get("ui.mochila.cada")} {stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}",
             1200, 420, 19, new Color(0.85f, 0.85f, 0.82f));
 

@@ -821,20 +821,26 @@ public partial class Juego : Node2D
         if (_celdaMouse is not { } c)
             return;
 
-        var stats = CargadorDatos.Actual.StatsOf(_claseElegida);
         bool puede = Run.PuedePoner(_claseElegida, c);
         var ocupada = Run.DefensorEn(c);
 
         // El alcance de lo que se está por poner, o de lo que ya está ahí.
-        int alcance = ocupada is null
-            ? stats.RangeCells
-            : CargadorDatos.Actual.StatsOf(ocupada.DefenderClass).RangeCells;
+        //
+        // ⚠ Sale de los stats EFECTIVOS —base + nivel + perks + equipo— y no de
+        // los de la tabla. Con el alcance en milésimas de celda, un perk de
+        // alcance mueve el círculo de verdad, y esta es la pantalla donde el
+        // jugador decide dónde poner: un anillo que ignora los perks miente
+        // justo en el momento en que la información importa.
+        var claseAnillo = ocupada?.DefenderClass ?? _claseElegida;
+        int alcanceMili = Run.Roster.StatsOf(claseAnillo, Run.Backpack).RangeMilli;
 
         if (puede || ocupada is not null)
         {
             var centro = new Vector2((c.X + 0.5f) * celda, (c.Y + 0.5f) * celda);
-            DrawCircle(centro, alcance * celda, new Color(0.5f, 0.75f, 1f, 0.10f));
-            DrawArc(centro, alcance * celda, 0, Mathf.Tau, 64,
+            float radio = alcanceMili * celda / (float)Ints.ThousandthsPerCell;
+
+            DrawCircle(centro, radio, new Color(0.5f, 0.75f, 1f, 0.10f));
+            DrawArc(centro, radio, 0, Mathf.Tau, 64,
                 new Color(0.6f, 0.8f, 1f, 0.5f), 2f);
         }
 

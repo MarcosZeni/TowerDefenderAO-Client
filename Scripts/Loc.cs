@@ -146,6 +146,52 @@ public static class Loc
             System.StringComparison.Ordinal);
 
     // -------------------------------------------------------------------------
+    //  La escala interna, de vuelta a números que se leen
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ Desde la propuesta V2 la simulación NO trabaja en las unidades de los
+    //  datos: el daño y el HP van en centésimas de punto y el alcance en
+    //  milésimas de celda, para que un +8% de nivel o un +15% de alcance no se
+    //  trunquen a cero. Eso es correcto adentro y es ilegible afuera: un defensor
+    //  que pega 10,4 no puede decir «1040 de daño» en pantalla.
+    //
+    //  Estos tres traducen. Van acá y no en `Ints` porque necesitan el separador
+    //  decimal del idioma, y `Simulacion\` no sabe en qué idioma se juega.
+
+    /// <summary>Puntos enteros de un valor interno en centésimas. Para el HP.</summary>
+    /// <remarks>
+    /// El HP va sin decimal a propósito: la Torre tiene 1000 y un enemigo 8400,
+    /// así que la centésima no aporta nada y solo agrega ruido a la barra.
+    /// </remarks>
+    public static string Points(int centesimas)
+        => Simulacion.Ints.ToPoints(centesimas)
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Daño con un decimal: <c>1040</c> se lee «10,4».</summary>
+    public static string Damage(int centesimas) => UnDecimal(centesimas, 100);
+
+    /// <summary>Alcance en celdas con un decimal: <c>2800</c> se lee «2,8».</summary>
+    public static string Range(int milesimas) => UnDecimal(milesimas, 1000);
+
+    /// <summary>
+    /// Un decimal, con enteros y con el separador del idioma.
+    /// </summary>
+    /// <remarks>
+    /// Redondea a la décima más cercana sumando media décima antes de dividir. Es
+    /// la misma cuenta que haría un <c>ToString("F1")</c> y no arrastra coma
+    /// flotante, que es la regla que este proyecto sostiene incluso donde no haría
+    /// daño: si acá se cuela una, mañana se cuela en la simulación por copiar y
+    /// pegar.
+    /// </remarks>
+    private static string UnDecimal(int valor, int escala)
+    {
+        int decimas = ((valor * 10) + (escala / 2)) / escala;
+        string separador = Get("ui.format.decimal");
+
+        return $"{decimas / 10}{separador}{decimas % 10}";
+    }
+
+    // -------------------------------------------------------------------------
     //  Atajos para lo que sale de los datos
     // -------------------------------------------------------------------------
 

@@ -63,14 +63,23 @@ public sealed class Enemy
     /// </remarks>
     public bool IsBoss { get; init; }
 
+    /// <summary>
+    /// Vida máxima, en <b>centésimas de punto</b> (<see cref="Ints.HundredthsPerPoint"/>).
+    /// </summary>
+    /// <remarks>
+    /// ⚠ No es el número del bestiario: <c>enemigos.json</c> lo escribe en puntos
+    /// enteros y la fase de spawn lo escala. Compararlo contra un HP de ahí da un
+    /// factor 100 de diferencia.
+    /// </remarks>
     public required int MaxHp { get; init; }
 
+    /// <summary>Vida actual, en centésimas de punto.</summary>
     public int Hp { get; set; }
 
     /// <summary>Milésimas de celda por tick.</summary>
     public required int Speed { get; init; }
 
-    /// <summary>Daño que le hace a la Torre por golpe.</summary>
+    /// <summary>Daño que le hace a la Torre por golpe, en centésimas de punto.</summary>
     public required int Damage { get; init; }
 
     /// <summary>Ticks entre golpe y golpe a la Torre.</summary>
@@ -188,6 +197,13 @@ public sealed class Defender
 /// </summary>
 public sealed class Tower
 {
+    /// <summary>
+    /// Vida máxima, en <b>centésimas de punto</b>, igual que la de los enemigos.
+    /// </summary>
+    /// <remarks>
+    /// <c>curvas.json</c> dice 1000 y acá adentro son 100.000. Mostrarlo crudo en
+    /// el HUD es el error obvio; para eso está <c>Loc.Points</c>.
+    /// </remarks>
     public required int MaxHp { get; init; }
 
     /// <summary>Ticks que le faltan para volver a pegar.</summary>

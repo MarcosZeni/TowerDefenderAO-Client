@@ -18,10 +18,15 @@
 
   // Puntos porcentuales de daño que suma cada nivel por encima del 1.
   //
-  // ⚠ Con daño base entero y chico, el truncamiento se come varios niveles:
-  // un cazador de 4 no sube nada en los niveles 2, 3 y 4 (4 × 1,08 = 4,32 → 4).
-  // Es la anomalía P0 de la propuesta V2 y se arregla escalando el daño
-  // internamente ×100, no subiendo este número.
+  // ⚠ ESTE NÚMERO SOLO FUNCIONA POR LA ESCALA INTERNA. Con daño base entero y
+  // chico, el truncamiento se comía niveles enteros: un cazador de 4 no subía
+  // nada en los niveles 2, 3, 4 ni 6 (4 × 1,08 = 4,32 → 4), y lo mismo pasaba en
+  // 3 de 5 niveles de Clérigo, Guerrero, Ladrón y Bardo. Era la anomalía P0 de
+  // la propuesta V2.
+  //
+  // Se arregló escalando el daño ×100 adentro de la simulación —centésimas de
+  // punto, ver Ints.HundredthsPerPoint— y NO subiendo este número. Si algún día
+  // alguien saca la escala, hay que volver a mirar acá.
   "extraDamagePerLevel": 8,
 
   // Nivel máximo y, a la vez, slots de perk por clase: cada nivel abre uno.
@@ -32,6 +37,11 @@
   //
   // ⚠ alcance 1 NO cubre las diagonales: una celda en diagonal queda a
   // √2 ≈ 1,41 y no entra. Por eso el mínimo del roster es 2.
+  //
+  // ⚠ Se escribe en celdas y la simulación lo lleva a MILÉSIMAS de celda
+  // (propuesta V2). Antes el alcance efectivo se redondeaba a celdas enteras, y
+  // eso mataba los perks de alcance: +15% sobre 2 daba 2,3 y truncaba a 2. Con
+  // milésimas, 2000 + 15% son 2300 y el círculo crece de verdad.
   //
   // "support": pega poco a propósito, su valor está en lo que le hace al resto
   // del equipo. Se usa para garantizar que la elección inicial traiga al menos

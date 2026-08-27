@@ -21,6 +21,14 @@
   "code": "es",
 
   "strings": {
+    // --- Formato de números -------------------------------------------------
+    //
+    // ⚠ El separador decimal del idioma. Adentro de la simulación NO hay coma
+    // flotante: el daño vive en centésimas de punto y el alcance en milésimas de
+    // celda (propuesta V2, anomalía P0). Esto es solo cómo se escribe esa
+    // fracción cuando se la muestra.
+    "ui.format.decimal": ",",
+
     // --- Las nueve clases ---------------------------------------------------
     // ⚠ NO existe "arquero": el que tira flechas es el Cazador.
     "class.Mage.name": "Mago",

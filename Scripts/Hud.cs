@@ -55,7 +55,11 @@ public partial class Hud : Control
             ? 0
             : p.Tower.Hp * 100 / p.Tower.MaxHp;
 
-        Text($"{Loc.Get("ui.hud.torre")}   {p.Tower.Hp} / {p.Tower.MaxHp}", 44, 62, 30, Blanco);
+        // ⚠ El HP de la Torre vive en centésimas de punto adentro de la
+        // simulación: crudo diría «100000 / 100000». `Loc.Points` lo devuelve a
+        // los puntos que el jugador entiende.
+        Text($"{Loc.Get("ui.hud.torre")}   {Loc.Points(p.Tower.Hp)} / {Loc.Points(p.Tower.MaxHp)}",
+            44, 62, 30, Blanco);
 
         // Barra de vida: verde, ámbar, rojo. El color dice la urgencia antes de
         // que el jugador llegue a leer el número.

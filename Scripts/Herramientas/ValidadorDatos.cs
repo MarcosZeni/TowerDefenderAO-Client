@@ -89,17 +89,25 @@ public static class ValidadorDatos
             $"clases: {datos.Classes.All.Count} · {datos.Classes.Offensive().Length} ofensivas · " +
             $"nivel máximo {datos.Classes.PerkSlotsPerClass} (+{datos.Classes.ExtraDamagePerLevel}% daño por nivel)");
 
-        // ⚠ El truncamiento entero se come mejoras enteras cuando el daño base es
-        // chico. Es la anomalía P0 de la propuesta V2 y no es un error de datos,
-        // pero es invisible: el jugador gasta oro en algo que no hace nada.
+        // ⚠ Era la anomalía P0 de la propuesta V2: con daño entero y chico, el
+        // truncamiento se comía niveles enteros —4 de 5 en Cazador, 3 de 5 en
+        // Clérigo, Guerrero, Ladrón y Bardo— y el jugador gastaba la elección en
+        // algo que no movía ningún número.
+        //
+        // Lo arregló la escala interna ×100, y este chequeo QUEDA como guarda de
+        // regresión: si alguien vuelve a calcular sobre puntos enteros, o baja
+        // extraDamagePerLevel por debajo de lo que la escala puede representar,
+        // el aviso reaparece. Se mide sobre la escala interna, que es donde la
+        // simulación hace la cuenta de verdad.
         foreach (var c in datos.Classes.All)
         {
             int mudos = 0;
+            int baseInterno = Ints.ToHundredths(c.Damage);
 
             for (int nivel = 2; nivel <= datos.Classes.PerkSlotsPerClass; nivel++)
             {
-                int anterior = Ints.WithPercents(c.Damage, (nivel - 2) * datos.Classes.ExtraDamagePerLevel);
-                int actual = Ints.WithPercents(c.Damage, (nivel - 1) * datos.Classes.ExtraDamagePerLevel);
+                int anterior = Ints.WithPercents(baseInterno, (nivel - 2) * datos.Classes.ExtraDamagePerLevel);
+                int actual = Ints.WithPercents(baseInterno, (nivel - 1) * datos.Classes.ExtraDamagePerLevel);
 
                 if (actual == anterior)
                     mudos++;
@@ -115,6 +123,12 @@ public static class ValidadorDatos
 
         // Lo mismo con los perks numéricos: un perk que no mueve el número en
         // ninguna clase es un slot y un drop gastados en nada.
+        //
+        // ⚠ También se mide en escala interna. Antes, medido en puntos y celdas
+        // enteras, «punteria» (+15% de alcance) no cambiaba nada en NINGUNA de
+        // las nueve clases y los dos perks de alcance de plata no servían en las
+        // cuatro cuerpo a cuerpo. Con centésimas y milésimas, un porcentaje
+        // chico ya tiene dónde caer.
         foreach (var p in datos.Perks.All)
         {
             if (p.Effect is not (PerkEffect.Damage or PerkEffect.Range))
@@ -127,7 +141,9 @@ public static class ValidadorDatos
                 if (!p.WorksFor(c.DefenderClass))
                     continue;
 
-                int baseValor = p.Effect == PerkEffect.Damage ? c.Damage : c.RangeCells;
+                int baseValor = p.Effect == PerkEffect.Damage
+                    ? Ints.ToHundredths(c.Damage)
+                    : Ints.ToThousandths(c.RangeCells);
 
                 if (Ints.WithPercents(baseValor, p.Magnitude) > baseValor)
                     sirveEn++;

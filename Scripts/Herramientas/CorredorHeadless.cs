@@ -483,8 +483,10 @@ public static class CorredorHeadless
                 oleadaAnterior = partida.Wave;
                 ultimoAviso = partida.Tick;
 
+                // El HP va dividido por la escala interna: los avisos de progreso
+                // los lee una persona, y «torre 100000» no dice nada.
                 GD.Print($"  ol {partida.Wave,3} · t {partida.Tick,7} · " +
-                         $"torre {partida.Tower.Hp,5} · oro {partida.Gold,6} · " +
+                         $"torre {Ints.ToPoints(partida.Tower.Hp),5} · oro {partida.Gold,6} · " +
                          $"{partida.Defenders.Count,2} def · {partida.Enemies.Count,3} vivos");
             }
 
@@ -500,7 +502,7 @@ public static class CorredorHeadless
                     clases.Append(CultureInfo.InvariantCulture, $"{f.DefenderClass}(nv{f.Level}) ");
 
                 GD.Print($"     ↳ atascado en ol {partida.Wave} · t {partida.Tick} · " +
-                         $"torre {partida.Tower.Hp} · {partida.Enemies.Count} vivos · " +
+                         $"torre {Ints.ToPoints(partida.Tower.Hp)} · {partida.Enemies.Count} vivos · " +
                          $"roster: {clases}");
 
                 if (partida.Enemies.Count > 0)
@@ -508,7 +510,7 @@ public static class CorredorHeadless
                     var e = partida.Enemies[0];
                     var d = datos.Get(e.TypeId);
 
-                    GD.Print($"        primero: {d?.Name} {e.Hp}/{e.MaxHp} HP · " +
+                    GD.Print($"        primero: {d?.Name} {Ints.ToPoints(e.Hp)}/{Ints.ToPoints(e.MaxHp)} HP · " +
                              $"vel {e.EffectiveSpeed} · dist {e.DistanceTravelled / 1000} celdas" +
                              (e.AttackingTower ? " · PEGANDO LA TORRE" : ""));
                 }

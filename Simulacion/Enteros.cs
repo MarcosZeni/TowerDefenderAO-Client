@@ -20,7 +20,53 @@ public static class Ints
     /// Milésimas de celda por celda. La posición de un enemigo en la ruta es un
     /// <c>long</c> en esta unidad, así que mover es una suma y nada más.
     /// </summary>
+    /// <remarks>
+    /// ⚠ Desde la propuesta V2 el <b>alcance</b> también vive en esta unidad. Con
+    /// alcance en celdas enteras, un perk de +15% sobre un alcance de 2 daba 2,3
+    /// y truncaba de vuelta a 2: el perk no hacía absolutamente nada, y el
+    /// jugador gastaba un slot y un drop en un número que no se movía. Con
+    /// milésimas, 2000 + 15% son 2300 y el círculo de alcance crece de verdad.
+    /// </remarks>
     public const int ThousandthsPerCell = 1000;
+
+    /// <summary>
+    /// Centésimas de punto por punto. <b>La unidad interna del daño y del HP.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Es la anomalía P0 de la propuesta V2, y el motivo es el mismo que
+    /// el del alcance: con daño entero y chico, el truncamiento se comía mejoras
+    /// enteras. Un cazador de daño base 4 no subía nada en los niveles 2, 3, 4 ni
+    /// 6 —4 × 1,08 = 4,32 → 4— así que subirlo de nivel era tirar la elección.
+    /// Medido: 4 de 5 niveles mudos en Cazador, 3 de 5 en Clérigo, Guerrero,
+    /// Ladrón y Bardo.</para>
+    ///
+    /// <para><b>La salida NO es punto flotante: es una unidad más chica.</b> Los
+    /// datos siguen escritos en puntos enteros —que es como se leen y se
+    /// balancean— y la simulación multiplica por esto al construir la entidad.
+    /// Adentro todo es centésimas, así que un +8% de 400 son 432 y se nota.</para>
+    ///
+    /// <para>⚠ La escala vale para <b>los dos lados a la vez</b>: daño del
+    /// defensor, HP del enemigo, HP y daño de la Torre, daño del enemigo a la
+    /// Torre y la cura de Vampirismo. Escalar uno solo cambiaría el balance en
+    /// vez de afinarlo. Lo que NO se escala es todo lo que se mide en porcentaje
+    /// —perks, habilidades, críticos— porque un porcentaje no tiene unidad, ni el
+    /// costo de los NPCs del presupuesto de oleada, que se calcula sobre el
+    /// bestiario en puntos enteros.</para>
+    /// </remarks>
+    public const int HundredthsPerPoint = 100;
+
+    /// <summary>
+    /// Pasa puntos enteros —como están escritos en los datos— a la escala interna.
+    /// </summary>
+    public static int ToHundredths(int puntos) => Trim((long)puntos * HundredthsPerPoint);
+
+    /// <summary>
+    /// Vuelve de la escala interna a puntos enteros, para mostrar. <b>Trunca.</b>
+    /// </summary>
+    public static int ToPoints(int centesimas) => centesimas / HundredthsPerPoint;
+
+    /// <summary>Pasa celdas enteras a milésimas, la unidad interna del alcance.</summary>
+    public static int ToThousandths(int celdas) => Trim((long)celdas * ThousandthsPerCell);
 
     /// <summary>
     /// Aplica una lista de modificadores porcentuales a un valor base.
@@ -108,6 +154,34 @@ public static class Ints
         long dy = ay - by;
         return (dx * dx) + (dy * dy);
     }
+
+    /// <summary>
+    /// Lo mismo, pero en <b>milésimas de celda al cuadrado</b>: la unidad en la
+    /// que está el alcance de un defensor.
+    /// </summary>
+    /// <remarks>
+    /// <para>Las celdas siguen siendo enteras —un defensor ocupa una celda y un
+    /// enemigo está en la celda que le toca de la ruta—, así que la distancia se
+    /// calcula igual y se convierte al final. Convertir después y no antes evita
+    /// multiplicar dos números grandes: el cuadrado de la diferencia nunca pasa
+    /// de unos cientos, y recién ahí se escala.</para>
+    ///
+    /// <para>El peor caso son 20×11 celdas: 521 × 1.000.000 = 5,21e8, muy adentro
+    /// de <c>long</c>.</para>
+    /// </remarks>
+    public static long SquaredDistanceThousandths(int ax, int ay, int bx, int by)
+        => SquaredDistance(ax, ay, bx, by) * ThousandthsPerCell * ThousandthsPerCell;
+
+    /// <summary>
+    /// Cuántas celdas enteras hay que mirar para cubrir un alcance en milésimas.
+    /// </summary>
+    /// <remarks>
+    /// Redondea <b>para arriba</b>: la grilla espacial devuelve candidatos, y
+    /// quedarse corto acá haría que un enemigo dentro del alcance real no llegue
+    /// nunca a compararse. Un candidato de más solo cuesta una resta.
+    /// </remarks>
+    public static int ThousandthsToCellsUp(int milesimas)
+        => (milesimas + ThousandthsPerCell - 1) / ThousandthsPerCell;
 
     /// <summary>Convierte segundos a ticks.</summary>
     public static int SecondsToTicks(int segundos) => segundos * TicksPerSecond;

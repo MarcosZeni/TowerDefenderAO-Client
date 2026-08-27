@@ -249,10 +249,13 @@ public sealed class Run
         Backpack = new Backpack(datos);
         _intervaloSpawn = datos.Curves.Wave.DefaultSpawnInterval;
 
+        // El HP de la Torre entra en la escala interna, igual que el de los
+        // enemigos y el daño de los defensores: los tres son el mismo eje y
+        // escalar uno solo cambiaría el balance en vez de afinarlo.
         Tower = new Tower
         {
-            MaxHp = _datos.Curves.Tower.HpInicial,
-            Hp = _datos.Curves.Tower.HpInicial,
+            MaxHp = Ints.ToHundredths(_datos.Curves.Tower.HpInicial),
+            Hp = Ints.ToHundredths(_datos.Curves.Tower.HpInicial),
             Cell = _ruta.End,
         };
     }
@@ -774,13 +777,24 @@ public sealed class Run
         if (b is null)
             return;   // el tipo no está en los datos: no spawnea nada
 
-        int hpMaximo = Ints.WithPercents(b.Hp, compra.HealthPerk);
+        // ⚠ El perk de vida se aplica sobre los PUNTOS del bestiario y recién
+        // después se escala. Al revés daría lo mismo, pero así el número que se
+        // muestra en la pantalla de preparación —"+50% de vida"— sale de la misma
+        // cuenta que el HP real, sin una conversión en el medio que se pueda
+        // olvidar.
+        int hpMaximo = Ints.ToHundredths(Ints.WithPercents(b.Hp, compra.HealthPerk));
 
         // El daño sale del promedio de min y max, no de una tirada por golpe: una
         // tirada acá gastaría un número del RNG por cada golpe de cada enemigo, y
         // eso hace que agregar un defensor corra toda la secuencia posterior y
         // cambie los drops de la corrida entera.
-        int dano = System.Math.Max(_datos.Combat.EnemyMinimumDamage, (b.MinDamage + b.MaxDamage) / _datos.Combat.EnemyDamageAverageDivisor);
+        //
+        // ⚠ Se escala ANTES de promediar. Al revés, un bicho de 3-4 pegaría 3 y no
+        // 3,5: sería exactamente el truncamiento que la escala vino a sacar, dejado
+        // en pie a un renglón de distancia del arreglo.
+        int dano = System.Math.Max(
+            Ints.ToHundredths(_datos.Combat.EnemyMinimumDamage),
+            Ints.ToHundredths(b.MinDamage + b.MaxDamage) / _datos.Combat.EnemyDamageAverageDivisor);
 
         _enemigos.Add(new Enemy
         {
@@ -904,7 +918,7 @@ public sealed class Run
             return;
         }
 
-        mordiendo.Hp -= _datos.Curves.Tower.Damage;
+        mordiendo.Hp -= Ints.ToHundredths(_datos.Curves.Tower.Damage);
         Tower.AttackCooldown = _datos.Curves.Tower.CadenceTicks;
     }
 
@@ -932,7 +946,7 @@ public sealed class Run
             // vive en el defensor: un cazador puesto en la oleada 3 y otro puesto
             // en la 40 pegan exactamente igual.
             var stats = Roster.StatsOf(d.DefenderClass, Backpack);
-            var objetivo = ElegirObjetivo(d, stats.RangeCells);
+            var objetivo = ElegirObjetivo(d, stats.RangeMilli);
 
             if (objetivo is null)
                 continue;
@@ -1062,14 +1076,16 @@ public sealed class Run
             case WeaponAbility.Butcher:
             {
                 // Cuánto del alcance está usando el disparo, en porcentaje. Se
-                // mide en celdas al cuadrado —que es como se mide todo acá— y se
-                // compara contra el alcance al cuadrado: no hace falta raíz.
+                // mide al cuadrado —que es como se mide todo acá— y se compara
+                // contra el alcance al cuadrado: no hace falta raíz. Las dos
+                // distancias van en milésimas de celda, que es la unidad del
+                // alcance desde la propuesta V2.
                 var celda = _ruta.CellAt(objetivo.DistanceTravelled);
 
-                long d2 = Ints.SquaredDistance(
+                long d2 = Ints.SquaredDistanceThousandths(
                     defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
-                long alcance2 = (long)stats.RangeCells * stats.RangeCells;
+                long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
 
                 if (alcance2 <= 0)
                     return dano;
@@ -1168,7 +1184,7 @@ public sealed class Run
                 // Le pega a hasta 5 secundarios en alcance (propuesta V2). Sin el
                 // techo, el daño escalaba lineal con la densidad y una oleada
                 // apretada lo multiplicaba por diez.
-                long alcance2 = (long)stats.RangeCells * stats.RangeCells;
+                long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
                 int extra = Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
                 int alcanzados = 0;
 
@@ -1182,7 +1198,7 @@ public sealed class Run
 
                     var celda = _ruta.CellAt(otro.DistanceTravelled);
 
-                    long d2 = Ints.SquaredDistance(
+                    long d2 = Ints.SquaredDistanceThousandths(
                         defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
                     if (d2 <= alcance2)
@@ -1203,7 +1219,13 @@ public sealed class Run
                 if (!_ultimaCuraPorClase.TryGetValue(defensor.DefenderClass, out int ultima) ||
                     Tick - ultima >= _datos.Combat.VampirismCooldownTicks)
                 {
-                    Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + stats.AbilityMagnitude);
+                    // ⚠ La magnitud son PUNTOS de vida (1 a 8), no un porcentaje:
+                    // hay que escalarla como el HP de la Torre. Sin esto, curar 8
+                    // sobre una Torre de 100.000 internos sería curar 0,08 y la
+                    // habilidad quedaría muda.
+                    Tower.Hp = System.Math.Min(
+                        Tower.MaxHp, Tower.Hp + Ints.ToHundredths(stats.AbilityMagnitude));
+
                     _ultimaCuraPorClase[defensor.DefenderClass] = Tick;
                 }
 
@@ -1347,14 +1369,20 @@ public sealed class Run
     /// decidiría el orden de la lista, que es justo lo que no puede decidir
     /// nada.
     /// </remarks>
-    private Enemy? ElegirObjetivo(Defender defensor, int alcanceCeldas)
+    private Enemy? ElegirObjetivo(Defender defensor, int alcanceMilesimas)
     {
-        long alcanceCuadrado = (long)alcanceCeldas * alcanceCeldas;
+        long alcanceCuadrado = (long)alcanceMilesimas * alcanceMilesimas;
 
         // La grilla devuelve candidatos por cercanía, ya ordenados por id de
         // spawn. Sigue habiendo que comparar la distancia: el rectángulo de
         // celdas es más grande que el círculo de alcance.
-        _grilla.Candidatos(defensor.Cell, alcanceCeldas, _candidatos);
+        //
+        // ⚠ La grilla trabaja en CELDAS y el alcance viene en milésimas, así que
+        // se redondea para arriba. Truncar dejaría afuera al enemigo que está en
+        // la fracción de celda que el perk de alcance acaba de ganar, que es
+        // exactamente lo que la escala nueva vino a arreglar.
+        _grilla.Candidatos(
+            defensor.Cell, Ints.ThousandthsToCellsUp(alcanceMilesimas), _candidatos);
 
         Enemy? mejor = null;
 
@@ -1366,7 +1394,7 @@ public sealed class Run
                 continue;
 
             var celda = _ruta.CellAt(e.DistanceTravelled);
-            long d2 = Ints.SquaredDistance(
+            long d2 = Ints.SquaredDistanceThousandths(
                 defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
 
             if (d2 > alcanceCuadrado)
@@ -1436,7 +1464,7 @@ public sealed class Run
             if (stats.Ability != WeaponAbility.Thirst)
                 continue;
 
-            long alcance2 = (long)stats.RangeCells * stats.RangeCells;
+            long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
 
             foreach (var e in _enemigos)
             {
@@ -1445,7 +1473,7 @@ public sealed class Run
 
                 var celda = _ruta.CellAt(e.DistanceTravelled);
 
-                long dist2 = Ints.SquaredDistance(
+                long dist2 = Ints.SquaredDistanceThousandths(
                     d.Cell.X, d.Cell.Y, celda.X, celda.Y);
 
                 if (dist2 <= alcance2)

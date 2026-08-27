@@ -66,10 +66,15 @@
   //
   // ⚠ Sacar un perk ya equipado LO DESTRUYE, no vuelve a la mochila. El equipo
   // sí se vende.
+  //
+  // "defenderSellPercent" pasó de 50 a 60 (propuesta V2). Vender y reubicar es
+  // la corrección de un error de colocación, y castigarla a la mitad hacía que
+  // convenga dejar un defensor mal puesto antes que moverlo. Las referencias van
+  // por ahí o más arriba: Kingdom Rush devuelve el 60% y BTD6 el 70%.
   "defenders": {
     "backpackSlots": 15,
     "gearSlotsPerClass": 1,
-    "defenderSellPercent": 50,
+    "defenderSellPercent": 60,
     "weaponSellPercent": 100
   },
 

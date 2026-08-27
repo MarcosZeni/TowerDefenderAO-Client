@@ -18,6 +18,13 @@
   "code": "en",
 
   "strings": {
+    // --- Formato de números -------------------------------------------------
+    //
+    // ⚠ El separador decimal del idioma: en inglés es el punto. Adentro de la
+    // simulación no hay coma flotante; esto es solo cómo se escribe la fracción
+    // del daño (centésimas de punto) y del alcance (milésimas de celda).
+    "ui.format.decimal": ".",
+
     // --- The nine classes ---------------------------------------------------
     "class.Mage.name": "Mage",
     "class.Cleric.name": "Cleric",
