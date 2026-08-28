@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -11,6 +13,22 @@ namespace TowerOfArgentum;
 /// mitades a la vista: qué tengo guardado y dónde lo puedo poner. Separarlas
 /// obligaría a abrir y cerrar dos pantallas para una sola decisión.</para>
 ///
+/// <para>Es la pantalla que el diseño describe entera, y usa sus cinco zonas tal
+/// cual (<see cref="UiLayout"/>):</para>
+///
+/// <list type="table">
+/// <item><term>Columna izquierda</term><description>las clases: dónde se
+/// equipa.</description></item>
+/// <item><term>Columna central</term><description>las pestañas, los filtros y la
+/// grilla de 5×4 con lo guardado.</description></item>
+/// <item><term>Columna de detalle</term><description>lo elegido: icono grande,
+/// descripción, stats y el botón de equipar.</description></item>
+/// <item><term>Columna derecha</term><description>la clase mirada: sus seis
+/// slots, sus stats, el nivel y qué comportamiento manda.</description></item>
+/// <item><term>Barra de abajo</term><description>la build armada, igual que en
+/// el HUD.</description></item>
+/// </list>
+///
 /// <para>Las dos acciones que <b>destruyen</b> avisan antes: sacar un perk
 /// equipado y fusionar. La primera no vuelve a la mochila, la segunda consume los
 /// dos Oro.</para>
@@ -18,7 +36,6 @@ namespace TowerOfArgentum;
 public partial class PantallaMochila : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
 
     private bool _abierta;
     private int _cosaElegida = -1;
@@ -43,7 +60,7 @@ public partial class PantallaMochila : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
     }
@@ -56,6 +73,93 @@ public partial class PantallaMochila : Control
         if (_abierta)
             QueueRedraw();
     }
+
+    // =====================================================================
+    // Pestañas, filtro y orden
+    // =====================================================================
+
+    /// <summary>Qué mira la grilla del medio.</summary>
+    private enum Pestana
+    {
+        Perks,
+        Armas,
+        Planos,
+    }
+
+    private Pestana _pestana = Pestana.Perks;
+
+    /// <summary>Si la grilla muestra solo lo que le entra a la clase mirada.</summary>
+    private bool _soloLoQueEntra;
+
+    /// <summary>Si la grilla ordena por rareza en vez de por orden de llegada.</summary>
+    private bool _ordenPorRareza = true;
+
+    /// <summary>
+    /// Los índices de la mochila que se ven ahora, ya filtrados y ordenados.
+    /// </summary>
+    /// <remarks>
+    /// <para>Devuelve <b>índices de la mochila</b>, no los objetos: equipar pide
+    /// el índice real y el orden de pantalla no es el de adentro. Si esto
+    /// devolviera los objetos, cada click habría que resolverlo buscando de
+    /// vuelta, y ordenar rompería el equipar.</para>
+    ///
+    /// <para>La pestaña de planos no sale de acá: los planos no están en la
+    /// mochila, son de la cuenta.</para>
+    /// </remarks>
+    private List<int> Visibles(Run p)
+    {
+        var salida = new List<int>();
+        var items = p.Backpack.Items;
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            var cosa = items[i];
+
+            bool esDeLaPestana = _pestana switch
+            {
+                Pestana.Perks => cosa.Kind == ItemType.Perk,
+                Pestana.Armas => cosa.Kind == ItemType.Weapon,
+                _ => false,
+            };
+
+            if (!esDeLaPestana)
+                continue;
+
+            if (_soloLoQueEntra && _claseElegida is { } clase)
+            {
+                var ficha = p.Roster.Find(clase);
+
+                if (ficha is null || !Acepta(p, ficha, i))
+                    continue;
+            }
+
+            salida.Add(i);
+        }
+
+        if (!_ordenPorRareza)
+            return salida;
+
+        // Lo más raro primero. Es el orden que pide el diseño y el útil: lo que
+        // decide una corrida es el Oro, no el tercer perk de bronce.
+        salida.Sort((a, b) => Rango(p, b).CompareTo(Rango(p, a)));
+
+        return salida;
+    }
+
+    /// <summary>Cuán raro es lo que está en ese lugar. Perks y armas en una escala.</summary>
+    private static int Rango(Run p, int indice)
+    {
+        var cosa = p.Backpack.Items[indice];
+
+        if (cosa.Kind == ItemType.Perk)
+            return (int)CargadorDatos.Actual.Perks.Get(cosa.Id).Tier;
+
+        return (int)(p.Backpack.WeaponById(cosa.Id)?.Rarity ?? WeaponRarity.Common);
+    }
+
+    // =====================================================================
+    // Entrada
+    // =====================================================================
 
     /// <summary>
     /// ⚠ <c>_Input</c> y no <c>_GuiInput</c>, por la misma cicatriz que
@@ -87,10 +191,10 @@ public partial class PantallaMochila : Control
         GetViewport().SetInputAsHandled();
 
         var posicion = GetGlobalMousePosition();
-
         var partida = _juego.Run;
 
-        // Confirmar la destrucción, si hay una pendiente.
+        // Confirmar la destrucción, si hay una pendiente. Va primero: mientras
+        // hay un modal arriba, nada de abajo atiende.
         if (_confirmarSacar is { } pendiente)
         {
             if (RectConfirmar().HasPoint(posicion))
@@ -106,22 +210,116 @@ public partial class PantallaMochila : Control
             return;
         }
 
-        // Un lugar de la mochila.
-        for (int i = 0; i < partida.Backpack.Items.Count; i++)
+        if (Pestanas(posicion) || Filtros(posicion))
+            return;
+
+        if (Grilla(partida, posicion))
+            return;
+
+        if (Clases(partida, posicion))
+            return;
+
+        ColumnaDeClase(partida, posicion);
+    }
+
+    /// <summary>Las tres pestañas de la columna del medio.</summary>
+    private bool Pestanas(Vector2 posicion)
+    {
+        if (UiLayout.TabPerks.HasPoint(posicion))
         {
-            if (RectLugar(i).HasPoint(posicion))
+            _pestana = Pestana.Perks;
+            _cosaElegida = -1;
+            return true;
+        }
+
+        if (UiLayout.TabWeapons.HasPoint(posicion))
+        {
+            _pestana = Pestana.Armas;
+            _cosaElegida = -1;
+            return true;
+        }
+
+        if (UiLayout.TabBlueprints.HasPoint(posicion))
+        {
+            _pestana = Pestana.Planos;
+            _cosaElegida = -1;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Los dos desplegables. Alternan, no abren una lista.
+    /// </summary>
+    /// <remarks>
+    /// Cada uno tiene dos valores, así que un menú desplegable de verdad sería
+    /// un click de más para llegar al mismo lado. Se dibujan como el desplegable
+    /// del diseño porque es lo que el jugador reconoce.
+    /// </remarks>
+    private bool Filtros(Vector2 posicion)
+    {
+        if (UiLayout.FilterDropdown.HasPoint(posicion))
+        {
+            _soloLoQueEntra = !_soloLoQueEntra;
+            _cosaElegida = -1;
+            return true;
+        }
+
+        if (UiLayout.SortDropdown.HasPoint(posicion))
+        {
+            _ordenPorRareza = !_ordenPorRareza;
+            _cosaElegida = -1;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Un hueco de la grilla, o el botón de equipar del detalle.</summary>
+    private bool Grilla(Run partida, Vector2 posicion)
+    {
+        if (_pestana != Pestana.Planos)
+        {
+            var visibles = Visibles(partida);
+
+            for (int i = 0; i < visibles.Count && i < UiLayout.GridVisible; i++)
             {
-                _cosaElegida = _cosaElegida == i ? -1 : i;
-                return;
+                if (!UiLayout.GridCell(i).HasPoint(posicion))
+                    continue;
+
+                _cosaElegida = _cosaElegida == visibles[i] ? -1 : visibles[i];
+                return true;
             }
         }
 
-        // Una clase: si hay algo elegido, se equipa ahí.
-        var clases = partida.Roster.Classes;
-
-        for (int i = 0; i < clases.Count; i++)
+        // El botón de equipar del detalle: equipa en la clase mirada. Es el
+        // camino de un click; el de arrastrar a una tarjeta sigue existiendo.
+        if (UiLayout.DetailBuy.HasPoint(posicion) && _cosaElegida >= 0 && _claseElegida is { } clase)
         {
-            if (!RectClase(i).HasPoint(posicion))
+            var ficha = partida.Roster.Find(clase);
+
+            if (ficha is not null && Acepta(partida, ficha, _cosaElegida))
+            {
+                _juego.EquiparDeMochila(_cosaElegida, clase);
+                _cosaElegida = -1;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Una tarjeta de clase: la mira, o equipa lo elegido ahí.</summary>
+    private bool Clases(Run partida, Vector2 posicion)
+    {
+        var clases = partida.Roster.Classes;
+        int visibles = Mathf.Min(clases.Count, UiLayout.HeroCardsVisible);
+
+        for (int i = 0; i < visibles; i++)
+        {
+            if (!UiLayout.HeroCard(i).HasPoint(posicion))
                 continue;
 
             if (_cosaElegida >= 0)
@@ -134,246 +332,66 @@ public partial class PantallaMochila : Control
                 _claseElegida = clases[i].DefenderClass;
             }
 
-            return;
+            return true;
         }
 
-        // Comprar un nivel de la clase mirada. Es el sumidero de oro de la
-        // corrida: con el tablero lleno y la mochila llena, es lo único que queda
-        // para gastar.
-        if (_claseElegida is { } paraSubir && RectSubirNivel().HasPoint(posicion))
+        return false;
+    }
+
+    /// <summary>El nivel, el comportamiento y los slots de la clase mirada.</summary>
+    private void ColumnaDeClase(Run partida, Vector2 posicion)
+    {
+        if (_claseElegida is not { } clase)
+            return;
+
+        // Comprar un nivel. Es el sumidero de oro de la corrida: con el tablero
+        // lleno y la mochila llena, es lo único que queda para gastar.
+        if (RectSubirNivel().HasPoint(posicion))
         {
-            _juego.SubirNivel(paraSubir);
+            _juego.SubirNivel(clase);
             return;
         }
 
         // ⚠ Elegir qué comportamiento manda. Solo si hay conflicto: sin arma con
         // habilidad Y perk de Oro/Único puestos no hay nada que decidir.
         //
-        // Existe porque antes ganaba el arma siempre y eso hacía que encontrar una
-        // excelente se sintiera como un CASTIGO: obligaba a apagar un Único que
-        // costó dos jefes y un plano, así que el jugador terminaba no equipándola.
-        // Los stats del arma se conservan en los dos casos.
-        if (_claseElegida is { } conConflicto && partida.HayConflictoDeComportamiento(conConflicto))
+        // Existe porque antes ganaba el arma siempre y eso hacía que encontrar
+        // una excelente se sintiera como un CASTIGO: obligaba a apagar un Único
+        // que costó dos jefes y un plano, así que el jugador terminaba no
+        // equipándola. Los stats del arma se conservan en los dos casos.
+        if (partida.HayConflictoDeComportamiento(clase))
         {
             if (RectComportamiento(elDelPerk: true).HasPoint(posicion))
             {
-                _juego.ElegirComportamiento(conConflicto, preferirElPerk: true);
+                _juego.ElegirComportamiento(clase, preferirElPerk: true);
                 return;
             }
 
             if (RectComportamiento(elDelPerk: false).HasPoint(posicion))
             {
-                _juego.ElegirComportamiento(conConflicto, preferirElPerk: false);
+                _juego.ElegirComportamiento(clase, preferirElPerk: false);
                 return;
             }
         }
 
-        // Un slot de perk de la clase mirada: sacarlo pide confirmación.
-        if (_claseElegida is { } clase)
-        {
-            var ficha = partida.Roster.Find(clase);
+        var ficha = partida.Roster.Find(clase);
 
-            if (ficha is not null)
-            {
-                for (int s = 0; s < ficha.Perks.Count; s++)
-                {
-                    if (RectSlot(s).HasPoint(posicion))
-                    {
-                        _confirmarSacar = (clase, s);
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  Geometría
-    // -------------------------------------------------------------------------
-
-    private const int LugarLado = 92;
-    private const int LugaresPorFila = 5;
-
-    /// <summary>El lado del slot de perk equipado, en la columna de la derecha.</summary>
-    private const int SlotLado = 84;
-
-    /// <summary>
-    /// Cuánto ocupa el icono adentro de su celda.
-    /// </summary>
-    /// <remarks>
-    /// Deja aire abajo para el nombre y el tier: el dibujo dice <i>qué</i> es de un
-    /// vistazo, pero seis perks distintos comparten la misma espada de +daño y sin
-    /// el renglón de abajo no se distinguen.
-    /// </remarks>
-    private const int IconoLugar = 38;
-    private const int IconoSlot = 36;
-
-    private static Rect2 RectLugar(int i)
-    {
-        int fila = i / LugaresPorFila;
-        int col = i % LugaresPorFila;
-
-        return new Rect2(
-            180 + (col * (LugarLado + 12)),
-            300 + (fila * (LugarLado + 12)),
-            LugarLado, LugarLado);
-    }
-
-    private static Rect2 RectClase(int i)
-        => new(760, 300 + (i * 64), 380, 54);
-
-    private static Rect2 RectSlot(int i)
-        => new(1200 + (i * 92), 300, SlotLado, SlotLado);
-
-    /// <summary>El botón de comprar el próximo nivel de la clase mirada.</summary>
-    private static Rect2 RectSubirNivel()
-        => new(1200, 528, 300, 52);
-
-    /// <summary>
-    /// Los dos botones de «qué comportamiento manda»: el del perk o el del arma.
-    /// </summary>
-    /// <remarks>
-    /// ⚠ Aparecen <b>solo</b> cuando la clase tiene las dos cosas puestas. Sin
-    /// conflicto no hay nada que elegir, y un par de botones permanentes que casi
-    /// siempre no hacen nada es peor que no tenerlos.
-    /// </remarks>
-    private static Rect2 RectComportamiento(bool elDelPerk)
-        => new(elDelPerk ? 1200 : 1360, 604, 148, 46);
-
-    private static Rect2 RectConfirmar()
-        => new(Escala.LienzoAncho / 2 - 220, Escala.LienzoAlto / 2 + 30, 200, 56);
-
-    private static Rect2 RectCancelar()
-        => new(Escala.LienzoAncho / 2 + 20, Escala.LienzoAlto / 2 + 30, 200, 56);
-
-    // -------------------------------------------------------------------------
-    //  Dibujo
-    // -------------------------------------------------------------------------
-
-    public override void _Draw()
-    {
-        var partida = _juego.Run;
-        if (partida is null)
+        if (ficha is null)
             return;
 
-        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.82f));
-
-        DibujarMochila(partida);
-        DibujarClases(partida);
-        DibujarPerksDeClase(partida);
-
-        if (_confirmarSacar is not null)
-            DibujarConfirmacion();
-
-        Text(Loc.Get("ui.mochila.esc_cerrar"), 180, Escala.LienzoAlto - 60, 18, Gris);
-    }
-
-    private void DibujarMochila(Run partida)
-    {
-        var mochila = partida.Backpack;
-        bool llena = mochila.Ocupados >= CargadorDatos.Actual.Curves.Defenders.BackpackSlots;
-
-        Text($"{Loc.Get("ui.mochila.titulo")}  {mochila.Ocupados} / {CargadorDatos.Actual.Curves.Defenders.BackpackSlots}",
-            180, 260, 30, llena ? new Color(0.95f, 0.6f, 0.3f) : Blanco);
-
-        if (llena)
+        // Un slot de perk equipado: sacarlo pide confirmación, porque destruye.
+        for (int s = 0; s < ficha.Perks.Count; s++)
         {
-            // ⚠ Cuando está llena, el próximo drop obliga a destruir algo. Decirlo
-            // ANTES es lo que convierte eso en una decisión y no en una sorpresa.
-            Text(Loc.Get("ui.mochila.llena"),
-                470, 260, 18, new Color(0.95f, 0.6f, 0.3f));
-        }
-
-        for (int i = 0; i < CargadorDatos.Actual.Curves.Defenders.BackpackSlots; i++)
-        {
-            var r = RectLugar(i);
-            bool ocupado = i < mochila.Items.Count;
-            bool elegido = i == _cosaElegida;
-
-            DrawRect(r, ocupado ? new Color(0.13f, 0.13f, 0.18f) : new Color(0.07f, 0.07f, 0.09f));
-            DrawRect(r,
-                elegido ? new Color(0.4f, 0.9f, 0.5f) : new Color(1, 1, 1, 0.12f),
-                filled: false, width: elegido ? 3f : 1.5f);
-
-            if (!ocupado)
-                continue;
-
-            var cosa = mochila.Items[i];
-
-            if (cosa.Kind == ItemType.Perk)
+            if (RectSlot(s).HasPoint(posicion))
             {
-                var def = CargadorDatos.Actual.Perks.Get(cosa.Id);
-
-                DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 6), ColorDe(def.Tier));
-
-                // ⚠ El icono va ARRIBA y el nombre abajo, no al revés. Con quince
-                // lugares en pantalla el jugador busca por dibujo, no leyendo
-                // quince nombres de doce caracteres; el nombre queda para
-                // desempatar los seis que comparten la misma espada.
-                CargadorIconos.Dibujar(this, def.Key,
-                    r.Position.X + ((LugarLado - IconoLugar) / 2f), r.Position.Y + 10, IconoLugar);
-
-                TextoAjustado(Loc.Perk(def), r.Position.X + 8, r.Position.Y + 66, 12, Blanco, LugarLado - 16);
-                Text(Loc.Tier(def.Tier), r.Position.X + 8, r.Position.Y + 84, 11, ColorDe(def.Tier));
+                _confirmarSacar = (clase, s);
+                return;
             }
-            else
-            {
-                var arma = mochila.WeaponById(cosa.Id);
-
-                // La franja de arriba lleva el color de la RAREZA, no un gris
-                // genérico: es lo primero que mira el jugador al abrir la mochila,
-                // y una legendaria tiene que gritar desde el otro lado de la
-                // pantalla.
-                DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 6),
-                    ColorDeRareza(arma?.Rarity ?? WeaponRarity.Common));
-
-                TextoAjustado(arma is null ? "?" : Loc.Weapon(arma), r.Position.X + 8, r.Position.Y + 34, 14, Blanco, LugarLado - 16);
-
-                // Si tiene habilidad se dice, aunque sea corto. Un arma con
-                // habilidad y números flojos puede valer más que una sin ella, y
-                // el jugador no puede saberlo si solo ve el precio.
-                if (arma is not null && arma.Ability != WeaponAbility.None)
-                {
-                    Text("★", r.Position.X + LugarLado - 22, r.Position.Y + 24, 18,
-                        ColorDeRareza(arma.Rarity));
-                }
-
-                Text($"{arma?.Value ?? 0} {Loc.Get("ui.mochila.oro")}",
-                    r.Position.X + 8, r.Position.Y + 76, 13, Gris);
-            }
-        }
-    }
-
-    private void DibujarClases(Run partida)
-    {
-        Text(Loc.Get("ui.mochila.equipar_en"), 760, 260, 30, Blanco);
-
-        var clases = partida.Roster.Classes;
-
-        for (int i = 0; i < clases.Count; i++)
-        {
-            var ficha = clases[i];
-            var r = RectClase(i);
-            bool mirada = _claseElegida == ficha.DefenderClass;
-
-            // Si hay algo elegido en la mochila, se marca en verde dónde entra.
-            bool aceptaLoElegido = AceptaLoElegido(partida, ficha);
-
-            DrawRect(r, new Color(0.11f, 0.11f, 0.15f));
-            DrawRect(r,
-                aceptaLoElegido ? new Color(0.4f, 0.9f, 0.5f) :
-                mirada ? new Color(0.6f, 0.7f, 0.95f) : new Color(1, 1, 1, 0.12f),
-                filled: false, width: aceptaLoElegido || mirada ? 3f : 1.5f);
-
-            Text(Loc.Class(ficha.DefenderClass), r.Position.X + 14, r.Position.Y + 34, 22, Blanco);
-
-            Text($"{Loc.Get("ui.mochila.nv")} {ficha.Level} · {ficha.Perks.Count}/{ficha.OpenSlots}",
-                r.Position.X + 250, r.Position.Y + 34, 18, Gris);
         }
     }
 
     /// <summary>
-    /// ¿Lo que está elegido en la mochila entra en esta clase?
+    /// ¿Lo que está en ese lugar de la mochila entra en esta clase?
     /// </summary>
     /// <remarks>
     /// Marca en verde dónde se puede soltar, <b>antes</b> del click. Para un perk
@@ -381,12 +399,12 @@ public partial class PantallaMochila : Control
     /// que no se pase del tope de apilado—; el equipo siempre entra, porque su
     /// ranura se pisa y lo anterior vuelve a la mochila.
     /// </remarks>
-    private bool AceptaLoElegido(Run partida, RosterClass ficha)
+    private static bool Acepta(Run partida, RosterClass ficha, int indice)
     {
-        if (_cosaElegida < 0 || _cosaElegida >= partida.Backpack.Items.Count)
+        if (indice < 0 || indice >= partida.Backpack.Items.Count)
             return false;
 
-        var cosa = partida.Backpack.Items[_cosaElegida];
+        var cosa = partida.Backpack.Items[indice];
 
         if (cosa.Kind == ItemType.Weapon)
             return true;
@@ -397,93 +415,546 @@ public partial class PantallaMochila : Control
             return false;
 
         int yaTiene = 0;
+
         foreach (int p in ficha.Perks)
+        {
             if (p == cosa.Id)
                 yaTiene++;
+        }
 
         return yaTiene < def.MaxStacked;
     }
 
-    private void DibujarPerksDeClase(Run partida)
+    // =====================================================================
+    // Geometría propia de la columna derecha
+    // =====================================================================
+
+    /// <summary>
+    /// Los seis slots de perk de la clase, en la columna de la derecha.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ No usa las cuatro tarjetas de <c>shop_card_*</c> del diseño: son cuatro
+    /// y los slots son seis. La grilla se deriva del panel —tres columnas, dos
+    /// filas— conservando los márgenes del diseño, que es lo que hace que se vea
+    /// de la misma familia.
+    /// </remarks>
+    private static Rect2 RectSlot(int i)
     {
+        var panel = UiLayout.ShopPanel;
+        float margen = 20f;
+        float hueco = 10f;
+        float ancho = (panel.Size.X - (margen * 2f) - (hueco * 2f)) / 3f;
+        float alto = ancho * 1.15f;
+
+        return new Rect2(
+            panel.Position.X + margen + ((i % 3) * (ancho + hueco)),
+            UiLayout.ShopCards[0].Position.Y + ((i / 3) * (alto + hueco)),
+            ancho, alto);
+    }
+
+    /// <summary>Dónde arrancan los stats de la clase, debajo de los seis slots.</summary>
+    private static float YStats() => RectSlot(3).End.Y + 16f;
+
+    /// <summary>El botón de comprar el próximo nivel de la clase mirada.</summary>
+    private static Rect2 RectSubirNivel()
+        => new(UiLayout.ShopPanel.Position.X + 20f, YStats() + 92f,
+               UiLayout.ShopPanel.Size.X - 40f, 44f);
+
+    /// <summary>
+    /// Los dos botones de «qué comportamiento manda»: el del perk o el del arma.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Aparecen <b>solo</b> cuando la clase tiene las dos cosas puestas. Sin
+    /// conflicto no hay nada que elegir, y un par de botones permanentes que casi
+    /// siempre no hacen nada es peor que no tenerlos.
+    /// </remarks>
+    private static Rect2 RectComportamiento(bool elDelPerk)
+    {
+        var panel = UiLayout.ShopPanel;
+        float ancho = (panel.Size.X - 50f) / 2f;
+
+        return new Rect2(
+            panel.Position.X + 20f + (elDelPerk ? 0f : ancho + 10f),
+            RectSubirNivel().End.Y + 30f,
+            ancho, 40f);
+    }
+
+    private static Rect2 RectConfirmar()
+        => new((Escala.LienzoAncho / 2f) - 220f, (Escala.LienzoAlto / 2f) + 30f, 200f, 56f);
+
+    private static Rect2 RectCancelar()
+        => new((Escala.LienzoAncho / 2f) + 20f, (Escala.LienzoAlto / 2f) + 30f, 200f, 56f);
+
+    // =====================================================================
+    // Dibujo
+    // =====================================================================
+
+    public override void _Draw()
+    {
+        var partida = _juego.Run;
+
+        if (partida is null)
+            return;
+
+        this.Scrim();
+
+        ColumnaDeClases(partida);
+        ColumnaDeInventario(partida);
+        ColumnaDeDetalle(partida);
+        ColumnaDeLaClaseMirada(partida);
+        Pie();
+
+        if (_confirmarSacar is not null)
+            DibujarConfirmacion();
+    }
+
+    /// <summary>La columna izquierda: dónde se equipa lo elegido.</summary>
+    private void ColumnaDeClases(Run partida)
+    {
+        this.Panel(UiLayout.HeroesPanel, opacidad: 1f);
+        this.SectionTitle(UiLayout.HeroesTitle, Loc.Get("ui.mochila.equipar_en"));
+
+        var clases = partida.Roster.Classes;
+        int visibles = Mathf.Min(clases.Count, UiLayout.HeroCardsVisible);
+
+        for (int i = 0; i < visibles; i++)
+        {
+            var ficha = clases[i];
+            var r = UiLayout.HeroCard(i);
+
+            this.ClassCard(r, ficha,
+                CargadorDatos.Actual.StatsOf(ficha.DefenderClass).Cost,
+                alcanza: true,
+                elegida: _claseElegida == ficha.DefenderClass,
+                puestas: 0);
+
+            // Con algo elegido en la mochila, se marca en verde dónde entra.
+            // Antes del click, que es cuando sirve.
+            if (_cosaElegida >= 0 && Acepta(partida, ficha, _cosaElegida))
+            {
+                this.Glow(r, Palette.Success, 2f);
+                DrawRect(r, Palette.Success, filled: false, width: 3f);
+            }
+        }
+
+        if (visibles < UiLayout.HeroCardsVisible)
+            this.LockedClassCard(UiLayout.HeroCard(visibles), Loc.Get("ui.hud.proximamente"));
+    }
+
+    /// <summary>La columna del medio: pestañas, filtros, grilla y capacidad.</summary>
+    private void ColumnaDeInventario(Run partida)
+    {
+        this.Panel(UiLayout.InventoryPanel, opacidad: 1f);
+
+        this.Tab(UiLayout.TabPerks, Loc.Get("ui.mochila.tab_perks"), _pestana == Pestana.Perks);
+        this.Tab(UiLayout.TabWeapons, Loc.Get("ui.mochila.tab_armas"), _pestana == Pestana.Armas);
+        this.Tab(UiLayout.TabBlueprints, Loc.Get("ui.mochila.tab_planos"), _pestana == Pestana.Planos);
+
+        this.Dropdown(UiLayout.FilterDropdown, "",
+            _soloLoQueEntra ? Loc.Get("ui.mochila.le_entran") : Loc.Get("ui.mochila.todos"));
+
+        this.Dropdown(UiLayout.SortDropdown, Loc.Get("ui.mochila.ordenar"),
+            _ordenPorRareza ? Loc.Get("ui.mochila.por_rareza") : Loc.Get("ui.mochila.por_llegada"));
+
+        if (_pestana == Pestana.Planos)
+        {
+            GrillaDePlanos(partida);
+            return;
+        }
+
+        GrillaDeMochila(partida);
+    }
+
+    private void GrillaDeMochila(Run partida)
+    {
+        var visibles = Visibles(partida);
+        int cap = CargadorDatos.Actual.Curves.Defenders.BackpackSlots;
+
+        // ⚠ Se dibujan los QUINCE lugares, no los ocupados. El hueco libre es
+        // información: dice cuánto margen queda antes de que el próximo drop
+        // obligue a tirar algo.
+        for (int i = 0; i < UiLayout.GridVisible; i++)
+        {
+            var celda = UiLayout.GridCell(i);
+
+            if (i >= visibles.Count)
+            {
+                if (i < cap)
+                    this.EmptySlot(celda);
+
+                continue;
+            }
+
+            int indice = visibles[i];
+            var cosa = partida.Backpack.Items[indice];
+            bool elegido = indice == _cosaElegida;
+
+            if (cosa.Kind == ItemType.Perk)
+            {
+                this.PerkSlot(celda, CargadorDatos.Actual.Perks.Get(cosa.Id), 0, elegido);
+                continue;
+            }
+
+            DibujarArma(celda, partida.Backpack.WeaponById(cosa.Id), elegido);
+        }
+
+        if (visibles.Count == 0)
+        {
+            this.Label(UiLayout.PerkGrid, Loc.Get("ui.mochila.vacia"), 17,
+                Palette.TextDisabled, HorizontalAlignment.Center);
+        }
+
+        // La capacidad, con la barra: el 15/15 se tiene que ver ANTES de que el
+        // próximo drop obligue a destruir algo.
+        var caja = UiLayout.InventoryCapacity;
+        bool llena = partida.Backpack.Ocupados >= cap;
+
+        this.Label(caja, Loc.Get("ui.mochila.capacidad").ToUpperInvariant(), 14, Palette.TextMuted);
+
+        float x = caja.Position.X + UiStyle.Width(Loc.Get("ui.mochila.capacidad").ToUpperInvariant(), 14) + 14f;
+
+        this.Label(new Rect2(x, caja.Position.Y, 90f, caja.Size.Y),
+            $"{partida.Backpack.Ocupados} / {cap}", 17,
+            llena ? Palette.Warning : Palette.TextPrimary);
+
+        this.Bar(new Rect2(x + 80f, caja.Position.Y + (caja.Size.Y / 2f) - 6f,
+                caja.End.X - x - 80f, 12f),
+            cap == 0 ? 0f : partida.Backpack.Ocupados / (float)cap,
+            llena ? Palette.Warning : Palette.Info);
+    }
+
+    /// <summary>
+    /// La pestaña de planos: las recetas de fusión que la cuenta conoce.
+    /// </summary>
+    /// <remarks>
+    /// Cada una se dibuja como <c>Oro + Oro = Único</c>, que es lo que hay que
+    /// mirar cuando un jefe ofrece dos Oro para elegir uno.
+    /// </remarks>
+    private void GrillaDePlanos(Run partida)
+    {
+        var todos = CargadorDatos.Actual.Blueprints.All;
+        var grilla = UiLayout.PerkGrid;
+
+        float alto = 62f;
+        int fila = 0;
+
+        for (int i = 0; i < todos.Count; i++)
+        {
+            if (!partida.ConocePlano(i))
+                continue;
+
+            float y = grilla.Position.Y + (fila * (alto + 8f));
+
+            if (y + alto > grilla.End.Y)
+                break;
+
+            var r = new Rect2(grilla.Position.X, y, grilla.Size.X, alto);
+
+            this.Panel(r, elevado: true, opacidad: 1f);
+
+            var plano = todos[i];
+            float lado = alto - 14f;
+            float x = r.Position.X + 8f;
+
+            Ingrediente(x, y + 7f, lado, plano.GoldA);
+            Signo(x + lado + 7f, y + (alto / 2f), "+");
+            Ingrediente(x + lado + 24f, y + 7f, lado, plano.GoldB);
+            Signo(x + (lado * 2f) + 31f, y + (alto / 2f), "=");
+
+            var salida = CargadorDatos.Actual.Perks.Get(plano.ResultingUnique);
+            var destino = new Rect2(x + (lado * 2f) + 48f, y + 7f, lado, lado);
+
+            this.PerkSlot(destino, salida);
+
+            this.Label(new Rect2(destino.End.X + 12f, y, r.End.X - destino.End.X - 20f, alto),
+                Loc.Perk(salida), 17, Palette.Unique);
+
+            fila++;
+        }
+
+        if (fila == 0)
+        {
+            this.Label(grilla, Loc.Get("ui.hud.sin_planos"), 17,
+                Palette.TextDisabled, HorizontalAlignment.Center);
+        }
+
+        this.Label(UiLayout.InventoryCapacity, Loc.Get("ui.mochila.planos_conocidos"), 15,
+            Palette.TextMuted);
+
+        void Ingrediente(float px, float py, float lado, int idPerk)
+            => this.PerkSlot(new Rect2(px, py, lado, lado), CargadorDatos.Actual.Perks.Get(idPerk));
+
+        void Signo(float px, float py, string s)
+            => this.Label(new Rect2(px, py - 12f, 16f, 24f), s, 20, Palette.TextMuted,
+                HorizontalAlignment.Center);
+    }
+
+    /// <summary>Un arma en un hueco de la grilla: marco de rareza y la estrella.</summary>
+    private void DibujarArma(Rect2 celda, Weapon? arma, bool elegido)
+    {
+        // ⚠ El arma con habilidad va en VIOLETA, no en el dorado del Oro: pelea
+        // por la misma ranura de comportamiento, y el jugador elige cuál habla.
+        // Con el color del Oro esa competencia no se vería.
+        var color = arma is null ? Palette.Common
+            : arma.Ability != WeaponAbility.None ? Palette.Epic
+            : ColorDeRareza(arma.Rarity);
+
+        this.Slot(celda, color, elegido);
+
+        this.Label(celda.Row(4f, celda.Size.Y * 0.5f),
+            arma is null ? "?" : Loc.Weapon(arma)[..1].ToUpperInvariant(),
+            (int)(celda.Size.X * 0.42f), color, HorizontalAlignment.Center);
+
+        this.Label(celda.Row(celda.Size.Y - 20f, 18f),
+            arma is null ? "?" : Loc.Weapon(arma), 12, Palette.TextSecondary,
+            HorizontalAlignment.Center);
+
+        // Si tiene habilidad se dice, aunque sea corto. Un arma con habilidad y
+        // números flojos puede valer más que una sin ella, y el jugador no puede
+        // saberlo si solo ve los stats.
+        if (arma is not null && arma.Ability != WeaponAbility.None)
+            this.Label(celda.Row(2f, 18f), "★", 14, color, HorizontalAlignment.Right, 5f);
+    }
+
+    /// <summary>
+    /// La columna de detalle: lo elegido, en grande.
+    /// </summary>
+    /// <remarks>
+    /// Existe para no tener un tooltip gigante encima de la grilla, que es lo que
+    /// el diseño evita a propósito: con un tooltip, comparar dos perks obliga a
+    /// recordar el primero mientras se mira el segundo.
+    /// </remarks>
+    private void ColumnaDeDetalle(Run partida)
+    {
+        this.Panel(UiLayout.DetailPanel, opacidad: 1f);
+
+        if (_cosaElegida < 0 || _cosaElegida >= partida.Backpack.Items.Count)
+        {
+            this.Label(UiLayout.DetailPanel, Loc.Get("ui.mochila.elegi_algo"), 15,
+                Palette.TextDisabled, HorizontalAlignment.Center);
+
+            return;
+        }
+
+        var cosa = partida.Backpack.Items[_cosaElegida];
+
+        if (cosa.Kind == ItemType.Perk)
+            DetalleDePerk(partida, CargadorDatos.Actual.Perks.Get(cosa.Id));
+        else
+            DetalleDeArma(partida, partida.Backpack.WeaponById(cosa.Id));
+
+        BotonEquipar(partida);
+    }
+
+    private void DetalleDePerk(Run partida, PerkDefinition def)
+    {
+        var color = Palette.Rarity(def.Tier);
+
+        this.Label(UiLayout.DetailTitle.Row(0f, 28f), Loc.Perk(def).ToUpperInvariant(), 21,
+            color, HorizontalAlignment.Center);
+
+        this.Label(UiLayout.DetailTitle.Row(26f, 22f), Loc.Tier(def.Tier).ToUpperInvariant(), 14,
+            Palette.TextMuted, HorizontalAlignment.Center);
+
+        var icono = UiLayout.Square(UiLayout.DetailIcon);
+
+        this.Slot(icono, color);
+
+        if (!CargadorIconos.Dibujar(this, def.Key,
+                icono.Position.X + 8f, icono.Position.Y + 8f, icono.Size.X - 16f))
+        {
+            this.Label(icono, Loc.Perk(def)[..1].ToUpperInvariant(),
+                (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
+        }
+
+        // ⚠ La descripción son las CLASES QUE LO PUEDEN EQUIPAR, no una frase de
+        // sabor. Los perks no tienen texto propio en `lang\` —y no deberían
+        // tenerlo: la magnitud ya está abajo, en los stats— así que el lugar de
+        // la descripción se usa para lo único que el jugador no puede deducir
+        // mirando el icono. Es la misma regla de información total que la tienda:
+        // un Oro que solo pueden usar dos de las nueve clases equipado en la que
+        // no es, es un slot perdido.
+        var sirve = new System.Text.StringBuilder();
+
+        foreach (var c in ChoiceBuilder.All)
+        {
+            if (!def.WorksFor(c))
+                continue;
+
+            if (sirve.Length > 0)
+                sirve.Append(" · ");
+
+            sirve.Append(Loc.Class(c));
+        }
+
+        this.Paragraph(UiLayout.DetailDescription,
+            sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
+            13, Palette.TextSecondary);
+
+        var stats = UiLayout.DetailStats;
+        float alto = 22f;
+
+        this.StatRow(stats.Row(0f, alto), Loc.Effect(def.Effect), $"{def.Magnitude}%", color);
+
+        // El segundo número lo tienen los Únicos, que son la fusión de dos Oro:
+        // Onda de Frío hace splash por el primero y ralentiza por este.
+        if (def.MagnitudeB > 0)
+            this.StatRow(stats.Row(alto, alto), Loc.Get("ui.mochila.receta"), $"{def.MagnitudeB}%");
+
+        this.StatRow(stats.Row(alto * 2f, alto), Loc.Get("ui.mochila.tab_perks"),
+            $"{def.MaxStacked}×");
+    }
+
+    private void DetalleDeArma(Run partida, Weapon? arma)
+    {
+        if (arma is null)
+            return;
+
+        var color = arma.Ability != WeaponAbility.None ? Palette.Epic : ColorDeRareza(arma.Rarity);
+
+        this.Label(UiLayout.DetailTitle.Row(0f, 28f), Loc.Weapon(arma).ToUpperInvariant(), 19,
+            color, HorizontalAlignment.Center);
+
+        var icono = UiLayout.Square(UiLayout.DetailIcon);
+
+        this.Slot(icono, color);
+        this.Label(icono, "⚔", (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
+
+        if (arma.Ability != WeaponAbility.None)
+        {
+            this.Paragraph(UiLayout.DetailDescription,
+                Loc.AbilityText(arma.Ability, arma.Magnitude), 14, Palette.Epic);
+        }
+        else
+        {
+            this.Label(UiLayout.DetailDescription, Loc.Get("ui.tienda.sin_habilidad"), 14,
+                Palette.TextDisabled);
+        }
+
+        var stats = UiLayout.DetailStats;
+        float alto = 22f;
+
+        // ⚠ Los tres vienen en escala interna —centésimas de punto y milésimas de
+        // celda—, así que pasan por Loc. Crudos dirían «1040 de daño» cuando el
+        // defensor pega 10,4.
+        this.StatRow(stats.Row(0f, alto), Loc.Get("ui.mochila.dano"), Loc.Damage(arma.Damage));
+        this.StatRow(stats.Row(alto, alto), Loc.Get("ui.mochila.alcance"), Loc.Range(arma.Range));
+        this.StatRow(stats.Row(alto * 2f, alto), Loc.Get("ui.mochila.cada"),
+            $"{arma.Cadence} {Loc.Get("ui.mochila.ticks")}");
+
+        this.Price(UiLayout.DetailPrice, arma.Value);
+    }
+
+    /// <summary>El botón de equipar, que necesita una clase mirada y que entre.</summary>
+    private void BotonEquipar(Run partida)
+    {
+        var ficha = _claseElegida is { } clase ? partida.Roster.Find(clase) : null;
+        bool puede = ficha is not null && Acepta(partida, ficha, _cosaElegida);
+
+        this.Button(UiLayout.DetailBuy, Loc.Get("ui.mochila.equipar"),
+            puede ? Palette.Success : Palette.TextDisabled, habilitado: puede);
+
+        if (ficha is null)
+        {
+            this.Label(UiLayout.DetailEquip, Loc.Get("ui.mochila.elegi_clase"), 13,
+                Palette.TextDisabled, HorizontalAlignment.Center);
+
+            return;
+        }
+
+        if (!puede)
+        {
+            this.Label(UiLayout.DetailEquip, Loc.Get("ui.mochila.no_entra"), 13,
+                Palette.Danger, HorizontalAlignment.Center);
+        }
+    }
+
+    /// <summary>La columna derecha: los seis slots de la clase mirada y su nivel.</summary>
+    private void ColumnaDeLaClaseMirada(Run partida)
+    {
+        this.Panel(UiLayout.ShopPanel, opacidad: 1f);
+
         if (_claseElegida is not { } clase)
         {
-            Text(Loc.Get("ui.mochila.elegi_clase"), 1200, 280, 18, Gris);
+            this.Label(UiLayout.ShopPanel, Loc.Get("ui.mochila.elegi_clase"), 16,
+                Palette.TextDisabled, HorizontalAlignment.Center);
+
             return;
         }
 
         var ficha = partida.Roster.Find(clase);
+
         if (ficha is null)
             return;
 
-        Text($"{Loc.Class(clase)} · {Loc.Get("ui.mochila.nivel")} {ficha.Level}", 1200, 260, 26, Blanco);
+        this.SectionTitle(UiLayout.ShopTitle, Loc.Class(clase), Palette.TextPrimary);
 
+        this.Label(UiLayout.ShopTimer,
+            $"{Loc.Get("ui.mochila.nivel")} {ficha.Level} · {ficha.Perks.Count}/{ficha.OpenSlots}",
+            16, Palette.TextMuted, HorizontalAlignment.Center);
+
+        // ⚠ Los slots cerrados se ven CERRADOS, no ocultos: el jugador tiene que
+        // ver qué le falta para saber que levelear sirve.
         for (int s = 0; s < CargadorDatos.Actual.Classes.PerkSlotsPerClass; s++)
         {
             var r = RectSlot(s);
-            bool abierto = s < ficha.OpenSlots;
-            bool lleno = s < ficha.Perks.Count;
 
-            // ⚠ Los slots cerrados se ven CERRADOS, no ocultos: el jugador tiene
-            // que ver qué le falta para saber que levelear sirve.
-            DrawRect(r, abierto ? new Color(0.13f, 0.13f, 0.18f) : new Color(0.05f, 0.05f, 0.06f));
-            DrawRect(r, new Color(1, 1, 1, abierto ? 0.15f : 0.06f), filled: false, width: 1.5f);
-
-            if (!abierto)
+            if (s >= ficha.OpenSlots)
             {
-                Text($"{Loc.Get("ui.mochila.nv")} {s + 1}",
-                    r.Position.X + 20, r.Position.Y + 48, 16, new Color(0.4f, 0.4f, 0.42f));
+                this.EmptySlot(r, bloqueado: true);
+
+                this.Label(r.Row(r.Size.Y - 20f, 18f), $"{Loc.Get("ui.hud.niv")} {s + 1}", 12,
+                    Palette.TextDisabled, HorizontalAlignment.Center);
+
                 continue;
             }
 
-            if (!lleno)
+            if (s >= ficha.Perks.Count)
+            {
+                this.EmptySlot(r);
                 continue;
+            }
 
-            var def = CargadorDatos.Actual.Perks.Get(ficha.Perks[s]);
-            DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 5), ColorDe(def.Tier));
-
-            CargadorIconos.Dibujar(this, def.Key,
-                r.Position.X + ((SlotLado - IconoSlot) / 2f), r.Position.Y + 9, IconoSlot);
-
-            TextoAjustado(Loc.Perk(def), r.Position.X + 6, r.Position.Y + 68, 12, Blanco, 74);
+            this.PerkSlot(r, CargadorDatos.Actual.Perks.Get(ficha.Perks[s]));
         }
 
-        var stats = partida.Roster.StatsOf(clase, partida.Backpack);
-
-        // ⚠ Los dos vienen en escala interna —centésimas de punto y milésimas de
-        // celda—, así que pasan por Loc. Es la pantalla donde se ve si un perk de
-        // alcance sirvió: con el redondeo a celdas enteras de antes, equipar
-        // Halcón no movía este número ni un poco.
-        Text($"{Loc.Get("ui.mochila.dano")} {Loc.Damage(stats.Damage)} · " +
-             $"{Loc.Get("ui.mochila.alcance")} {Loc.Range(stats.RangeMilli)} · " +
-             $"{Loc.Get("ui.mochila.cada")} {stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}",
-            1200, 420, 19, new Color(0.85f, 0.85f, 0.82f));
-
-        if (stats.Behavior != PerkEffect.None)
-        {
-            Text($"{Loc.Get("ui.mochila.habilidad")} {Loc.Effect(stats.Behavior)}",
-                1200, 448, 19, new Color(0.95f, 0.8f, 0.4f));
-        }
-        else if (stats.Ability != WeaponAbility.None)
-        {
-            Text($"{Loc.Get("ui.mochila.habilidad")} {Loc.Ability(stats.Ability)}",
-                1200, 448, 19, new Color(0.95f, 0.8f, 0.4f));
-        }
-
-        // ⚠ AVISO EXPLÍCITO (Drops_v2): el arma y el perk son la MISMA ranura, y
-        // el arma gana. La exclusión no cambió; lo que cambió es que ahora se
-        // dice. Antes un Oro raro —uno de los ocho de toda la corrida— podía
-        // quedar anulado por equipar un arma y el jugador no se enteraba nunca.
-        if (partida.ArmaTapaElRasgo(clase))
-        {
-            Text(Loc.Get("ui.mochila.arma_tapa_rasgo"),
-                1200, 470, 16, new Color(0.95f, 0.55f, 0.4f));
-        }
-
-        Text(Loc.Get("ui.mochila.sacar_destruye"), 1200, 496, 16, Gris);
-
+        StatsDeClase(partida, clase);
         DibujarSubirNivel(partida, ficha);
         DibujarComportamiento(partida, ficha);
+    }
+
+    private void StatsDeClase(Run partida, DefenderClass clase)
+    {
+        var stats = partida.Roster.StatsOf(clase, partida.Backpack);
+        var panel = UiLayout.ShopPanel;
+
+        float x = panel.Position.X + 20f;
+        float ancho = panel.Size.X - 40f;
+        float y = YStats();
+        float alto = 21f;
+
+        // ⚠ Los dos vienen en escala interna. Es la pantalla donde se ve si un
+        // perk de alcance sirvió: con el redondeo a celdas enteras de antes,
+        // equipar Halcón no movía este número ni un poco.
+        this.StatRow(new Rect2(x, y, ancho, alto),
+            Loc.Get("ui.mochila.dano"), Loc.Damage(stats.Damage));
+
+        this.StatRow(new Rect2(x, y + alto, ancho, alto),
+            Loc.Get("ui.mochila.alcance"), Loc.Range(stats.RangeMilli));
+
+        this.StatRow(new Rect2(x, y + (alto * 2f), ancho, alto),
+            Loc.Get("ui.mochila.cada"), $"{stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}");
+
+        string habilidad =
+            stats.Behavior != PerkEffect.None ? Loc.Effect(stats.Behavior)
+            : stats.Ability != WeaponAbility.None ? Loc.Ability(stats.Ability)
+            : "";
+
+        if (habilidad.Length > 0)
+        {
+            this.StatRow(new Rect2(x, y + (alto * 3f), ancho, alto),
+                Loc.Get("ui.mochila.habilidad"), habilidad, Palette.Legendary);
+        }
     }
 
     /// <summary>
@@ -506,11 +977,8 @@ public partial class PantallaMochila : Control
 
         if (ficha.Level >= ficha.MaxLevel)
         {
-            DrawRect(caja, new Color(0.08f, 0.08f, 0.10f));
-            DrawRect(caja, new Color(1, 1, 1, 0.08f), filled: false, width: 1.5f);
-
-            Text(Loc.Get("ui.mochila.nivel_maximo"),
-                caja.Position.X + 18, caja.Position.Y + 33, 19, Gris);
+            this.Button(caja, Loc.Get("ui.mochila.nivel_maximo"), Palette.TextDisabled,
+                habilitado: false);
 
             return;
         }
@@ -518,116 +986,104 @@ public partial class PantallaMochila : Control
         int precio = CargadorDatos.Actual.Curves.Economy.LevelUpPrice(ficha.Level + 1);
         bool alcanza = precio <= partida.Gold;
 
-        DrawRect(caja, alcanza ? new Color(0.16f, 0.34f, 0.22f) : new Color(0.14f, 0.10f, 0.10f));
+        this.Button(caja,
+            $"{Loc.Get("ui.mochila.subir_nivel")} {ficha.Level + 1}",
+            alcanza ? Palette.Success : Palette.Danger, habilitado: alcanza);
 
-        DrawRect(caja, alcanza ? new Color(0.45f, 0.85f, 0.55f) : new Color(0.55f, 0.35f, 0.35f),
-            filled: false, width: 1.5f);
-
-        string etiqueta = Loc.Get("ui.mochila.subir_nivel") + " " + (ficha.Level + 1)
-                          + " — " + precio + " " + Loc.Get("ui.mochila.oro");
-
-        Text(etiqueta, caja.Position.X + 18, caja.Position.Y + 33, 19,
-            alcanza ? new Color(0.90f, 0.98f, 0.92f) : new Color(0.78f, 0.60f, 0.58f));
-
-        if (!alcanza)
-        {
-            Text(Loc.Get("ui.mochila.sin_oro"),
-                caja.Position.X + caja.Size.X + 14, caja.Position.Y + 33, 16, Gris);
-        }
+        this.Price(new Rect2(caja.Position.X, caja.End.Y + 4f, caja.Size.X, 22f),
+            precio, alcanza, HorizontalAlignment.Center);
     }
 
     /// <summary>
     /// Los dos botones de «qué comportamiento manda»: el del perk o el del arma.
     /// </summary>
     /// <remarks>
-    /// <para>⚠ <b>La ranura de comportamiento sigue siendo UNA.</b> Esto no permite
-    /// tener los dos: permite elegir cuál habla. Tenerlos juntos multiplicaría las
-    /// combinaciones a balancear por el catálogo entero de armas.</para>
+    /// <para>⚠ <b>La ranura de comportamiento sigue siendo UNA.</b> Esto no
+    /// permite tener los dos: permite elegir cuál habla. Tenerlos juntos
+    /// multiplicaría las combinaciones a balancear por el catálogo entero de
+    /// armas.</para>
     ///
-    /// <para><b>Los stats del arma se conservan en los dos casos</b>, y ese es todo
-    /// el punto. Antes ganaba el arma siempre, así que encontrar una excelente
-    /// obligaba a apagar un Único que costó dos jefes y un plano; el jugador
-    /// terminaba dejándola sin equipar, que es lo peor que le puede pasar a un
-    /// drop. La línea de abajo lo dice explícitamente, porque si no se dice el
-    /// jugador va a suponer que elegir el perk le apaga el arma entera.</para>
+    /// <para><b>Los stats del arma se conservan en los dos casos</b>, y ese es
+    /// todo el punto. Antes ganaba el arma siempre, así que encontrar una
+    /// excelente obligaba a apagar un Único que costó dos jefes y un plano; el
+    /// jugador terminaba dejándola sin equipar, que es lo peor que le puede pasar
+    /// a un drop. La línea de abajo lo dice explícitamente, porque si no se dice
+    /// el jugador va a suponer que elegir el perk le apaga el arma entera.</para>
     /// </remarks>
     private void DibujarComportamiento(Run partida, RosterClass ficha)
     {
         if (!partida.HayConflictoDeComportamiento(ficha.DefenderClass))
             return;
 
-        Text(Loc.Get("ui.mochila.comportamiento_activo"), 1200, 592, 17, Gris);
+        var izquierda = RectComportamiento(elDelPerk: true);
 
-        Boton(RectComportamiento(elDelPerk: true), Loc.Get("ui.mochila.el_perk"), ficha.PreferPerkBehavior);
-        Boton(RectComportamiento(elDelPerk: false), Loc.Get("ui.mochila.el_arma"), !ficha.PreferPerkBehavior);
+        this.Label(new Rect2(izquierda.Position.X, izquierda.Position.Y - 22f,
+                UiLayout.ShopPanel.Size.X - 40f, 20f),
+            Loc.Get("ui.mochila.comportamiento_activo").ToUpperInvariant(), 13, Palette.TextMuted);
 
-        Text(Loc.Get("ui.mochila.stats_del_arma_quedan"), 1200, 674, 15, Gris);
+        this.Button(izquierda, Loc.Get("ui.mochila.el_perk"),
+            ficha.PreferPerkBehavior ? Palette.Legendary : Palette.BorderNormal,
+            relleno: ficha.PreferPerkBehavior);
 
-        void Boton(Rect2 caja, string etiqueta, bool activo)
-        {
-            DrawRect(caja, activo ? new Color(0.16f, 0.34f, 0.22f) : new Color(0.10f, 0.11f, 0.14f));
+        this.Button(RectComportamiento(elDelPerk: false), Loc.Get("ui.mochila.el_arma"),
+            ficha.PreferPerkBehavior ? Palette.BorderNormal : Palette.Epic,
+            relleno: !ficha.PreferPerkBehavior);
 
-            DrawRect(caja, activo ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.14f),
-                filled: false, width: 1.5f);
+        var pie = new Rect2(izquierda.Position.X, izquierda.End.Y + 4f,
+            UiLayout.ShopPanel.Size.X - 40f, 34f);
 
-            Text(etiqueta, caja.Position.X + 16, caja.Position.Y + 30, 18,
-                activo ? new Color(0.90f, 0.98f, 0.92f) : Gris);
-        }
+        this.Paragraph(pie, Loc.Get("ui.mochila.stats_del_arma_quedan"), 12, Palette.TextMuted);
+    }
+
+    /// <summary>El pie: cómo se cierra y la leyenda de rarezas.</summary>
+    private void Pie()
+    {
+        this.Panel(UiLayout.FooterBar, opacidad: 1f);
+
+        this.Label(UiLayout.FooterTip,
+            $"{Loc.Get("ui.mochila.esc_cerrar")}  ·  {Loc.Get("ui.mochila.sacar_destruye")}",
+            14, Palette.TextMuted);
+
+        this.RarityLegend(UiLayout.FooterLegend);
     }
 
     private void DibujarConfirmacion()
     {
-        var panel = new Rect2(Escala.LienzoAncho / 2 - 320, Escala.LienzoAlto / 2 - 110, 640, 220);
+        this.Scrim();
 
-        DrawRect(panel, new Color(0.10f, 0.07f, 0.07f, 0.98f));
-        DrawRect(panel, new Color(0.9f, 0.35f, 0.3f), filled: false, width: 3f);
+        var panel = new Rect2((Escala.LienzoAncho / 2f) - 320f, (Escala.LienzoAlto / 2f) - 110f,
+            640f, 220f);
 
-        Text(Loc.Get("ui.mochila.confirmar_titulo"),
-            panel.Position.X + 40, panel.Position.Y + 60, 28, new Color(0.95f, 0.5f, 0.45f));
+        this.Panel(panel, elevado: true, opacidad: 1f);
+        this.Glow(panel, Palette.Danger, 2f, 6);
+        DrawRect(panel, Palette.Danger, filled: false, width: 3f);
 
-        Text(Loc.Get("ui.mochila.confirmar_detalle"),
-            panel.Position.X + 40, panel.Position.Y + 100, 19, new Color(0.85f, 0.8f, 0.8f));
+        this.Label(panel.Row(40f, 40f), Loc.Get("ui.mochila.confirmar_titulo"), 27,
+            Palette.Danger, HorizontalAlignment.Center);
 
-        var confirmar = RectConfirmar();
-        DrawRect(confirmar, new Color(0.5f, 0.16f, 0.16f));
-        Text(Loc.Get("ui.mochila.destruir"), confirmar.Position.X + 50, confirmar.Position.Y + 36, 21, Blanco);
+        this.Label(panel.Row(84f, 30f), Loc.Get("ui.mochila.confirmar_detalle"), 17,
+            Palette.TextSecondary, HorizontalAlignment.Center);
 
-        var cancelar = RectCancelar();
-        DrawRect(cancelar, new Color(0.18f, 0.18f, 0.22f));
-        Text(Loc.Get("ui.mochila.cancelar"), cancelar.Position.X + 50, cancelar.Position.Y + 36, 21, Blanco);
+        this.Button(RectConfirmar(), Loc.Get("ui.mochila.destruir"), Palette.Danger);
+        this.Button(RectCancelar(), Loc.Get("ui.mochila.cancelar"), Palette.BorderNormal,
+            relleno: false);
     }
 
     /// <summary>
     /// El color de la rareza de un arma.
     /// </summary>
     /// <remarks>
-    /// Naranja para la legendaria y no dorado, para que no se confunda con el
-    /// dorado del perk de Oro: son dos escalas distintas —una de perks, otra de
-    /// armas— y mezclarlas visualmente haría que el jugador crea que un arma
-    /// legendaria y un perk de Oro son la misma categoría de cosa.
+    /// Usa los mismos seis marcos que todo lo demás
+    /// (<see cref="Palette.Rarity"/>), pero la legendaria de arma cae en el
+    /// <b>naranja</b> del ámbar y no en el dorado del perk de Oro: son dos
+    /// escalas distintas —una de perks, otra de armas— y mezclarlas haría creer
+    /// que un arma legendaria y un perk de Oro son la misma categoría de cosa.
     /// </remarks>
     private static Color ColorDeRareza(WeaponRarity r) => r switch
     {
-        WeaponRarity.Rare => new Color(0.35f, 0.65f, 0.95f),
-        WeaponRarity.Epic => new Color(0.70f, 0.40f, 0.95f),
-        WeaponRarity.Legendary => new Color(0.98f, 0.55f, 0.15f),
-        _ => new Color(0.62f, 0.62f, 0.66f),
+        WeaponRarity.Rare => Palette.Rare,
+        WeaponRarity.Epic => Palette.Epic,
+        WeaponRarity.Legendary => Palette.Warning,
+        _ => Palette.Common,
     };
-
-    private static Color ColorDe(PerkTier tier) => tier switch
-    {
-        PerkTier.Bronze => new Color(0.72f, 0.45f, 0.20f),
-        PerkTier.Silver => new Color(0.75f, 0.78f, 0.82f),
-        PerkTier.Gold => new Color(0.95f, 0.78f, 0.25f),
-        _ => new Color(0.55f, 0.75f, 0.98f),
-    };
-
-    private static readonly Color Blanco = new(0.94f, 0.94f, 0.92f);
-    private static readonly Color Gris = new(0.62f, 0.62f, 0.60f);
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
-
-    private void TextoAjustado(string s, float x, float y, int tamano, Color color, float ancho)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, ancho, tamano, color);
 }

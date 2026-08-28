@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -18,7 +19,6 @@ namespace TowerOfArgentum;
 public partial class PantallaFinDeCorrida : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
 
     private bool _reportado;
     private string _estadoEnvio = "";
@@ -31,7 +31,7 @@ public partial class PantallaFinDeCorrida : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
     }
@@ -111,66 +111,73 @@ public partial class PantallaFinDeCorrida : Control
 
         bool gano = partida.State == RunState.Won;
 
-        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.62f));
+        this.Scrim();
 
-        var panel = new Rect2(Escala.LienzoAncho / 2 - 420, Escala.LienzoAlto / 2 - 220, 840, 440);
-        var acento = gano ? new Color(0.4f, 0.95f, 0.5f) : new Color(0.92f, 0.35f, 0.32f);
+        var panel = new Rect2((Escala.LienzoAncho / 2f) - 420f, (Escala.LienzoAlto / 2f) - 220f,
+            840f, 440f);
 
-        DrawRect(panel, new Color(0.07f, 0.07f, 0.10f, 0.97f));
+        var acento = gano ? Palette.Success : Palette.Danger;
+
+        this.Panel(panel, elevado: true, opacidad: 1f);
+        this.Glow(panel, acento, 2f, 6);
+
         DrawRect(panel, acento, filled: false, width: 3f);
-        DrawRect(new Rect2(panel.Position.X, panel.Position.Y, panel.Size.X, 8), acento);
+        DrawRect(panel.Row(0f, 6f), acento);
 
-        float x = panel.Position.X + 60;
-        float y = panel.Position.Y + 100;
+        this.Label(panel.Row(60f, 60f), Loc.Get(gano ? "ui.fin.ganaste" : "ui.fin.cayo_la_torre"),
+            52, acento, HorizontalAlignment.Center);
 
-        Text(Loc.Get(gano ? "ui.fin.ganaste" : "ui.fin.cayo_la_torre"), x, y, 54, acento);
+        // "Llegaste a la N de 100" y no solo "oleada N": el 100 es el final real
+        // de la corrida, y verlo dice cuánto falta.
+        this.Label(panel.Row(130f, 30f),
+            gano
+                ? Loc.Get("ui.fin.mataste_al_jefe")
+                : $"{Loc.Get("ui.fin.llegaste_a_la_oleada")} {partida.Wave} " +
+                  $"{Loc.Get("ui.fin.de")} {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun}.",
+            22, Palette.TextPrimary, HorizontalAlignment.Center);
 
-        y += 70;
+        this.Rule(panel, 180f);
 
-        if (gano)
-        {
-            Text(Loc.Get("ui.fin.mataste_al_jefe"), x, y, 22, Blanco);
-        }
-        else
-        {
-            // "Llegaste a la N de 100" y no solo "oleada N": el 100 es el final
-            // real de la corrida, y verlo dice cuánto falta.
-            Text($"{Loc.Get("ui.fin.llegaste_a_la_oleada")} {partida.Wave} " +
-                 $"{Loc.Get("ui.fin.de")} {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun}.",
-                x, y, 22, Blanco);
-        }
-
-        y += 60;
-
+        // Las tres cifras que el ranking mira, en columnas: se comparan con las
+        // de la corrida anterior sin leer una frase.
         int segundos = partida.Tick / Ints.TicksPerSecond;
 
-        Text($"{Loc.Get("ui.fin.area")} {CargadorDatos.Actual.Areas.OfWave(partida.Wave)} · " +
-              $"{segundos / 60:00}:{segundos % 60:00} · {partida.Tick} {Loc.Get("ui.fin.ticks")}",
-            x, y, 21, Gris);
+        Cifra(0, Loc.Get("ui.fin.area"),
+            CargadorDatos.Actual.Areas.OfWave(partida.Wave).ToString(), Palette.TextPrimary);
 
-        y += 34;
+        Cifra(1, Loc.Get("ui.preparacion.wave"), partida.Wave.ToString(), Palette.TextPrimary);
+
+        Cifra(2, Loc.Get("ui.fin.ticks"), $"{segundos / 60:00}:{segundos % 60:00}", Palette.Info);
 
         // Los ticks son el desempate del ranking, así que se dice para qué sirven.
-        Text(Loc.Get("ui.fin.desempate"), x, y, 17, Gris);
-
-        y += 62;
+        this.Label(panel.Row(300f, 24f), Loc.Get("ui.fin.desempate"), 16, Palette.TextMuted,
+            HorizontalAlignment.Center);
 
         if (_oroGanado >= 0)
         {
-            Text($"+{_oroGanado} {Loc.Get("ui.fin.de_oro_a_la_billetera")}",
-                x, y, 26, new Color(0.98f, 0.85f, 0.35f));
-            y += 34;
+            var oro = new Rect2(panel.Position.X, panel.Position.Y + 334f, panel.Size.X, 30f);
+
+            this.Price(oro, (int)_oroGanado, alcanza: true, HorizontalAlignment.Center);
+
+            this.Label(panel.Row(366f, 24f), Loc.Get("ui.fin.de_oro_a_la_billetera"), 16,
+                Palette.Gold, HorizontalAlignment.Center);
         }
 
-        Text(_estadoEnvio, x, y, 18, Gris);
+        this.Label(panel.Row(panel.Size.Y - 62f, 24f), _estadoEnvio, 16, Palette.TextMuted,
+            HorizontalAlignment.Center);
 
-        Text(Loc.Get("ui.fin.esc_volver"),
-            panel.Position.X + 60, panel.Position.Y + panel.Size.Y - 40, 18, Gris);
+        this.Label(panel.Row(panel.Size.Y - 36f, 24f), Loc.Get("ui.fin.esc_volver"), 15,
+            Palette.TextDisabled, HorizontalAlignment.Center);
+
+        void Cifra(int i, string etiqueta, string valor, Color color)
+        {
+            float ancho = panel.Size.X / 3f;
+            var celda = new Rect2(panel.Position.X + (i * ancho), panel.Position.Y + 200f, ancho, 90f);
+
+            this.Label(celda.Row(0f, 22f), etiqueta.ToUpperInvariant(), 14, Palette.TextMuted,
+                HorizontalAlignment.Center);
+
+            this.Label(celda.Row(24f, 46f), valor, 40, color, HorizontalAlignment.Center);
+        }
     }
-
-    private static readonly Color Blanco = new(0.93f, 0.93f, 0.91f);
-    private static readonly Color Gris = new(0.62f, 0.62f, 0.60f);
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }

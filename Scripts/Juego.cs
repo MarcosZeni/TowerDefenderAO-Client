@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -42,6 +43,38 @@ public partial class Juego : Node2D
     private int _velocidad = 1;
 
     private bool _pausado;
+
+    /// <summary>
+    /// Si la corrida está en pausa. La leen y la escriben el HUD y las teclas.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Pausar frena los ticks y el ranking desempata por ticks, así que en
+    /// pausa se mira pero no se actúa (ver <c>PuedeActuar</c>). El botón del HUD
+    /// pasa por acá, igual que el atajo de teclado: si hubiera dos caminos
+    /// distintos, uno de los dos se olvidaría de esa regla.
+    /// </remarks>
+    public bool Pausado
+    {
+        get => _pausado;
+        set
+        {
+            _pausado = value;
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>El multiplicador de velocidad: 1, 2 o 4.</summary>
+    public int Velocidad
+    {
+        get => _velocidad;
+        set => _velocidad = value;
+    }
+
+    /// <summary>El menú de ESC, para poder abrirlo desde el botón del HUD.</summary>
+    public PantallaMenuEsc? EscMenu { get; set; }
+
+    /// <summary>Las opciones, para el botón del engranaje del HUD.</summary>
+    public PantallaOpciones? Opciones { get; set; }
 
     /// <summary>
     /// Fija con qué corrida se arranca. Se llama <b>antes</b> de agregar el nodo
@@ -91,7 +124,7 @@ public partial class Juego : Node2D
         var entrada = mapa.Route.Entrada;
         var (px, py) = Escala.CentroDe(entrada.X, entrada.Y);
 
-        AddChild(new PortalEntrada(new Color(0.45f, 0.78f, 1f))
+        AddChild(new PortalEntrada(Palette.Info)
         {
             Position = new Vector2(px, py),
         });
@@ -596,13 +629,8 @@ public partial class Juego : Node2D
         // mientras que el contorno marca la celda sin pintarla.
         bool hayPiso = piso is not null;
 
-        var relleno = hayPiso
-            ? new Color(0.20f, 0.45f, 0.28f, 0.10f)
-            : new Color(0.20f, 0.45f, 0.28f, 0.28f);
-
-        var borde = hayPiso
-            ? new Color(0.55f, 0.90f, 0.60f, 0.45f)
-            : new Color(0.35f, 0.70f, 0.45f, 0.25f);
+        var relleno = Palette.Success.Alpha(hayPiso ? 0.08f : 0.20f);
+        var borde = Palette.Success.Alpha(hayPiso ? 0.45f : 0.28f);
 
         for (int y = 0; y < mapa.Height; y++)
         {
@@ -643,7 +671,7 @@ public partial class Juego : Node2D
             {
                 DrawRect(
                     new Rect2(d.Cell.X * celda + 8, d.Cell.Y * celda + 8, celda - 16, celda - 16),
-                    new Color(0.2f, 0.8f, 0.4f));
+                    Palette.Success);
             }
         }
 
@@ -666,13 +694,18 @@ public partial class Juego : Node2D
                 // Sin sprite todavía: el arte entra por áreas y hoy está la 1. El
                 // círculo de siempre, para que el área 5 se pueda jugar igual.
                 DrawCircle(centro, celda * 0.3f,
-                    conPerk ? new Color(0.9f, 0.7f, 0.1f) : new Color(0.8f, 0.25f, 0.25f));
+                    conPerk ? Palette.Warning : Palette.Danger);
             }
 
-            // Barra de vida.
-            float porcion = e.MaxHp == 0 ? 0f : (float)e.Hp / e.MaxHp;
-            DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40, 5), new Color(0, 0, 0, 0.6f));
-            DrawRect(new Rect2(centro.X - 20, centro.Y - 30, 40 * porcion, 5), new Color(0.2f, 0.9f, 0.2f));
+            // Barra de vida. Los mismos tres colores que la de la Torre —verde,
+            // ámbar, rojo—: el jugador ya sabe leerlos de la barra de arriba, y
+            // dos escalas distintas de "cuánta vida queda" se confunden.
+            int porcentaje = e.MaxHp == 0 ? 0 : e.Hp * 100 / e.MaxHp;
+            var barra = new Rect2(centro.X - 20f, centro.Y - 30f, 40f, 5f);
+
+            DrawRect(barra, Palette.BackgroundMain.Alpha(0.7f));
+            DrawRect(new Rect2(barra.Position, new Vector2(40f * porcentaje / 100f, 5f)),
+                Palette.Health(porcentaje));
         }
 
         DibujarCursor(celda);
@@ -924,15 +957,14 @@ public partial class Juego : Node2D
             var centro = new Vector2((c.X + 0.5f) * celda, (c.Y + 0.5f) * celda);
             float radio = alcanceMili * celda / (float)Ints.ThousandthsPerCell;
 
-            DrawCircle(centro, radio, new Color(0.5f, 0.75f, 1f, 0.10f));
-            DrawArc(centro, radio, 0, Mathf.Tau, 64,
-                new Color(0.6f, 0.8f, 1f, 0.5f), 2f);
+            DrawCircle(centro, radio, Palette.Info.Alpha(0.10f));
+            DrawArc(centro, radio, 0, Mathf.Tau, 64, Palette.Info.Alpha(0.5f), 2f);
         }
 
         var color =
-            ocupada is not null ? new Color(0.95f, 0.75f, 0.2f, 0.85f) :
-            puede ? new Color(0.35f, 0.9f, 0.45f, 0.85f) :
-                    new Color(0.9f, 0.3f, 0.3f, 0.65f);
+            ocupada is not null ? Palette.Warning.Alpha(0.85f) :
+            puede ? Palette.Success.Alpha(0.85f) :
+                    Palette.Danger.Alpha(0.65f);
 
         DrawRect(new Rect2(c.X * celda, c.Y * celda, celda, celda),
             color, filled: false, width: 3f);

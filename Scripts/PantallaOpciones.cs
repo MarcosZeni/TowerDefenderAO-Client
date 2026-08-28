@@ -1,4 +1,5 @@
 using Godot;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -17,8 +18,6 @@ namespace TowerOfArgentum;
 /// </remarks>
 public partial class PantallaOpciones : Control
 {
-    private Font _fuente = null!;
-
     /// <summary>Se cerró. Lo escucha quien lo abrió, para volver a mostrarse.</summary>
     public event System.Action? Cerrado;
 
@@ -37,7 +36,7 @@ public partial class PantallaOpciones : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
@@ -267,9 +266,18 @@ public partial class PantallaOpciones : Control
         if (!_abierto)
             return;
 
-        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.86f));
+        this.Scrim();
 
-        Text(Loc.Get("ui.opciones.titulo"), X0, Y0 - 34, 40, new Color(0.95f, 0.95f, 0.92f));
+        // El marco alrededor de la lista entera: sin él las filas flotan sobre el
+        // velo y la pantalla es la única del juego sin panel.
+        var marco = new Rect2(X0 - 24f, Y0 - 78f, Width + 48f, (TotalFilas * AltoFila) + 100f);
+
+        this.Panel(marco, opacidad: 1f);
+
+        this.Label(new Rect2(X0, Y0 - 68f, Width, 48f), Loc.Get("ui.opciones.titulo"), 38,
+            Palette.TextPrimary);
+
+        this.Rule(marco, 76f);
 
         Titulo(IndiceDe(Fila.TituloVentana), Loc.Get("ui.opciones.ventana"));
         ModoVentana(IndiceDe(Fila.ModoVentana));
@@ -293,23 +301,23 @@ public partial class PantallaOpciones : Control
     }
 
     private void Titulo(int i, string texto)
-        => Text(texto, X0, Y0 + (i * AltoFila) + 30, 20, new Color(0.55f, 0.75f, 0.95f));
+        => this.Label(RectFila(i), texto.ToUpperInvariant(), 17, Palette.Info);
 
     private void Fondo(int i, bool interactiva)
     {
         var r = RectFila(i);
         bool resaltada = interactiva && i == _bajoElCursor;
 
-        DrawRect(r, new Color(0.09f, 0.09f, 0.13f, resaltada ? 0.95f : 0.72f));
+        DrawRect(r, resaltada ? Palette.PanelElevated : Palette.BackgroundAlt.Alpha(0.7f));
 
         if (resaltada)
-            DrawRect(r, new Color(0.45f, 0.85f, 0.55f, 0.6f), filled: false, width: 2f);
+            DrawRect(r, Palette.BorderLight, filled: false, width: 2f);
     }
 
     private void ModoVentana(int i)
     {
         Fondo(i, interactiva: true);
-        Text(Loc.Get("ui.opciones.modo"), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        this.Label(RectFila(i), Loc.Get("ui.opciones.modo"), 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         bool completa = DisplayServer.WindowGetMode() is DisplayServer.WindowMode.ExclusiveFullscreen
             or DisplayServer.WindowMode.Fullscreen;
@@ -321,7 +329,7 @@ public partial class PantallaOpciones : Control
     private void Resoluciones(int i)
     {
         Fondo(i, interactiva: true);
-        Text(Loc.Get("ui.opciones.resolucion"), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        this.Label(RectFila(i), Loc.Get("ui.opciones.resolucion"), 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         var actual = DisplayServer.WindowGetSize();
 
@@ -334,30 +342,27 @@ public partial class PantallaOpciones : Control
         // ⚠ La resolución cambia la NITIDEZ, no el campo visible: el lienzo es
         // siempre 1920x1080 y `keep` no le da más ruta a nadie. Decirlo acá evita
         // que el jugador piense que en 4K ve más mapa (INTERFAZ.md §1).
-        Text(Loc.Get("ui.opciones.nitidez"),
-            X0 + 300 + (Resolucion.Opciones.Length * 96) + 8,
-            Y0 + (i * AltoFila) + 27, 14, new Color(0.5f, 0.5f, 0.48f));
+        float x = X0 + 300 + (Resolucion.Opciones.Length * 96) + 8;
+
+        this.Label(new Rect2(x, RectFila(i).Position.Y, X0 + Width - x - 20f, AltoFila - 6f),
+            Loc.Get("ui.opciones.nitidez"), 13, Palette.TextDisabled);
     }
 
     private void Barra(int i, string nombre, int valor)
     {
         Fondo(i, interactiva: true);
-        Text(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        this.Label(RectFila(i), nombre, 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         var barra = RectBarra(i);
 
-        DrawRect(barra, new Color(0, 0, 0, 0.55f));
-        DrawRect(new Rect2(barra.Position, new Vector2(barra.Size.X * valor / 100f, barra.Size.Y)),
-            valor > 0 ? new Color(0.35f, 0.75f, 0.95f) : new Color(0.4f, 0.4f, 0.4f));
-
-        Text(valor == 0 ? Loc.Get("ui.opciones.mudo") : $"{valor}",
-            barra.End.X - 52, Y0 + (i * AltoFila) + 28, 17, new Color(0.8f, 0.8f, 0.78f));
+        this.Bar(barra, valor / 100f, valor > 0 ? Palette.Info : Palette.TextDisabled,
+            valor == 0 ? Loc.Get("ui.opciones.mudo") : $"{valor}");
     }
 
     private void Interruptor(int i, string nombre, bool activo)
     {
         Fondo(i, interactiva: true);
-        Text(nombre, X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        this.Label(RectFila(i), nombre, 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         Choice(RectValor(i, 0, 1), Loc.Get(activo ? "ui.opciones.si" : "ui.opciones.no"), activo);
     }
@@ -365,7 +370,7 @@ public partial class PantallaOpciones : Control
     private void Atajo(int i, Atajo atajo)
     {
         Fondo(i, interactiva: true);
-        Text(Configuracion.NombreDe(atajo), X0 + 20, Y0 + (i * AltoFila) + 28, 19, Blanco);
+        this.Label(RectFila(i), Configuracion.NombreDe(atajo), 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         bool capturando = _capturando == (int)atajo;
 
@@ -377,25 +382,11 @@ public partial class PantallaOpciones : Control
     }
 
     private void Boton(int i, string texto)
-    {
-        Fondo(i, interactiva: true);
-        Text(texto, X0 + 20, Y0 + (i * AltoFila) + 28, 20, new Color(0.85f, 0.9f, 0.88f));
-    }
+        => this.Button(RectFila(i).Inset(2f), texto, Palette.BorderNormal,
+            relleno: false, encima: i == _bajoElCursor);
 
+    /// <summary>Una de las cajitas de valor de una fila. La elegida se rellena.</summary>
     private void Choice(Rect2 r, string texto, bool elegida)
-    {
-        DrawRect(r, elegida ? new Color(0.16f, 0.42f, 0.24f) : new Color(0.14f, 0.14f, 0.18f));
-        DrawRect(r, elegida ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.14f),
-            filled: false, width: elegida ? 2f : 1f);
-
-        float ancho = _fuente.GetStringSize(texto, HorizontalAlignment.Left, -1, 17).X;
-
-        Text(texto, r.Position.X + ((r.Size.X - ancho) / 2f), r.Position.Y + 22, 17,
-            elegida ? new Color(0.9f, 0.98f, 0.92f) : new Color(0.72f, 0.72f, 0.7f));
-    }
-
-    private static readonly Color Blanco = new(0.9f, 0.9f, 0.88f);
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
+        => this.Button(r, texto, elegida ? Palette.Success : Palette.BorderNormal,
+            relleno: elegida);
 }

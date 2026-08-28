@@ -29,6 +29,10 @@
     // fracción cuando se la muestra.
     "ui.format.decimal": ",",
 
+    // El separador de miles. El diseño escribe «12.450» y «1.250 / 1.250»: sin
+    // esto, los cinco dígitos del oro de una corrida larga se leen de a uno.
+    "ui.format.miles": ".",
+
     // --- Las nueve clases ---------------------------------------------------
     // ⚠ NO existe "arquero": el que tira flechas es el Cazador.
     "class.Mage.name": "Mago",
@@ -277,6 +281,7 @@
     "ui.preparacion.de": "de",
     "ui.preparacion.oro": "oro",
     "ui.preparacion.instrucciones": "poné defensores, equipá y comprá — el reloj está detenido",
+    "ui.preparacion.avance": "Lo que viene",
     "ui.preparacion.jefe": "(JEFE)",
     "ui.preparacion.con_perk": "con perk",
 
@@ -313,6 +318,9 @@
     // la cuenta; este muere con la corrida. Si no se dijera, el jugador pagaría
     // dos veces por lo que cree que es lo mismo.
     "ui.tienda.solo_esta_corrida": "solo para esta corrida",
+    "ui.tienda.proximas_ofertas": "Nuevas ofertas en la oleada",
+    "ui.tienda.comprar": "Comprar",
+    "ui.tienda.sin_oro": "no alcanza",
 
     // --- El panel del defensor: targeting y soporte ---------------------------
     //
@@ -348,6 +356,37 @@
     "ui.hud.perks": "perks",
     "ui.hud.en_el_mapa": "en el mapa",
     "ui.hud.mochila": "mochila",
+
+    // --- Los rótulos de la disposición del diseñador -------------------------
+    // Salen del panel de Resources\ui\preview.png. Van en mayúsculas en el
+    // diseño, pero se guardan como se escriben: el que dibuja los pasa a
+    // mayúsculas, así el alemán y el francés pueden decidir otra cosa.
+    "ui.hud.vida_de_torre": "Vida de Torre",
+    "ui.hud.heroes": "Héroes / Clases",
+    "ui.hud.menu": "Menú",
+    "ui.hud.proximamente": "Próximamente",
+    "ui.hud.perks_equipados": "Perks equipados",
+    "ui.hud.arma_equipada": "Arma equipada",
+    "ui.hud.planos_activos": "Planos activos",
+    "ui.hud.sin_arma": "sin arma",
+    "ui.hud.sin_planos": "ningún plano aprendido",
+    "ui.hud.consejo": "Consejo:",
+    "ui.hud.niv": "NIV.",
+    "ui.hud.libre": "libre",
+
+    // --- Los oficios, para la tarjeta de clase -------------------------------
+    // No son un dato de balance: no cambian nada del tick. Son la línea de
+    // abajo del nombre en la tarjeta, y existen porque «Paladín» no le dice a
+    // un jugador nuevo si conviene ponerlo adelante o atrás.
+    "class.Mage.role": "Daño mágico",
+    "class.Cleric.role": "Soporte",
+    "class.Warrior.role": "Tanque",
+    "class.Assassin.role": "Daño físico",
+    "class.Thief.role": "Utilidad",
+    "class.Bard.role": "Soporte",
+    "class.Druid.role": "Control",
+    "class.Paladin.role": "Tanque",
+    "class.Hunter.role": "Daño físico",
     "ui.mochila.titulo": "MOCHILA",
     "ui.mochila.llena": "llena: el próximo drop te va a hacer tirar algo",
     "ui.mochila.oro": "oro",
@@ -379,6 +418,24 @@
     "ui.mochila.destruir": "destruir",
     "ui.mochila.cancelar": "cancelar",
     "ui.mochila.esc_cerrar": "esc para cerrar",
+
+    // --- Las tres pestañas y los dos desplegables del diseño ------------------
+    "ui.mochila.tab_perks": "Perks",
+    "ui.mochila.tab_armas": "Armas",
+    "ui.mochila.tab_planos": "Planos",
+    "ui.mochila.filtro": "Filtro:",
+    "ui.mochila.todos": "todos",
+    "ui.mochila.le_entran": "le entran",
+    "ui.mochila.ordenar": "Ordenar:",
+    "ui.mochila.por_rareza": "rareza",
+    "ui.mochila.por_llegada": "llegada",
+    "ui.mochila.capacidad": "Capacidad",
+    "ui.mochila.equipar": "Equipar",
+    "ui.mochila.elegi_algo": "elegí algo de la mochila",
+    "ui.mochila.vacia": "no hay nada acá todavía",
+    "ui.mochila.no_entra": "no entra en la clase mirada",
+    "ui.mochila.planos_conocidos": "las recetas que conocés",
+    "ui.mochila.receta": "receta",
     "ui.fin.corrida_local": "corrida local: no se reportó al servidor",
     "ui.fin.reportando": "reportando…",
     "ui.fin.billetera": "billetera:",

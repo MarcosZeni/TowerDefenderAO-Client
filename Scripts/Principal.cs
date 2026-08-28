@@ -195,6 +195,12 @@ public partial class Principal : Node2D
         capaModal.AddChild(menuEsc);
         capaModal.AddChild(opciones);
 
+        // Los tres botones de la esquina derecha de la barra de arriba —engranaje,
+        // MENÚ y pausa— entran por acá. El HUD no los puede buscar en el árbol:
+        // es hijo de otra capa y quedaría atado al nombre de un nodo.
+        juego.EscMenu = menuEsc;
+        juego.Opciones = opciones;
+
         return raiz;
     }
 

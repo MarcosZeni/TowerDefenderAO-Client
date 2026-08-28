@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Godot;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -32,24 +33,37 @@ public partial class PantallaLogin : Control
     /// <summary>Se dispara cuando la sesión quedó abierta.</summary>
     public event System.Action? Entro;
 
+    /// <summary>
+    /// El marco que se dibuja detrás de los nodos, con el estilo del diseño.
+    /// </summary>
+    /// <remarks>
+    /// Los <c>Control</c> del motor van adentro de esto. Sin el marco, los campos
+    /// flotarían sobre un fondo vacío y el login sería la única pantalla del juego
+    /// sin panel.
+    /// </remarks>
+    private static Rect2 Marco()
+        => new((Escala.LienzoAncho / 2f) - 300f, (Escala.LienzoAlto / 2f) - 260f, 600f, 520f);
+
     public override void _Ready()
     {
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
+
+        // ⚠ El tema va acá y no en cada nodo: es la única pantalla con nodos del
+        // motor, y con el tema de fábrica de Godot se vería de otro juego que el
+        // resto de la interfaz.
+        Theme = UiTheme.Actual;
+
+        var marco = Marco();
 
         var caja = new VBoxContainer
         {
-            Position = new Vector2(Escala.LienzoAncho / 2 - 220, Escala.LienzoAlto / 2 - 180),
+            Position = new Vector2(marco.Position.X + 80f, marco.Position.Y + 120f),
             CustomMinimumSize = new Vector2(440, 0),
         };
 
         caja.AddThemeConstantOverride("separation", 14);
         AddChild(caja);
-
-        var titulo = new Label { Text = Loc.Get("ui.login.titulo") };
-        titulo.AddThemeFontSizeOverride("font_size", 42);
-        caja.AddChild(titulo);
-
-        caja.AddChild(new Control { CustomMinimumSize = new Vector2(0, 30) });
 
         caja.AddChild(Etiqueta(Loc.Get("ui.login.nombre")));
 
@@ -93,16 +107,35 @@ public partial class PantallaLogin : Control
         botones.AddChild(_registrar);
 
         _mensaje = new Label { Text = "" };
-        _mensaje.AddThemeColorOverride("font_color", new Color(0.95f, 0.5f, 0.45f));
+        _mensaje.AddThemeColorOverride("font_color", Palette.Danger);
         caja.AddChild(_mensaje);
 
         _nick.GrabFocus();
     }
 
+    /// <summary>El fondo y el marco. Los campos son nodos y se dibujan encima.</summary>
+    public override void _Draw()
+    {
+        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), Palette.BackgroundMain);
+
+        var marco = Marco();
+
+        this.Panel(marco, elevado: true, opacidad: 1f);
+        this.Glow(marco, Palette.Info, 0.8f, 5);
+
+        this.Label(marco.Row(44f, 52f), Loc.Get("ui.login.titulo"), 42, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Rule(marco, 108f);
+    }
+
     private static Label Etiqueta(string texto)
     {
         var l = new Label { Text = texto };
-        l.AddThemeColorOverride("font_color", new Color(0.65f, 0.65f, 0.63f));
+
+        l.AddThemeColorOverride("font_color", Palette.TextMuted);
+        l.AddThemeFontSizeOverride("font_size", 15);
+
         return l;
     }
 
@@ -162,7 +195,7 @@ public partial class PantallaLogin : Control
         _entrar.Disabled = ocupado;
         _registrar.Disabled = ocupado;
 
-        _mensaje.AddThemeColorOverride("font_color", new Color(0.65f, 0.65f, 0.63f));
+        _mensaje.AddThemeColorOverride("font_color", Palette.TextMuted);
         _mensaje.Text = texto;
     }
 
@@ -183,7 +216,7 @@ public partial class PantallaLogin : Control
 
     private void Mensaje(string texto)
     {
-        _mensaje.AddThemeColorOverride("font_color", new Color(0.95f, 0.5f, 0.45f));
+        _mensaje.AddThemeColorOverride("font_color", Palette.Danger);
         _mensaje.Text = texto;
     }
 }

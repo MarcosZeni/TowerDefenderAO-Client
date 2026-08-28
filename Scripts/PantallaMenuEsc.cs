@@ -1,4 +1,5 @@
 using Godot;
+using TowerOfArgentum.Ui;
 using TowerOfArgentum.Simulacion;
 
 namespace TowerOfArgentum;
@@ -23,7 +24,6 @@ namespace TowerOfArgentum;
 public partial class PantallaMenuEsc : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
 
     /// <summary>Guardó y quiere volver al menú principal. Lo escucha <c>Principal</c>.</summary>
     public event System.Action? SalirAlMenu;
@@ -53,7 +53,7 @@ public partial class PantallaMenuEsc : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
@@ -135,6 +135,19 @@ public partial class PantallaMenuEsc : Control
         }
     }
 
+    /// <summary>Si está a la vista. Lo mira el HUD para no dibujar encima.</summary>
+    public bool Abierto => _abierto;
+
+    /// <summary>
+    /// Lo abre desde afuera: el botón MENÚ de la barra de arriba.
+    /// </summary>
+    /// <remarks>
+    /// El botón entra por el mismo <see cref="Alternar"/> que el ESC, así que
+    /// congela el reloj igual. Abrirlo poniendo <c>Visible</c> a mano dejaría la
+    /// corrida corriendo atrás del velo.
+    /// </remarks>
+    public void Abrir() => Alternar(true);
+
     private void Alternar(bool abierto)
     {
         _abierto = abierto;
@@ -189,44 +202,43 @@ public partial class PantallaMenuEsc : Control
         if (!_abierto)
             return;
 
-        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.72f));
+        this.Scrim();
 
-        TextCentrado(Loc.Get("ui.pausa.titulo"), 280, 52, new Color(0.95f, 0.95f, 0.92f));
+        // El marco alrededor de los cuatro botones, con el mismo aire que el
+        // resto: título arriba, regla, y la lista abajo.
+        var primero = RectBoton(0);
+        var ultimo = RectBoton(_botones.Length - 1);
 
-        TextCentrado(Loc.Get("ui.pausa.aviso"), 318, 18, new Color(0.6f, 0.6f, 0.58f));
+        var marco = new Rect2(
+            primero.Position.X - 40f, 240f,
+            primero.Size.X + 80f, ultimo.End.Y - 240f + 40f);
+
+        this.Panel(marco, elevado: true, opacidad: 1f);
+
+        this.Label(marco.Row(24f, 56f), Loc.Get("ui.pausa.titulo"), 48, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Label(marco.Row(78f, 26f), Loc.Get("ui.pausa.aviso"), 16, Palette.TextMuted,
+            HorizontalAlignment.Center);
+
+        this.Rule(marco, 112f);
 
         for (int i = 0; i < _botones.Length; i++)
         {
             var r = RectBoton(i);
             bool resaltado = i == _bajoElCursor;
 
-            DrawRect(r, new Color(0.09f, 0.09f, 0.13f, 0.97f));
-            DrawRect(r,
-                resaltado ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.15f),
-                filled: false, width: resaltado ? 3f : 1.5f);
+            // El acento del último —salir del juego— es rojo: es la única acción
+            // de esta lista que no se puede deshacer con otro click.
+            var acento = i == _botones.Length - 1 ? Palette.Danger : Palette.BorderNormal;
 
-            Text(Loc.Get(_botones[i].ClaveTitulo), r.Position.X + 28, r.Position.Y + 34, 23,
-                new Color(0.92f, 0.92f, 0.9f));
-            Text(Loc.Get(_botones[i].ClaveDetalle), r.Position.X + 28, r.Position.Y + 58, 15,
-                new Color(0.58f, 0.58f, 0.56f));
+            this.Button(r, "", acento, relleno: false, encima: resaltado);
+
+            this.Label(new Rect2(r.Position.X + 28f, r.Position.Y + 8f, r.Size.X - 56f, 28f),
+                Loc.Get(_botones[i].ClaveTitulo), 22, Palette.TextPrimary);
+
+            this.Label(new Rect2(r.Position.X + 28f, r.Position.Y + 38f, r.Size.X - 56f, 24f),
+                Loc.Get(_botones[i].ClaveDetalle), 14, Palette.TextMuted);
         }
-
-    }
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
-
-    /// <summary>
-    /// Centrado midiendo el texto, no con un offset a ojo.
-    /// </summary>
-    /// <remarks>
-    /// Antes el título llevaba un −86 fijo, calculado para «PAUSA»; con el texto
-    /// traducido el ancho cambia en cada idioma y el offset fijo lo descentra.
-    /// </remarks>
-    private void TextCentrado(string s, float y, int tamano, Color color)
-    {
-        float ancho = _fuente.GetStringSize(s, HorizontalAlignment.Left, -1, tamano).X;
-
-        Text(s, (Escala.LienzoAncho - ancho) / 2f, y, tamano, color);
     }
 }

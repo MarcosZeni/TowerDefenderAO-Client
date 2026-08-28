@@ -199,6 +199,14 @@ public static class Loc
 
     public static string Class(DefenderClass c) => Get($"class.{c}.name");
 
+    /// <summary>El oficio de una clase: «Tanque», «Control», «Soporte».</summary>
+    /// <remarks>
+    /// Es la línea de abajo del nombre en la tarjeta del roster, que el diseño
+    /// pide. No es un dato de balance —no toca el tick— y por eso vive en
+    /// <c>lang\</c> y no en <c>clases.json</c>.
+    /// </remarks>
+    public static string Role(DefenderClass c) => Get($"class.{c}.role");
+
     public static string Tier(PerkTier t) => Get($"tier.{t}.name");
 
     public static string Effect(PerkEffect e) => Get($"effect.{e}.name");

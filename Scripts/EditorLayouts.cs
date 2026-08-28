@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -90,8 +91,22 @@ public partial class EditorLayouts : Node2D
     /// <summary>Si se ve el panel. Se esconde con H para pintar las filas de abajo.</summary>
     private bool _panel = true;
 
+    /// <summary>
+    /// Si se marcan las zonas que el HUD va a tapar durante la partida.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Arranca en <c>true</c> a propósito.</b> El HUD dejó de estar solo en
+    /// las esquinas: con la disposición del diseño (2026-08-28) el roster pasó a
+    /// ser la <b>columna izquierda entera</b>, y una celda de ruta o colocable
+    /// pintada ahí queda abajo de un panel en la partida. Los 12 layouts que hay
+    /// se dibujaron sin esa columna ocupada.
+    /// </remarks>
+    private bool _zonasHud = true;
+
     public override void _Ready()
     {
+        UiStyle.Init();
+
         Reiniciar();
         Validar();
     }
@@ -131,6 +146,14 @@ public partial class EditorLayouts : Node2D
     {
         if (evento is InputEventMouseButton boton)
         {
+            // Las fichas de pincel primero: si el click cayó en una, elige el
+            // pincel y no pinta la celda que la ficha tapa.
+            if (boton is { Pressed: true, ButtonIndex: MouseButton.Left }
+                && PincelEn(boton.Position))
+            {
+                return;
+            }
+
             if (boton.ButtonIndex == MouseButton.Left)
             {
                 _pintando = boton.Pressed;
@@ -187,6 +210,12 @@ public partial class EditorLayouts : Node2D
             // es justo donde en el juego va a flotar el HUD.
             case Key.H:
                 _panel = !_panel;
+                break;
+
+            // Las zonas de HUD se pueden apagar: son una guía encima del dibujo,
+            // y a veces hay que ver el color real de lo que está abajo.
+            case Key.Z:
+                _zonasHud = !_zonasHud;
                 break;
 
             case Key.S:
@@ -547,6 +576,30 @@ public partial class EditorLayouts : Node2D
     //  Dibujo
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// El color de cada pincel. <b>Los mismos que usa el juego para lo mismo.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>Sale de <see cref="Ui.Palette"/> y no de valores sueltos, y no es
+    /// cosmético: pintar una celda colocable con un verde y que en la partida se
+    /// vea otro obliga a traducir de memoria entre las dos pantallas. La
+    /// <b>entrada</b> es celeste porque el portal del juego se dibuja con ese
+    /// mismo celeste, y la <b>Torre</b> es violeta porque es el único color de la
+    /// paleta que no aparece en el tablero: no se confunde con nada.</para>
+    ///
+    /// <para>La ruta es el ámbar oscurecido. La paleta del diseño es fría y no
+    /// tiene un marrón; en vez de inventar uno se usa el ámbar bajado, que es
+    /// tierra y sigue siendo de la familia.</para>
+    /// </remarks>
+    private static Color ColorDe(Pincel pincel) => pincel switch
+    {
+        Pincel.Bloqueado => Palette.BackgroundMain.Alpha(0.62f),
+        Pincel.Colocable => Palette.Success.Alpha(0.24f),
+        Pincel.Route => Palette.Warning.Darkened(0.55f).Alpha(0.80f),
+        Pincel.Entrada => Palette.Info.Alpha(0.85f),
+        _ => Palette.Epic.Alpha(0.85f),
+    };
+
     public override void _Draw()
     {
         DibujarPiso();
@@ -557,25 +610,22 @@ public partial class EditorLayouts : Node2D
             {
                 var caja = new Rect2(x * Cell, y * Cell, Cell, Cell);
 
-                var tinte = _celdas[x, y] switch
-                {
-                    Pincel.Bloqueado => new Color(0f, 0f, 0f, 0.55f),
-                    Pincel.Colocable => new Color(0.25f, 0.85f, 0.45f, 0.22f),
-                    Pincel.Route => new Color(0.55f, 0.40f, 0.20f, 0.75f),
-                    Pincel.Entrada => new Color(0.95f, 0.85f, 0.20f, 0.85f),
-                    _ => new Color(0.30f, 0.55f, 0.95f, 0.85f),
-                };
-
-                DrawRect(caja, tinte);
-                DrawRect(caja, new Color(0f, 0f, 0f, 0.15f), filled: false, width: 1f);
+                DrawRect(caja, ColorDe(_celdas[x, y]));
+                DrawRect(caja, Palette.BackgroundMain.Alpha(0.18f), filled: false, width: 1f);
             }
         }
 
+        if (_zonasHud)
+            DibujarZonasHud();
+
         if (_bajoMouse is { } c)
         {
-            DrawRect(
-                new Rect2(c.X * Cell, c.Y * Cell, Cell, Cell),
-                Colors.White, filled: false, width: 3f);
+            var caja = new Rect2(c.X * Cell, c.Y * Cell, Cell, Cell);
+
+            // El cursor lleva el color del pincel que está cargado, no blanco:
+            // así se ve qué se va a pintar antes de apretar.
+            this.Glow(caja, ColorDe(_pincel), 1.4f);
+            DrawRect(caja, Palette.TextPrimary, filled: false, width: 3f);
         }
 
         if (_panel)
@@ -598,7 +648,7 @@ public partial class EditorLayouts : Node2D
         {
             DrawRect(
                 new Rect2(0, 0, Width * Cell, Height * Cell),
-                new Color(0.16f, 0.18f, 0.16f));
+                Palette.BackgroundAlt);
 
             return;
         }
@@ -624,48 +674,202 @@ public partial class EditorLayouts : Node2D
     /// avisara, porque el aviso estaba abajo de la pantalla. Con 20×11 el
     /// sobrante es de 24 px y habría sido peor.
     /// </remarks>
+    /// <summary>
+    /// Las zonas que el HUD va a tapar durante la partida.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Esto es lo que reemplaza a «las esquinas son zona de HUD».</b>
+    /// Con la disposición del diseño el HUD no está en las esquinas: es la
+    /// columna izquierda entera, la barra de arriba, la de abajo y el pie. Una
+    /// celda de ruta pintada ahí se juega abajo de un panel, y el jugador clickea
+    /// el panel en vez del mapa.</para>
+    ///
+    /// <para>Se dibuja con rayas y no con un relleno plano: un relleno taparía el
+    /// color de lo que está pintado abajo, que es justo lo que hay que ver para
+    /// decidir si esa celda hay que moverla.</para>
+    /// </remarks>
+    private void DibujarZonasHud()
+    {
+        Zona(UiLayout.TopBar);
+        Zona(UiLayout.HeroesPanel);
+        Zona(UiLayout.BuildPanel);
+        Zona(UiLayout.FooterBar);
+
+        // El cartel va en la columna, que es la zona nueva y la que sorprende.
+        var aviso = new Rect2(
+            UiLayout.HeroesPanel.Position.X,
+            UiLayout.HeroesPanel.Position.Y + (UiLayout.HeroesPanel.Size.Y / 2f) - 20f,
+            UiLayout.HeroesPanel.Size.X, 40f);
+
+        DrawRect(aviso, Palette.BackgroundMain.Alpha(0.85f));
+
+        this.Label(aviso, "zona de HUD", 18, Palette.Danger, HorizontalAlignment.Center);
+
+        void Zona(Rect2 r)
+        {
+            var color = Palette.Danger.Alpha(0.28f);
+
+            // Diagonales cada 24 px. Se recorren las dos dimensiones juntas
+            // —de −alto a ancho— para que la raya entre por el borde de arriba y
+            // salga por el de la izquierda sin salirse del rectángulo.
+            for (float d = -r.Size.Y; d < r.Size.X; d += 24f)
+            {
+                var a = new Vector2(r.Position.X + Mathf.Max(d, 0f),
+                    r.Position.Y + Mathf.Max(-d, 0f));
+
+                float largo = Mathf.Min(r.Size.X - Mathf.Max(d, 0f),
+                    r.Size.Y - Mathf.Max(-d, 0f));
+
+                if (largo <= 0f)
+                    continue;
+
+                DrawLine(a, a + new Vector2(largo, largo), color, 2f);
+            }
+
+            DrawRect(r, Palette.Danger.Alpha(0.55f), filled: false, width: 2f);
+        }
+    }
+
+    /// <summary>Los cinco pinceles, en el orden en que se numeran y se dibujan.</summary>
+    private static readonly (Pincel Pincel, string Nombre)[] _pinceles =
+    [
+        (Pincel.Bloqueado, "bloqueado"),
+        (Pincel.Colocable, "colocable"),
+        (Pincel.Route, "ruta"),
+        (Pincel.Entrada, "entrada"),
+        (Pincel.Tower, "Torre"),
+    ];
+
+    /// <summary>
+    /// La ficha del pincel <paramref name="i"/>. La usan el dibujo Y el click.
+    /// </summary>
+    /// <remarks>
+    /// Las cinco ocupan los dos bloques del medio de la barra de abajo del
+    /// diseño —el del arma y el de los planos—: en uno solo quedan de 64 px y el
+    /// nombre no entra.
+    /// </remarks>
+    private static Rect2 FichaDePincel(int i)
+    {
+        var zona = new Rect2(
+            UiLayout.EquippedWeapon.Position,
+            new Vector2(
+                UiLayout.ActiveBlueprints.End.X - UiLayout.EquippedWeapon.Position.X,
+                UiLayout.EquippedWeapon.Size.Y));
+
+        float paso = zona.Size.X / _pinceles.Length;
+
+        return new Rect2(zona.Position.X + (i * paso), zona.Position.Y + 30f, paso - 10f, 56f);
+    }
+
+    /// <summary>
+    /// Un click sobre una ficha carga ese pincel. <c>true</c> si lo atendió.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Hay que consumirlo: el panel tapa las dos filas de abajo de la grilla y
+    /// sin esto, elegir un pincel además <b>pinta</b> la celda que quedó debajo
+    /// de la ficha.
+    /// </remarks>
+    private bool PincelEn(Vector2 posicion)
+    {
+        if (!_panel)
+            return false;
+
+        for (int i = 0; i < _pinceles.Length; i++)
+        {
+            if (!FichaDePincel(i).HasPoint(posicion))
+                continue;
+
+            _pincel = _pinceles[i].Pincel;
+            QueueRedraw();
+
+            return true;
+        }
+
+        return false;
+    }
+
     private void DibujarPanel()
     {
-        var fuente = ThemeDB.FallbackFont;
+        // ⚠ El panel usa el MISMO rectángulo que la barra de abajo del juego
+        // (`build_panel` del diseño). Así, lo que acá tapa el panel es
+        // exactamente lo que en la partida va a quedar abajo del HUD: si una
+        // celda de ruta no se ve mientras se dibuja, tampoco se va a poder
+        // clickear jugando.
+        // Llega hasta el borde de abajo del lienzo —o sea, la barra de build más
+        // el pie— y no solo la barra: si terminara en 1024, los últimos 32 px de
+        // la fila 10 asomarían por debajo del panel y se verían como una franja
+        // de grilla suelta.
+        var panel = new Rect2(
+            UiLayout.BuildPanel.Position,
+            new Vector2(UiLayout.BuildPanel.Size.X,
+                Escala.LienzoAlto - UiLayout.BuildPanel.Position.Y - 4f));
 
-        const int AltoPanel = 132;
-        int alto = Escala.LienzoAlto - AltoPanel;
+        // El fondo tapa el ancho entero: el panel del diseño deja 12 px de margen
+        // a cada lado, y ahí abajo hay grilla.
+        DrawRect(
+            new Rect2(0, panel.Position.Y, Escala.LienzoAncho,
+                Escala.LienzoAlto - panel.Position.Y),
+            Palette.BackgroundMain);
 
-        DrawRect(new Rect2(0, alto, Escala.LienzoAncho, AltoPanel),
-            new Color(0.06f, 0.07f, 0.09f, 0.88f));
-
-        string pincel = _pincel switch
-        {
-            Pincel.Bloqueado => "1 bloqueado",
-            Pincel.Colocable => "2 colocable",
-            Pincel.Route => "3 ruta",
-            Pincel.Entrada => "4 entrada",
-            _ => "5 Torre",
-        };
+        this.Panel(panel, opacidad: 1f);
 
         // El estado va PRIMERO y más grande: es lo único que hay que mirar para
         // saber si lo que se está dibujando sirve.
-        var color = _valido
-            ? new Color(0.45f, 0.90f, 0.55f)
-            : new Color(0.98f, 0.50f, 0.40f);
+        var color = _valido ? Palette.Success : Palette.Danger;
 
-        DrawRect(new Rect2(0, alto, Escala.LienzoAncho, 4), color);
+        DrawRect(panel.Row(0f, 4f), color);
 
-        DrawString(fuente, new Vector2(16, alto + 34),
-            (_valido ? "✓  " : "✗  ") + _estado,
-            HorizontalAlignment.Left, -1, 24, color);
+        var estado = UiLayout.EquippedPerks;
 
-        DrawString(fuente, new Vector2(16, alto + 66),
-            $"pincel: {pincel}      1 bloqueado   2 colocable   3 ruta   4 entrada   5 Torre" +
-            "      click izq pinta · der borra",
-            HorizontalAlignment.Left, -1, 18, new Color(0.85f, 0.88f, 0.92f));
+        this.Label(estado.Row(0f, 22f), "layout".ToUpperInvariant(), 14, Palette.TextMuted);
 
-        DrawString(fuente, new Vector2(16, alto + 92),
-            $"P cambia piso ({Pisos[_piso]})   H esconde este panel   C limpia   S guarda",
-            HorizontalAlignment.Left, -1, 18, new Color(0.60f, 0.65f, 0.72f));
+        this.Label(estado.Row(24f, 34f), (_valido ? "✓  " : "✗  ") + _estado, 24, color);
 
-        DrawString(fuente, new Vector2(16, alto + 118),
-            $"campo {Width}x{Height}, celda {Cell} px — la vista de AO, 220 celdas",
-            HorizontalAlignment.Left, -1, 18, new Color(0.60f, 0.65f, 0.72f));
+        this.Label(estado.Row(64f, 24f),
+            $"campo {Width}×{Height}, celda {Cell} px — la vista de AO, 220 celdas",
+            14, Palette.TextMuted);
+
+        this.Label(estado.Row(88f, 24f), "click izquierdo pinta · derecho borra", 14,
+            Palette.TextMuted);
+
+        // Las cinco fichas, con el color real de cada pincel adentro: el número
+        // de la tecla arriba y el nombre abajo.
+        this.Label(new Rect2(FichaDePincel(0).Position.X, panel.Position.Y + 6f, 300f, 22f),
+            "pincel".ToUpperInvariant(), 14, Palette.TextMuted);
+
+        for (int i = 0; i < _pinceles.Length; i++)
+        {
+            var r = FichaDePincel(i);
+            bool activo = _pincel == _pinceles[i].Pincel;
+            var suyo = ColorDe(_pinceles[i].Pincel);
+
+            this.Slot(r, activo ? Palette.TextPrimary : Palette.BorderNormal, activo);
+
+            // La muestra de color adentro de la ficha, opaca: el tinte del
+            // tablero es semitransparente y sobre el panel oscuro no se vería.
+            DrawRect(new Rect2(r.Position.X + 8f, r.Position.Y + 8f, 26f, r.Size.Y - 16f),
+                suyo.Alpha(1f));
+
+            this.Label(new Rect2(r.Position.X + 42f, r.Position.Y + 6f, r.Size.X - 48f, 20f),
+                $"{i + 1}", 14, Palette.TextMuted);
+
+            this.Label(new Rect2(r.Position.X + 42f, r.Position.Y + 26f, r.Size.X - 48f, 24f),
+                _pinceles[i].Nombre, 17,
+                activo ? Palette.TextPrimary : Palette.TextSecondary);
+        }
+
+        // Las teclas que no son pinceles, en el último bloque.
+        var teclas = UiLayout.Consumables;
+
+        this.Label(teclas.Row(0f, 22f), "teclas".ToUpperInvariant(), 14, Palette.TextMuted);
+
+        this.StatRow(teclas.Row(24f, 21f), "P", $"piso ({Pisos[_piso]})");
+        this.StatRow(teclas.Row(45f, 21f), "H", "esconde el panel");
+
+        this.StatRow(teclas.Row(66f, 21f), "Z", _zonasHud ? "zonas de HUD: sí" : "zonas de HUD: no",
+            _zonasHud ? Palette.Danger : Palette.TextMuted);
+
+        this.StatRow(teclas.Row(87f, 21f), "C", "limpia");
+        this.StatRow(teclas.Row(108f, 21f), "S", "guarda", Palette.Success);
     }
 }

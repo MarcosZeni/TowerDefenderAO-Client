@@ -93,9 +93,13 @@ public partial class CristalTorre : Node2D
     /// </remarks>
     private static Color ColorDeVida(float vida)
     {
-        var sano = new Color(0.42f, 0.86f, 1f);
-        var aviso = new Color(1f, 0.72f, 0.24f);
-        var grave = new Color(1f, 0.26f, 0.24f);
+        // Los mismos tres de la barra de vida del HUD, para que el cristal y la
+        // barra digan lo mismo con el mismo color. El celeste del sano es el Info
+        // de la paleta: la Torre no es un enemigo, y el verde ya es «se puede
+        // poner acá».
+        var sano = Ui.Palette.Info;
+        var aviso = Ui.Palette.Warning;
+        var grave = Ui.Palette.Danger;
 
         return vida > 0.5f
             ? aviso.Lerp(sano, (vida - 0.5f) / 0.5f)

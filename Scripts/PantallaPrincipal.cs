@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Godot;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -7,9 +8,14 @@ namespace TowerOfArgentum;
 /// El menú fuera de la corrida: jugar, tienda de planos, ranking y billetera.
 /// </summary>
 /// <remarks>
-/// Los cuatro paneles tocan el servidor, y esa es la diferencia con todo lo
+/// <para>Los cuatro paneles tocan el servidor, y esa es la diferencia con todo lo
 /// demás: dentro de la corrida no hay red, todo pasa en el cliente. Acá es al
-/// revés (INTERFAZ.md §4).
+/// revés (INTERFAZ.md §4).</para>
+///
+/// <para>Usa la misma disposición que el resto (<see cref="UiLayout"/>): la barra
+/// de arriba con el título y la billetera, la <b>columna izquierda</b> con los
+/// botones —donde en la corrida está el roster— y el resto del ancho como panel
+/// de contenido, que es donde se pintan el ranking y la tienda de planos.</para>
 /// </remarks>
 public partial class PantallaPrincipal : Control
 {
@@ -32,29 +38,46 @@ public partial class PantallaPrincipal : Control
     /// <summary>El panel de opciones. El mismo que abre el menú de ESC.</summary>
     private PantallaOpciones _opciones = null!;
 
+    /// <summary>
+    /// El panel de contenido: desde la columna del inventario hasta el borde.
+    /// </summary>
+    /// <remarks>
+    /// Ocupa las tres columnas de la derecha del diseño juntas. El ranking es una
+    /// lista de veinte líneas anchas y la tienda de planos son nueve filas con un
+    /// botón: ninguna de las dos entra en una columna de 350 px, y partirlas en
+    /// tres sería inventar una disposición que el diseño no tiene.
+    /// </remarks>
+    private static Rect2 PanelDeContenido()
+        => new(
+            UiLayout.InventoryPanel.Position,
+            new Vector2(UiLayout.ShopPanel.End.X - UiLayout.InventoryPanel.Position.X,
+                UiLayout.InventoryPanel.Size.Y));
+
     public override void _Ready()
     {
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
+        Theme = UiTheme.Actual;
+
+        var columna = UiLayout.HeroesPanel;
 
         var caja = new VBoxContainer
         {
-            Position = new Vector2(140, 140),
-            CustomMinimumSize = new Vector2(700, 0),
+            Position = new Vector2(columna.Position.X + 16f, UiLayout.HeroCard(0).Position.Y),
+            CustomMinimumSize = new Vector2(columna.Size.X - 32f, 0),
         };
 
-        caja.AddThemeConstantOverride("separation", 16);
+        caja.AddThemeConstantOverride("separation", 10);
         AddChild(caja);
 
-        var titulo = new Label { Text = Loc.Get("ui.principal.titulo") };
-        titulo.AddThemeFontSizeOverride("font_size", 46);
-        caja.AddChild(titulo);
-
+        // La billetera es un nodo y no dibujo a mano porque su texto llega del
+        // servidor y cambia solo: dejarla como Label evita tener que redibujar
+        // la pantalla entera cuando contesta /perfil/me.
         _billetera = new Label { Text = "…" };
-        _billetera.AddThemeColorOverride("font_color", new Color(0.98f, 0.85f, 0.35f));
-        _billetera.AddThemeFontSizeOverride("font_size", 24);
-        caja.AddChild(_billetera);
-
-        caja.AddChild(new Control { CustomMinimumSize = new Vector2(0, 24) });
+        _billetera.AddThemeColorOverride("font_color", Palette.Gold);
+        _billetera.AddThemeFontSizeOverride("font_size", 22);
+        _billetera.Position = new Vector2(UiLayout.TowerHp.Position.X, UiLayout.TowerHp.Position.Y + 14f);
+        AddChild(_billetera);
 
         // Continuar arriba de Jugar: si hay una corrida a medias, retomarla es
         // lo que el jugador vino a hacer — son horas de partida. Y Jugar con un
@@ -75,17 +98,24 @@ public partial class PantallaPrincipal : Control
         // las cosas que más rápido se notan.
         caja.AddChild(Boton(Loc.Get("ui.principal.salir_juego"), () => GetTree().Quit()));
 
+        // El mensaje va al pie, que es donde el diseño pone el consejo: es el
+        // mismo tipo de texto —una línea de estado que se lee de reojo— y así no
+        // corre los botones cada vez que aparece.
         _mensaje = new Label { Text = "" };
-        _mensaje.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.68f));
-        caja.AddChild(_mensaje);
+        _mensaje.AddThemeColorOverride("font_color", Palette.TextMuted);
+        _mensaje.AddThemeFontSizeOverride("font_size", 15);
+        _mensaje.Position = UiLayout.FooterTip.Position + new Vector2(0, 4f);
+        AddChild(_mensaje);
 
         // El panel de la derecha: acá se pinta el ranking o la tienda, sin
         // navegar a otra pantalla. Es lo que hace que las "cuatro pantallas" del
         // diseño sean en realidad una sola con paneles.
+        var contenido = PanelDeContenido();
+
         _panel = new VBoxContainer
         {
-            Position = new Vector2(900, 140),
-            CustomMinimumSize = new Vector2(880, 0),
+            Position = contenido.Position + new Vector2(24f, 20f),
+            CustomMinimumSize = new Vector2(contenido.Size.X - 48f, 0),
         };
 
         _panel.AddThemeConstantOverride("separation", 6);
@@ -105,10 +135,34 @@ public partial class PantallaPrincipal : Control
             _ = RefrescarAsync();
     }
 
+    /// <summary>El fondo, la barra de arriba, la columna y el panel de contenido.</summary>
+    public override void _Draw()
+    {
+        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), Palette.BackgroundMain);
+
+        this.Panel(UiLayout.TopBar, opacidad: 1f);
+
+        this.Label(UiLayout.WaveStatus, Loc.Get("ui.principal.titulo"), 30, Palette.TextPrimary);
+
+        this.Panel(UiLayout.HeroesPanel, opacidad: 1f);
+        this.SectionTitle(UiLayout.HeroesTitle, Loc.Get("ui.principal.jugar"));
+
+        this.Panel(PanelDeContenido(), opacidad: 1f);
+
+        this.Panel(UiLayout.FooterBar, opacidad: 1f);
+        this.RarityLegend(UiLayout.FooterLegend);
+    }
+
     private static Button Boton(string texto, System.Action alApretar)
     {
-        var b = new Button { Text = texto, CustomMinimumSize = new Vector2(420, 56) };
+        var b = new Button
+        {
+            Text = texto,
+            CustomMinimumSize = new Vector2(UiLayout.HeroesPanel.Size.X - 32f, 46),
+        };
+
         b.Pressed += alApretar;
+
         return b;
     }
 
@@ -195,7 +249,7 @@ public partial class PantallaPrincipal : Control
             };
 
             if (fila.Won)
-                l.AddThemeColorOverride("font_color", new Color(0.5f, 0.95f, 0.6f));
+                l.AddThemeColorOverride("font_color", Palette.Success);
 
             _panel.AddChild(l);
         }

@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -28,12 +29,10 @@ namespace TowerOfArgentum;
 public partial class PantallaDefensor : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
     private int _bajoElCursor = -1;
 
-    private const int Ancho = 340;
-    private const int Alto = 268;
-    private const int AltoFila = 30;
+    /// <summary>Alto de cada fila de modo de targeting.</summary>
+    private const int AltoFila = 34;
 
     /// <summary>Los cuatro modos, en el orden en que se muestran y se numeran.</summary>
     /// <remarks>
@@ -55,7 +54,7 @@ public partial class PantallaDefensor : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         // Ignore: el panel no es modal. Sus clicks se atienden en _Input y todo lo
@@ -134,13 +133,25 @@ public partial class PantallaDefensor : Control
         }
     }
 
+    /// <summary>
+    /// El panel, en la <b>columna de detalle</b> del diseño.
+    /// </summary>
+    /// <remarks>
+    /// Es la columna que el diseño reserva para «lo que está seleccionado», y un
+    /// defensor clickeado es exactamente eso. No usa el alto entero de la columna
+    /// porque el contenido es corto: un panel de 700 px con 300 de texto adentro
+    /// se lee como un error de layout.
+    /// </remarks>
     private static Rect2 Caja()
-        => new(Escala.LienzoAncho - Ancho - 24, 96, Ancho, Alto);
+        => new(UiLayout.DetailPanel.Position, new Vector2(UiLayout.DetailPanel.Size.X, 404f));
 
     private static Rect2 FilaDe(int i)
     {
         var c = Caja();
-        return new Rect2(c.Position.X + 12, c.Position.Y + 118 + (i * AltoFila), c.Size.X - 24, AltoFila - 4);
+
+        return new Rect2(
+            c.Position.X + 14f, c.Position.Y + 190f + (i * AltoFila),
+            c.Size.X - 28f, AltoFila - 5f);
     }
 
     private static int FilaEn(Vector2 posicion)
@@ -163,49 +174,49 @@ public partial class PantallaDefensor : Control
         var stats = partida.Roster.StatsOf(defensor.DefenderClass, partida.Backpack);
         var caja = Caja();
 
-        DrawRect(caja, new Color(0.07f, 0.08f, 0.12f, 0.95f));
-        DrawRect(caja, new Color(0.85f, 0.72f, 0.30f, 0.55f), filled: false, width: 2f);
+        this.Panel(caja);
 
-        float x = caja.Position.X + 16;
-        float y = caja.Position.Y + 32;
+        var titulo = caja.Row(12f, 32f);
 
-        Text(Loc.Class(defensor.DefenderClass), x, y, 26, new Color(0.95f, 0.95f, 0.92f));
+        this.Label(titulo, Loc.Class(defensor.DefenderClass).ToUpperInvariant(), 24,
+            Palette.TextPrimary, HorizontalAlignment.Center);
+
+        this.Label(caja.Row(42f, 22f), Loc.Role(defensor.DefenderClass), 14, Palette.TextMuted,
+            HorizontalAlignment.Center);
+
+        this.Rule(caja, 68f);
 
         // ⚠ En la escala del JUGADOR, no en la interna. Adentro el daño va en
         // centésimas de punto y el alcance en milésimas de celda: mostrarlos crudos
         // diría «1040 de daño» cuando el defensor pega 10,4.
-        Text($"{Loc.Damage(stats.Damage)} · {Loc.Range(stats.RangeMilli)} · {stats.CadenceTicks}t",
-            x, y + 26, 17, new Color(0.68f, 0.70f, 0.74f));
+        var stat = new Rect2(caja.Position.X + 16f, caja.Position.Y + 76f, caja.Size.X - 32f, 20f);
 
-        DibujarSoporte(defensor, stats, x, y + 52);
+        this.StatRow(stat, Loc.Get("ui.mochila.dano"), Loc.Damage(stats.Damage));
+        this.StatRow(stat.Row(20f, 20f), Loc.Get("ui.mochila.alcance"), Loc.Range(stats.RangeMilli));
+        this.StatRow(stat.Row(40f, 20f), Loc.Get("ui.mochila.cada"),
+            $"{stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}");
 
-        Text(Loc.Get("ui.defensor.apunta_a"), x, caja.Position.Y + 106, 16, new Color(0.60f, 0.64f, 0.70f));
+        DibujarSoporte(defensor, stats, caja.Position.X + 16f, caja.Position.Y + 142f);
+
+        this.Label(new Rect2(caja.Position.X + 16f, caja.Position.Y + 166f, caja.Size.X - 32f, 22f),
+            Loc.Get("ui.defensor.apunta_a").ToUpperInvariant(), 13, Palette.TextMuted);
 
         for (int i = 0; i < _modos.Length; i++)
             DibujarModo(i, defensor.Targeting == _modos[i]);
 
-        Text(Loc.Get("ui.defensor.cerrar"),
-            x, caja.Position.Y + caja.Size.Y - 12, 14, new Color(0.48f, 0.51f, 0.56f));
+        this.Label(caja.Row(caja.Size.Y - 26f, 22f), Loc.Get("ui.defensor.cerrar"), 13,
+            Palette.TextDisabled, HorizontalAlignment.Center);
     }
 
     private void DibujarModo(int i, bool activo)
     {
         var r = FilaDe(i);
-        bool resaltado = i == _bajoElCursor;
 
-        if (activo)
-        {
-            DrawRect(r, new Color(0.20f, 0.32f, 0.22f));
-            DrawRect(r, new Color(0.45f, 0.85f, 0.55f), filled: false, width: 2f);
-        }
-        else if (resaltado)
-        {
-            DrawRect(r, new Color(0.16f, 0.17f, 0.22f));
-        }
-
-        Text(Loc.Get($"ui.targeting.{_modos[i]}"),
-            r.Position.X + 12, r.Position.Y + 20, 19,
-            activo ? new Color(0.85f, 0.98f, 0.88f) : new Color(0.80f, 0.82f, 0.86f));
+        // El activo se rellena; el de abajo del cursor solo se ilumina. Son los
+        // mismos dos estados del botón del diseño, en versión de fila.
+        this.Button(r, Loc.Get($"ui.targeting.{_modos[i]}"),
+            activo ? Palette.Success : Palette.BorderNormal,
+            relleno: activo, encima: i == _bajoElCursor);
     }
 
     /// <summary>
@@ -242,9 +253,9 @@ public partial class PantallaDefensor : Control
                 }
             }
 
-            Text($"{Loc.Effect(stats.Behavior)}  ·  {Loc.Get("ui.defensor.radio")} {radio}  ·  " +
-                 $"{alcanzados} {Loc.Get("ui.defensor.aliados")}",
-                x, y, 16, new Color(0.72f, 0.88f, 0.72f));
+            Renglon($"{Loc.Effect(stats.Behavior)}  ·  {Loc.Get("ui.defensor.radio")} {radio}  ·  " +
+                    $"{alcanzados} {Loc.Get("ui.defensor.aliados")}",
+                Palette.Success);
 
             y += 22;
         }
@@ -255,9 +266,9 @@ public partial class PantallaDefensor : Control
         {
             int decimas = (defensor.CadenceBuffExpiryTick - partida.Tick) * 10 / Ints.TicksPerSecond;
 
-            Text($"{Loc.Get("ui.defensor.cadencia")} +{defensor.CadenceBuffPercent}%  ·  " +
-                 $"{decimas / 10}.{decimas % 10}s",
-                x, y, 16, new Color(0.85f, 0.90f, 0.60f));
+            Renglon($"{Loc.Get("ui.defensor.cadencia")} +{defensor.CadenceBuffPercent}%  ·  " +
+                    $"{decimas / 10}.{decimas % 10}s",
+                Palette.Legendary);
 
             y += 22;
         }
@@ -270,11 +281,11 @@ public partial class PantallaDefensor : Control
         {
             bool ganaElPerk = partida.Roster.Find(defensor.DefenderClass)?.PreferPerkBehavior == true;
 
-            Text(Loc.Get(ganaElPerk ? "ui.defensor.manda_el_perk" : "ui.defensor.manda_el_arma"),
-                x, y, 15, new Color(0.95f, 0.78f, 0.45f));
+            Renglon(Loc.Get(ganaElPerk ? "ui.defensor.manda_el_perk" : "ui.defensor.manda_el_arma"),
+                ganaElPerk ? Palette.Legendary : Palette.Epic);
         }
-    }
 
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
+        void Renglon(string texto, Color color)
+            => this.Label(new Rect2(x, y, Caja().Size.X - 32f, 22f), texto, 14, color);
+    }
 }

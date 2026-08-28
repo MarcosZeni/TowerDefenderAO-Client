@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -7,6 +8,12 @@ namespace TowerOfArgentum;
 /// La tienda rotativa de la corrida: cuatro ofertas, cada tres oleadas.
 /// </summary>
 /// <remarks>
+/// <para>Ocupa la <b>columna derecha</b> del diseño, con las cuatro ofertas en
+/// dos por dos (<c>shop_card_1..4</c> de
+/// <c>tower_of_argentum_ui_mockup_spec.json</c>). Cuatro es un número fijo del
+/// juego, no una lista que crece, así que las cuatro posiciones son constantes y
+/// no un bucle con separación.</para>
+///
 /// <para>⚠ <b>Aparece en la preparación, inmediatamente después de la pantalla de
 /// elección</b>, y no literalmente al lado de ella. El diseño pedía las dos en la
 /// misma pantalla y no se puede: el stock de la tienda lo arma la seed <b>al
@@ -26,30 +33,15 @@ namespace TowerOfArgentum;
 /// no en recordar una receta que el juego no muestra.</para>
 ///
 /// <para>⚠ <b>No se repone.</b> Comprar deja el hueco vacío hasta la próxima
-/// tienda: sin eso, un jugador rico vacía el catálogo en una sola visita.</para>
+/// tienda: sin eso, un jugador rico vacía el catálogo en una sola visita. Por eso
+/// el pie de la columna dice <i>cuándo</i> llega la próxima y no ofrece pagar por
+/// renovar: <b>el botón «actualizar tienda» del diseño no existe en el juego</b>,
+/// y ponerlo cambiaría el balance, no la pantalla.</para>
 /// </remarks>
 public partial class PantallaTienda : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
     private int _bajoElCursor = -1;
-
-    private const int Ancho = 380;
-    private const int Alto = 122;
-
-    /// <summary>
-    /// El lado del icono del perk en la oferta.
-    /// </summary>
-    /// <remarks>
-    /// 52 y no más: lo que corre a la derecha se lo saca a la lista de clases que
-    /// pueden equiparlo, que es el renglón que hace que comprar un Oro no sea a
-    /// ciegas.
-    /// </remarks>
-    private const int LadoIcono = 52;
-    private const int Separacion = 10;
-
-    /// <summary>Margen inferior: arriba del panel de preparación, que mide 210.</summary>
-    private const int MargenAbajo = 226;
 
     public PantallaTienda(Juego juego)
     {
@@ -58,7 +50,7 @@ public partial class PantallaTienda : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         // ⚠ Ignore y no Stop, igual que la preparación: durante esta fase el
@@ -134,30 +126,13 @@ public partial class PantallaTienda : Control
 
     private static int TarjetaEn(Vector2 posicion, int cantidad)
     {
-        for (int i = 0; i < cantidad; i++)
+        for (int i = 0; i < cantidad && i < UiLayout.ShopCards.Length; i++)
         {
-            if (RectDe(i, cantidad).HasPoint(posicion))
+            if (UiLayout.ShopCards[i].HasPoint(posicion))
                 return i;
         }
 
         return -1;
-    }
-
-    /// <summary>
-    /// Columna a la derecha, apilada de abajo hacia arriba.
-    /// </summary>
-    /// <remarks>
-    /// Va al costado y no en el centro porque el jugador está mirando <b>el
-    /// mapa</b>: en esta fase decide dónde poner, y un panel centrado le taparía
-    /// justo eso. Es la misma regla que llevó el panel de preparación abajo.
-    /// </remarks>
-    private static Rect2 RectDe(int i, int cantidad)
-    {
-        int x = Escala.LienzoAncho - Ancho - 24;
-        int altoTotal = (cantidad * Alto) + ((cantidad - 1) * Separacion);
-        int y0 = Escala.LienzoAlto - MargenAbajo - altoTotal;
-
-        return new Rect2(x, y0 + (i * (Alto + Separacion)), Ancho, Alto);
     }
 
     public override void _Draw()
@@ -168,80 +143,125 @@ public partial class PantallaTienda : Control
         var partida = _juego.Run!;
         var stock = partida.Shop.Stock;
 
-        var titulo = RectDe(0, stock.Count);
+        // El panel va con opacidad: abajo hay mapa, y en esta fase el jugador
+        // está eligiendo dónde poner. Taparlo del todo sería taparle la decisión.
+        this.Panel(UiLayout.ShopPanel, opacidad: 0.94f);
 
-        Text(Loc.Get("ui.tienda.titulo"),
-            titulo.Position.X, titulo.Position.Y - 34, 26, new Color(0.93f, 0.86f, 0.62f));
+        this.SectionTitle(UiLayout.ShopTitle, Loc.Get("ui.tienda.titulo"), Palette.Gold);
 
-        Text(Loc.Get("ui.tienda.no_se_repone"),
-            titulo.Position.X, titulo.Position.Y - 12, 15, new Color(0.55f, 0.58f, 0.64f));
+        // El diseño pone acá un reloj de cuenta regresiva. Acá la tienda no rota
+        // por tiempo sino cada tres oleadas, así que dice qué oleada: es el mismo
+        // dato —cuánto falta— en la unidad que este juego usa.
+        this.Label(UiLayout.ShopTimer,
+            $"{Loc.Get("ui.tienda.proximas_ofertas")} {partida.Shop.OleadaDelStock + 3}",
+            15, Palette.TextMuted, HorizontalAlignment.Center);
 
-        for (int i = 0; i < stock.Count; i++)
-            DibujarTarjeta(i, stock[i], stock.Count, partida);
+        for (int i = 0; i < UiLayout.ShopCards.Length; i++)
+        {
+            if (i < stock.Count)
+                DibujarTarjeta(i, stock[i], partida);
+            else
+                this.EmptySlot(UiLayout.ShopCards[i]);
+        }
+
+        // ⚠ Donde el diseño pone «actualizar tienda», va el aviso de que NO se
+        // repone. Es la regla que hace que comprar sea una decisión, y el lugar
+        // donde el jugador buscaría el botón de renovar es exactamente donde
+        // tiene que leer que no existe.
+        var aviso = new Rect2(
+            UiLayout.ShopRefresh.Position,
+            new Vector2(UiLayout.ShopRefreshCost.End.X - UiLayout.ShopRefresh.Position.X,
+                UiLayout.ShopRefresh.Size.Y));
+
+        this.Paragraph(aviso, Loc.Get("ui.tienda.no_se_repone"), 13, Palette.TextMuted);
     }
 
-    /// <summary>El color de cada categoría. Se distinguen antes de leer una palabra.</summary>
+    /// <summary>
+    /// El color de cada categoría. Se distinguen antes de leer una palabra.
+    /// </summary>
+    /// <remarks>
+    /// Los perks toman el color de su tier, que es el mismo de los seis marcos de
+    /// rareza del diseño; las otras tres categorías toman uno de los que a los
+    /// perks les sobra. Reclutar una clase va en azul —lo mismo que marca la
+    /// clase elegida en el HUD— y el plano en violeta, porque produce un Único.
+    /// </remarks>
     private static Color AcentoDe(ShopOffer oferta, BalanceData datos) => oferta.Kind switch
     {
-        ShopKind.Class => new Color(0.35f, 0.65f, 0.95f),
-        ShopKind.Blueprint => new Color(0.62f, 0.45f, 0.92f),
-        ShopKind.Weapon => new Color(0.70f, 0.74f, 0.80f),
-        _ => datos.Perks.Get(oferta.Id).Tier switch
-        {
-            PerkTier.Bronze => new Color(0.80f, 0.55f, 0.35f),
-            PerkTier.Silver => new Color(0.78f, 0.82f, 0.88f),
-            _ => new Color(0.93f, 0.78f, 0.31f),
-        },
+        ShopKind.Class => Palette.Info,
+        ShopKind.Blueprint => Palette.Epic,
+        ShopKind.Weapon => Palette.Common,
+        _ => Palette.Rarity(datos.Perks.Get(oferta.Id).Tier),
     };
 
-    private void DibujarTarjeta(int i, ShopOffer oferta, int cantidad, Run partida)
+    private void DibujarTarjeta(int i, ShopOffer oferta, Run partida)
     {
-        var r = RectDe(i, cantidad);
+        var r = UiLayout.ShopCards[i];
         var datos = CargadorDatos.Actual;
-
-        bool alcanza = partida.Gold >= oferta.Price;
-        bool resaltada = i == _bajoElCursor && !oferta.Sold && alcanza;
 
         // ⚠ Vendida se dibuja igual, apagada, en vez de desaparecer. El hueco
         // vacío ES la información: dice que la tienda no se repone, y que lo que
         // queda es todo lo que queda hasta la próxima.
         if (oferta.Sold)
         {
-            DrawRect(r, new Color(0.06f, 0.07f, 0.09f, 0.80f));
-            DrawRect(r, new Color(1, 1, 1, 0.06f), filled: false, width: 2f);
+            this.EmptySlot(r);
 
-            Text(Loc.Get("ui.tienda.vendido"),
-                r.Position.X + 20, r.Position.Y + 40, 22, new Color(0.38f, 0.40f, 0.44f));
+            this.Label(r, Loc.Get("ui.tienda.vendido").ToUpperInvariant(), 18,
+                Palette.TextDisabled, HorizontalAlignment.Center);
 
             return;
         }
 
+        bool alcanza = partida.Gold >= oferta.Price;
         var acento = AcentoDe(oferta, datos);
 
-        DrawRect(r, new Color(0.08f, 0.09f, 0.13f, 0.94f));
-        DrawRect(r, resaltada ? acento : new Color(1, 1, 1, 0.14f),
-            filled: false, width: resaltada ? 3f : 2f);
+        this.Slot(r, acento, elegido: i == _bajoElCursor && alcanza);
 
-        DrawRect(new Rect2(r.Position.X, r.Position.Y, 6, r.Size.Y), acento);
+        // La tarjeta se lee de arriba a abajo: qué categoría, qué es, qué hace,
+        // cuánto sale. El precio va último y pegado abajo, siempre en el mismo
+        // lugar de las cuatro, para poder compararlos de un vistazo.
+        var titulo = r.Row(10f, 22f);
+        var icono = UiLayout.Square(r.Row(34f, r.Size.Y * 0.34f));
+        var nombre = r.Row(34f + (r.Size.Y * 0.34f) + 4f, 26f);
+        var cuerpo = new Rect2(
+            r.Position.X + 10f, nombre.End.Y + 2f,
+            r.Size.X - 20f, r.End.Y - nombre.End.Y - 40f);
 
-        float x = r.Position.X + 18;
-        float y = r.Position.Y + 26;
+        this.Label(titulo, EtiquetaDe(oferta).ToUpperInvariant(), 13, acento,
+            HorizontalAlignment.Center);
 
         switch (oferta.Kind)
         {
-            case ShopKind.Class: DibujarClase(oferta, x, y, acento, datos); break;
-            case ShopKind.Blueprint: DibujarPlano(oferta, x, y, acento, partida, datos); break;
-            case ShopKind.Weapon: DibujarArma(oferta, x, y, acento, partida); break;
-            default: DibujarPerk(oferta, x, y, acento, datos); break;
+            case ShopKind.Class:
+                DibujarClase(oferta, icono, nombre, cuerpo, datos);
+                break;
+
+            case ShopKind.Blueprint:
+                DibujarPlano(oferta, icono, nombre, cuerpo, acento, partida, datos);
+                break;
+
+            case ShopKind.Weapon:
+                DibujarArma(oferta, icono, nombre, cuerpo, acento, partida);
+                break;
+
+            default:
+                DibujarPerk(oferta, icono, nombre, cuerpo, acento, datos);
+                break;
         }
 
-        // ⚠ El precio en rojo cuando no alcanza, y la carta igual se ve entera. Es
-        // información: saber que existe un Oro que hoy no se puede pagar es lo que
-        // hace que guardar oro sea una decisión.
-        Text($"{oferta.Price}",
-            r.Position.X + r.Size.X - 92, r.Position.Y + r.Size.Y - 16, 26,
-            alcanza ? new Color(0.95f, 0.85f, 0.45f) : new Color(0.72f, 0.34f, 0.34f));
+        // ⚠ El precio en rojo cuando no alcanza, y la carta igual se ve entera.
+        // Es información: saber que existe un Oro que hoy no se puede pagar es lo
+        // que hace que guardar oro sea una decisión.
+        this.Price(r.Row(r.Size.Y - 32f, 26f), oferta.Price, alcanza, HorizontalAlignment.Center);
     }
+
+    /// <summary>La categoría, en el renglón de arriba de la tarjeta.</summary>
+    private static string EtiquetaDe(ShopOffer oferta) => oferta.Kind switch
+    {
+        ShopKind.Class => Loc.Get("ui.tienda.reclutar"),
+        ShopKind.Blueprint => Loc.Get("ui.tienda.plano"),
+        ShopKind.Weapon => Loc.Get("ui.tienda.arma"),
+        _ => Loc.Tier(CargadorDatos.Actual.Perks.Get(oferta.Id).Tier),
+    };
 
     /// <summary>
     /// Reclutar una clase. <b>Es el desbloqueo, no un defensor puesto.</b>
@@ -252,20 +272,30 @@ public partial class PantallaTienda : Control
     /// un mago por 656 parece caro hasta que uno descubre que además cada ficha
     /// cuesta 100.
     /// </remarks>
-    private void DibujarClase(ShopOffer oferta, float x, float y, Color acento, BalanceData datos)
+    private void DibujarClase(
+        ShopOffer oferta, Rect2 icono, Rect2 nombre, Rect2 cuerpo, BalanceData datos)
     {
         var clase = (DefenderClass)oferta.Id;
         var s = datos.StatsOf(clase);
 
-        Text(Loc.Get("ui.tienda.reclutar"), x, y, 16, acento);
-        Text(Loc.Class(clase), x, y + 30, 28, new Color(0.95f, 0.95f, 0.92f));
+        // El muñeco de la clase, no un icono genérico: es lo que se va a ver en
+        // el mapa, y reconocerlo importa más que el nombre.
+        var ficha = new RosterClass { DefenderClass = clase, MaxLevel = 1 };
 
-        Text($"{s.Damage} {Loc.Get("ui.tienda.dano")} · {s.RangeCells} {Loc.Get("ui.tienda.alcance")} · " +
-             $"{s.CadenceTicks} {Loc.Get("ui.tienda.ticks")}",
-            x, y + 56, 16, new Color(0.68f, 0.70f, 0.74f));
+        this.Portrait(icono, ficha);
 
-        Text($"{Loc.Get("ui.tienda.costo_colocacion")} {s.Cost}",
-            x, y + 78, 16, new Color(0.58f, 0.62f, 0.68f));
+        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 20, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Label(cuerpo.Row(0f, 18f), Loc.Role(clase), 13, Palette.TextMuted,
+            HorizontalAlignment.Center);
+
+        this.StatRow(cuerpo.Row(20f, 18f), Loc.Get("ui.tienda.dano"), s.Damage.ToString());
+        this.StatRow(cuerpo.Row(38f, 18f), Loc.Get("ui.tienda.alcance"), s.RangeCells.ToString());
+        this.StatRow(cuerpo.Row(56f, 18f), Loc.Get("ui.tienda.ticks"), s.CadenceTicks.ToString());
+
+        this.StatRow(cuerpo.Row(76f, 18f), Loc.Get("ui.tienda.costo_colocacion"),
+            s.Cost.ToString(), Palette.Gold);
     }
 
     /// <summary>
@@ -274,24 +304,29 @@ public partial class PantallaTienda : Control
     /// <remarks>
     /// Un Oro es un comportamiento que solo pueden usar dos o tres de las nueve
     /// clases. Comprarlo sin saber quién lo puede equipar es comprarlo a ciegas, y
-    /// a 1.900 de oro eso es una corrida perdida por falta de un renglón.
+    /// a 1.900 de oro eso es una corrida perdida por falta de un renglón. Con la
+    /// tarjeta vertical del diseño la lista no entra en un renglón, así que se
+    /// parte en varios: se achica el texto, no la información.
     /// </remarks>
-    private void DibujarPerk(ShopOffer oferta, float x, float y, Color acento, BalanceData datos)
+    private void DibujarPerk(
+        ShopOffer oferta, Rect2 icono, Rect2 nombre, Rect2 cuerpo, Color acento, BalanceData datos)
     {
         var def = datos.Perks.Get(oferta.Id);
 
-        // ⚠ El icono va a la IZQUIERDA y corre el texto, no arriba a la derecha.
-        // Ahí está el precio, y la lista de clases que sirven llega a nueve
-        // nombres: cualquier cosa apoyada sobre el borde derecho se le encima.
-        float texto = CargadorIconos.Dibujar(this, def.Key, x, y - 8, LadoIcono)
-            ? x + LadoIcono + 12
-            : x;
+        this.Slot(icono, acento);
 
-        Text(Loc.Tier(def.Tier), texto, y, 16, acento);
-        Text(Loc.Perk(def), texto, y + 30, 26, new Color(0.95f, 0.95f, 0.92f));
+        if (!CargadorIconos.Dibujar(this, def.Key,
+                icono.Position.X + 6f, icono.Position.Y + 6f, icono.Size.X - 12f))
+        {
+            this.Label(icono, Loc.Perk(def)[..1].ToUpperInvariant(),
+                (int)(icono.Size.X * 0.5f), acento, HorizontalAlignment.Center);
+        }
 
-        Text($"{Loc.Effect(def.Effect)} · {def.Magnitude}%",
-            texto, y + 56, 16, new Color(0.68f, 0.70f, 0.74f));
+        this.Label(nombre, Loc.Perk(def).ToUpperInvariant(), 19, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Label(cuerpo.Row(0f, 18f), $"{Loc.Effect(def.Effect)} · {def.Magnitude}%", 13,
+            Palette.TextSecondary, HorizontalAlignment.Center);
 
         var sirve = new System.Text.StringBuilder();
 
@@ -306,8 +341,9 @@ public partial class PantallaTienda : Control
             sirve.Append(Loc.Class(c));
         }
 
-        Text(sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
-            texto, y + 78, 15, new Color(0.58f, 0.62f, 0.68f));
+        this.Paragraph(cuerpo.Row(20f, cuerpo.Size.Y - 20f),
+            sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
+            12, Palette.TextMuted);
     }
 
     /// <summary>
@@ -325,7 +361,8 @@ public partial class PantallaTienda : Control
     /// única progresión permanente del juego.</para>
     /// </remarks>
     private void DibujarPlano(
-        ShopOffer oferta, float x, float y, Color acento, Run partida, BalanceData datos)
+        ShopOffer oferta, Rect2 icono, Rect2 nombre, Rect2 cuerpo, Color acento,
+        Run partida, BalanceData datos)
     {
         if (oferta.Id < 0 || oferta.Id >= datos.Blueprints.All.Count)
             return;
@@ -333,29 +370,37 @@ public partial class PantallaTienda : Control
         var plano = datos.Blueprints.All[oferta.Id];
         var unico = datos.Perks.Get(plano.ResultingUnique);
 
-        Text(Loc.Get("ui.tienda.plano"), x, y, 16, acento);
-        Text(Loc.Perk(unico), x, y + 30, 26, new Color(0.95f, 0.95f, 0.92f));
+        this.Slot(icono, Palette.Unique);
 
-        var a = datos.Perks.Get(plano.GoldA);
-        var b = datos.Perks.Get(plano.GoldB);
+        if (!CargadorIconos.Dibujar(this, unico.Key,
+                icono.Position.X + 6f, icono.Position.Y + 6f, icono.Size.X - 12f))
+        {
+            this.Label(icono, Loc.Perk(unico)[..1].ToUpperInvariant(),
+                (int)(icono.Size.X * 0.5f), Palette.Unique, HorizontalAlignment.Center);
+        }
 
-        bool tieneA = Tiene(partida, plano.GoldA);
-        bool tieneB = Tiene(partida, plano.GoldB);
+        this.Label(nombre, Loc.Perk(unico).ToUpperInvariant(), 18, Palette.TextPrimary,
+            HorizontalAlignment.Center);
 
-        Marca(x, y + 56, tieneA, Loc.Perk(a));
-        Marca(x + 180, y + 56, tieneB, Loc.Perk(b));
+        Marca(cuerpo.Row(0f, 18f), Tiene(partida, plano.GoldA),
+            Loc.Perk(datos.Perks.Get(plano.GoldA)));
 
-        Text(Loc.Get("ui.tienda.solo_esta_corrida"),
-            x, y + 78, 15, new Color(0.58f, 0.62f, 0.68f));
+        Marca(cuerpo.Row(19f, 18f), Tiene(partida, plano.GoldB),
+            Loc.Perk(datos.Perks.Get(plano.GoldB)));
+
+        this.Label(cuerpo.Row(42f, 18f), Loc.Get("ui.tienda.solo_esta_corrida"), 12,
+            acento, HorizontalAlignment.Center);
     }
 
-    private void Marca(float x, float y, bool tiene, string nombre)
+    /// <summary>Una pieza de la receta, con tilde si ya está o cruz si falta.</summary>
+    private void Marca(Rect2 r, bool tiene, string nombre)
     {
-        Text(tiene ? "✓" : "✗", x, y, 16,
-            tiene ? new Color(0.50f, 0.85f, 0.55f) : new Color(0.72f, 0.40f, 0.40f));
+        var color = tiene ? Palette.Success : Palette.Danger;
 
-        Text(nombre, x + 18, y, 15,
-            tiene ? new Color(0.82f, 0.88f, 0.82f) : new Color(0.62f, 0.62f, 0.62f));
+        this.Label(r, tiene ? "✓" : "✗", 14, color);
+
+        this.Label(new Rect2(r.Position.X + 16f, r.Position.Y, r.Size.X - 16f, r.Size.Y),
+            nombre, 13, tiene ? Palette.TextSecondary : Palette.TextMuted);
     }
 
     private static bool Tiene(Run partida, int idPerk)
@@ -378,27 +423,32 @@ public partial class PantallaTienda : Control
         return false;
     }
 
-    private void DibujarArma(ShopOffer oferta, float x, float y, Color acento, Run partida)
+    private void DibujarArma(
+        ShopOffer oferta, Rect2 icono, Rect2 nombre, Rect2 cuerpo, Color acento, Run partida)
     {
         var arma = partida.Backpack.WeaponById(oferta.Id);
 
         if (arma is null)
             return;
 
-        Text(Loc.Get("ui.tienda.arma"), x, y, 16, acento);
-        Text(Loc.Weapon(arma), x, y + 30, 24, new Color(0.95f, 0.95f, 0.92f));
+        // ⚠ Un arma con habilidad va en violeta: pelea por la ranura de
+        // comportamiento contra un Oro o un Único, y el jugador elige cuál habla.
+        var color = arma.Ability == WeaponAbility.None ? acento : Palette.Epic;
 
-        Text($"+{arma.Damage}% {Loc.Get("ui.tienda.dano")} · " +
-             $"+{arma.Cadence}% {Loc.Get("ui.tienda.cadencia")} · " +
-             $"+{arma.Range}% {Loc.Get("ui.tienda.alcance")}",
-            x, y + 56, 16, new Color(0.68f, 0.70f, 0.74f));
+        this.Slot(icono, color);
+        this.Label(icono, "⚔", (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
 
-        Text(arma.Ability == WeaponAbility.None
+        this.Label(nombre, Loc.Weapon(arma).ToUpperInvariant(), 17, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.StatRow(cuerpo.Row(0f, 18f), Loc.Get("ui.tienda.dano"), $"+{arma.Damage}%");
+        this.StatRow(cuerpo.Row(18f, 18f), Loc.Get("ui.tienda.cadencia"), $"+{arma.Cadence}%");
+        this.StatRow(cuerpo.Row(36f, 18f), Loc.Get("ui.tienda.alcance"), $"+{arma.Range}%");
+
+        this.Paragraph(cuerpo.Row(58f, cuerpo.Size.Y - 58f),
+            arma.Ability == WeaponAbility.None
                 ? Loc.Get("ui.tienda.sin_habilidad")
                 : Loc.AbilityText(arma.Ability, arma.Magnitude),
-            x, y + 78, 15, new Color(0.85f, 0.80f, 0.60f));
+            12, arma.Ability == WeaponAbility.None ? Palette.TextDisabled : Palette.Epic);
     }
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }

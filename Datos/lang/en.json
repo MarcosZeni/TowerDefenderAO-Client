@@ -25,6 +25,9 @@
     // del daño (centésimas de punto) y del alcance (milésimas de celda).
     "ui.format.decimal": ".",
 
+    // Thousands separator. The mockup writes «12,450» and «1,250 / 1,250».
+    "ui.format.miles": ",",
+
     // --- The nine classes ---------------------------------------------------
     "class.Mage.name": "Mage",
     "class.Cleric.name": "Cleric",
@@ -267,6 +270,7 @@
     "ui.preparacion.de": "of",
     "ui.preparacion.oro": "gold",
     "ui.preparacion.instrucciones": "place defenders, equip and buy — the clock is stopped",
+    "ui.preparacion.avance": "What is coming",
     "ui.preparacion.jefe": "(BOSS)",
     "ui.preparacion.con_perk": "with perk",
     "ui.preparacion.con_rasgo": "with a trait (impulsive or leader)",
@@ -289,6 +293,9 @@
     "ui.tienda.cualquier_clase": "any class",
     "ui.tienda.sin_habilidad": "no ability",
     "ui.tienda.solo_esta_corrida": "this run only",
+    "ui.tienda.proximas_ofertas": "New offers on wave",
+    "ui.tienda.comprar": "Buy",
+    "ui.tienda.sin_oro": "not enough",
 
     // --- El panel del defensor: targeting y soporte ---------------------------
     "ui.defensor.apunta_a": "targets",
@@ -316,6 +323,31 @@
     "ui.hud.perks": "perks",
     "ui.hud.en_el_mapa": "on the map",
     "ui.hud.mochila": "backpack",
+
+    // --- Labels for the designer's layout ------------------------------------
+    "ui.hud.vida_de_torre": "Tower Health",
+    "ui.hud.heroes": "Heroes / Classes",
+    "ui.hud.menu": "Menu",
+    "ui.hud.proximamente": "Coming soon",
+    "ui.hud.perks_equipados": "Equipped perks",
+    "ui.hud.arma_equipada": "Equipped weapon",
+    "ui.hud.planos_activos": "Active blueprints",
+    "ui.hud.sin_arma": "no weapon",
+    "ui.hud.sin_planos": "no blueprint learned",
+    "ui.hud.consejo": "Tip:",
+    "ui.hud.niv": "LV.",
+    "ui.hud.libre": "free",
+
+    // --- Class roles, for the roster card ------------------------------------
+    "class.Mage.role": "Magic damage",
+    "class.Cleric.role": "Support",
+    "class.Warrior.role": "Tank",
+    "class.Assassin.role": "Physical damage",
+    "class.Thief.role": "Utility",
+    "class.Bard.role": "Support",
+    "class.Druid.role": "Control",
+    "class.Paladin.role": "Tank",
+    "class.Hunter.role": "Physical damage",
     "ui.mochila.titulo": "BACKPACK",
     "ui.mochila.llena": "full: the next drop will make you throw something away",
     "ui.mochila.oro": "gold",
@@ -343,6 +375,24 @@
     "ui.mochila.destruir": "destroy",
     "ui.mochila.cancelar": "cancel",
     "ui.mochila.esc_cerrar": "esc to close",
+
+    // --- The three tabs and the two dropdowns from the mockup -----------------
+    "ui.mochila.tab_perks": "Perks",
+    "ui.mochila.tab_armas": "Weapons",
+    "ui.mochila.tab_planos": "Blueprints",
+    "ui.mochila.filtro": "Filter:",
+    "ui.mochila.todos": "all",
+    "ui.mochila.le_entran": "fits",
+    "ui.mochila.ordenar": "Sort:",
+    "ui.mochila.por_rareza": "rarity",
+    "ui.mochila.por_llegada": "pickup",
+    "ui.mochila.capacidad": "Capacity",
+    "ui.mochila.equipar": "Equip",
+    "ui.mochila.elegi_algo": "pick something from the backpack",
+    "ui.mochila.vacia": "nothing here yet",
+    "ui.mochila.no_entra": "does not fit the selected class",
+    "ui.mochila.planos_conocidos": "the recipes you know",
+    "ui.mochila.receta": "recipe",
     "ui.fin.corrida_local": "local run: it was not reported to the server",
     "ui.fin.reportando": "reporting…",
     "ui.fin.billetera": "wallet:",

@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -11,13 +12,14 @@ namespace TowerOfArgentum;
 /// exactamente los mismos ticks, así que el ranking no castiga pensar. Ver
 /// <see cref="Partida.EnPausa"/>.</para>
 ///
-/// <para>El tope de 30 segundos vive <b>acá</b> y no en la simulación: es reloj
-/// de pared, no entra al tick y el servidor ni se entera. Existe para que la
-/// corrida no se quede detenida para siempre si alguien se levanta de la silla,
-/// no para apurar a nadie.</para>
+/// <para>Ocupa la <b>barra de abajo del diseño</b> —el mismo rectángulo que en
+/// combate muestra la build— y el HUD deja de dibujar la suya mientras esto está
+/// a la vista. Es el lugar correcto por la misma razón que la build: es la franja
+/// que no tapa el mapa, y en esta fase lo que el jugador tiene que mirar es
+/// dónde queda libre.</para>
 ///
 /// <para>Y hay botón para arrancar antes: quien acomoda el tablero en cinco
-/// segundos no tiene por qué esperar veinticinco mirando el techo.</para>
+/// segundos no tiene por qué esperar mirando el techo.</para>
 /// </remarks>
 public partial class PantallaPreparacion : Control
 {
@@ -49,6 +51,7 @@ public partial class PantallaPreparacion : Control
 
     public override void _Ready()
     {
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         // ⚠ Ignore y no Stop, al revés que el modal de elección.
@@ -59,12 +62,20 @@ public partial class PantallaPreparacion : Control
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
+    /// <summary>
+    /// Si la preparación está a la vista.
+    /// </summary>
+    /// <remarks>
+    /// La consulta el HUD: mientras esto se dibuja, la barra de build se calla,
+    /// porque las dos usan el mismo rectángulo del diseño.
+    /// </remarks>
+    public static bool EstaAbierta(Run? partida)
+        => partida is { State: RunState.InProgress, WaitingForWaveStart: true }
+           && !partida.WaitingForChoice;
+
     public override void _Process(double delta)
     {
-        var partida = _juego.Run;
-
-        bool deberia = partida is { State: RunState.InProgress, WaitingForWaveStart: true }
-                       && !partida.WaitingForChoice;
+        bool deberia = EstaAbierta(_juego.Run);
 
         if (deberia != _visible)
         {
@@ -103,6 +114,7 @@ public partial class PantallaPreparacion : Control
             return 0;
 
         long faltan = MsDeCuentaRegresiva - (RelojFino.Ms - _cuentaDesdeMs);
+
         return (int)System.Math.Max(0, (faltan + 999) / 1000);
     }
 
@@ -126,8 +138,15 @@ public partial class PantallaPreparacion : Control
         }
     }
 
-    private static Rect2 Boton()
-        => new(Escala.LienzoAncho - 360, Escala.LienzoAlto - 120, 320, 72);
+    /// <summary>
+    /// El botón de comenzar, en el último bloque de la barra de abajo.
+    /// </summary>
+    /// <remarks>
+    /// Va donde en combate están los consumibles del diseño —o sea, la mochila—
+    /// porque es la esquina más lejos de la ruta y la que la mano ya tiene cerca
+    /// del borde de la pantalla.
+    /// </remarks>
+    private static Rect2 Boton() => UiLayout.Consumables.Inset(4f);
 
     public override void _Draw()
     {
@@ -135,30 +154,40 @@ public partial class PantallaPreparacion : Control
             return;
 
         var partida = _juego.Run;
-        var fuente = ThemeDB.FallbackFont;
-
-        const int Height = 210;
-        int y0 = Escala.LienzoAlto - Height;
 
         // ⚠ Panel abajo y sobre el mundo, no una ventana modal que lo tape.
         //
         // Lo que el jugador tiene que mirar en esta fase es EL MAPA: dónde queda
         // libre, por dónde pasa la ruta, qué cubre lo que ya puso. Un modal
         // centrado le taparía justo eso y lo obligaría a cerrarlo para decidir.
-        DrawRect(new Rect2(0, y0, Escala.LienzoAncho, Height), new Color(0.05f, 0.06f, 0.09f, 0.90f));
-        DrawRect(new Rect2(0, y0, Escala.LienzoAncho, 3), new Color(0.85f, 0.72f, 0.30f));
+        this.Panel(UiLayout.BuildPanel);
 
-        DrawString(fuente, new Vector2(28, y0 + 40),
-            $"{Loc.Get("ui.preparacion.wave")} {partida.ProximaOleada} " +
-            $"{Loc.Get("ui.preparacion.de")} {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun}",
-            HorizontalAlignment.Left, -1, 30, new Color(0.92f, 0.90f, 0.84f));
+        // La franja ámbar de arriba: es lo que dice, de reojo, que el juego está
+        // esperando y no colgado.
+        DrawRect(UiLayout.BuildPanel.Row(0f, 3f), Palette.Warning);
 
-        DrawString(fuente, new Vector2(28, y0 + 72),
-            $"{Loc.Get("ui.preparacion.oro")} {partida.Gold}    ·    {Loc.Get("ui.preparacion.instrucciones")}",
-            HorizontalAlignment.Left, -1, 18, new Color(0.58f, 0.63f, 0.70f));
+        Cabecera(partida);
+        DibujarAvance(partida);
+        DibujarBoton();
+    }
 
-        DibujarAvance(fuente, y0);
-        DibujarBoton(fuente);
+    /// <summary>Qué oleada viene, cuánto oro hay y cómo se juega.</summary>
+    private void Cabecera(Run partida)
+    {
+        var r = UiLayout.EquippedPerks;
+        int total = CargadorDatos.Actual.Curves.RunCurve.WavesPerRun;
+
+        this.Label(r.Row(0f, 22f), Loc.Get("ui.preparacion.wave").ToUpperInvariant(), 14,
+            Palette.TextMuted);
+
+        this.Label(r.Row(20f, 38f),
+            $"{partida.ProximaOleada} {Loc.Get("ui.preparacion.de")} {total}", 32,
+            Palette.TextPrimary);
+
+        this.Price(r.Row(62f, 26f), partida.Gold);
+
+        this.Paragraph(r.Row(92f, r.Size.Y - 92f), Loc.Get("ui.preparacion.instrucciones"), 13,
+            Palette.TextMuted);
     }
 
     /// <summary>
@@ -169,35 +198,50 @@ public partial class PantallaPreparacion : Control
     /// contrario que contra treinta hormigas: daño concentrado o daño en área. Es
     /// la información que convierte la preparación en una decisión.
     /// </remarks>
-    private void DibujarAvance(Font fuente, int y0)
+    private void DibujarAvance(Run partida)
     {
-        var avance = _juego.Run.AvanceProximaOleada();
+        // El bloque del avance ocupa los dos del medio del diseño —el del arma y
+        // el de los planos—: una fila de bichos no entra en uno solo.
+        var zona = new Rect2(
+            UiLayout.EquippedWeapon.Position,
+            new Vector2(UiLayout.ActiveBlueprints.End.X - UiLayout.EquippedWeapon.Position.X,
+                UiLayout.EquippedWeapon.Size.Y));
 
-        float x = 28;
-        float y = y0 + 118;
+        this.Label(zona.Row(0f, 22f), Loc.Get("ui.preparacion.avance").ToUpperInvariant(), 14,
+            Palette.TextMuted);
 
-        foreach (var fila in avance)
+        this.Rule(zona, 24f);
+
+        float x = zona.Position.X;
+        float y = zona.Position.Y + 30f;
+        float alto = zona.End.Y - y;
+
+        foreach (var fila in partida.AvanceProximaOleada())
         {
             var textura = CargadorGraficos.Textura($"{fila.Graphic}.sur");
 
             if (textura is not null)
             {
-                var tamano = textura.GetSize() * 0.30f;
-                DrawTextureRect(textura, new Rect2(x, y - tamano.Y + 46, tamano), tile: false);
-                x += tamano.X + 6;
+                // El bicho se encaja en el alto disponible en vez de una escala
+                // fija: los sprites van de 100 a 400 px de alto y con un 0,30
+                // parejo el dragón se comía la barra entera.
+                var tamano = textura.GetSize();
+                float s = System.Math.Min(alto / tamano.Y, 0.34f);
+
+                DrawTextureRect(textura,
+                    new Rect2(x, zona.End.Y - (tamano.Y * s), tamano * s), tile: false);
+
+                x += (tamano.X * s) + 6f;
             }
 
-            var color = fila.IsBoss
-                ? new Color(0.98f, 0.62f, 0.25f)
-                : new Color(0.86f, 0.88f, 0.92f);
+            var color = fila.IsBoss ? Palette.Warning : Palette.TextPrimary;
 
             string etiqueta = $"{fila.Cuantos}× {fila.Name}"
                 + (fila.IsBoss ? $"  {Loc.Get("ui.preparacion.jefe")}" : "");
 
-            DrawString(fuente, new Vector2(x, y + 26), etiqueta,
-                HorizontalAlignment.Left, -1, 20, color);
+            this.Label(new Rect2(x, y, 240f, 22f), etiqueta, 18, color);
 
-            float ancho = fuente.GetStringSize(etiqueta, HorizontalAlignment.Left, -1, 20).X;
+            float ancho = UiStyle.Width(etiqueta, 18);
 
             // Los buffeados se marcan en ámbar. INTERFAZ.md §5: «un NPC con perk
             // tiene que distinguirse de un vistazo o el jugador pierde sin
@@ -206,11 +250,8 @@ public partial class PantallaPreparacion : Control
             {
                 string buffeados = $"{fila.ConPerk} {Loc.Get("ui.preparacion.con_perk")}";
 
-                DrawString(fuente, new Vector2(x, y + 48), buffeados,
-                    HorizontalAlignment.Left, -1, 16, new Color(0.98f, 0.80f, 0.30f));
-
-                ancho = System.Math.Max(ancho,
-                    fuente.GetStringSize(buffeados, HorizontalAlignment.Left, -1, 16).X);
+                this.Label(new Rect2(x, y + 22f, 240f, 20f), buffeados, 14, Palette.Warning);
+                ancho = System.Math.Max(ancho, UiStyle.Width(buffeados, 14));
             }
 
             // ⚠ Los rasgos —impulsivo y líder— van en su propio renglón y en otro
@@ -222,46 +263,34 @@ public partial class PantallaPreparacion : Control
             {
                 string rasgos = $"{fila.ConRasgo} {Loc.Get("ui.preparacion.con_rasgo")}";
 
-                DrawString(fuente, new Vector2(x, y + 68), rasgos,
-                    HorizontalAlignment.Left, -1, 16, new Color(0.70f, 0.55f, 0.95f));
-
-                ancho = System.Math.Max(ancho,
-                    fuente.GetStringSize(rasgos, HorizontalAlignment.Left, -1, 16).X);
+                this.Label(new Rect2(x, y + 42f, 240f, 20f), rasgos, 14, Palette.Epic);
+                ancho = System.Math.Max(ancho, UiStyle.Width(rasgos, 14));
             }
 
-            x += ancho + 34;
+            x += ancho + 24f;
 
-            if (x > Escala.LienzoAncho - 420)
+            if (x > zona.End.X - 80f)
                 break;
         }
     }
 
-    private void DibujarBoton(Font fuente)
+    private void DibujarBoton()
     {
         var caja = Boton();
         int cuenta = Cuenta();
 
         if (cuenta > 0)
         {
-            DrawRect(caja, new Color(0.42f, 0.30f, 0.12f));
-            DrawRect(caja, new Color(0.95f, 0.75f, 0.35f), filled: false, width: 2f);
-
-            DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 46),
-                $"{Loc.Get("ui.preparacion.ahi_vienen")}  {cuenta}", HorizontalAlignment.Left, -1, 30,
-                new Color(0.99f, 0.88f, 0.60f));
+            this.Button(caja, $"{Loc.Get("ui.preparacion.ahi_vienen")}  {cuenta}",
+                Palette.Warning, encima: true);
 
             return;
         }
 
-        DrawRect(caja, new Color(0.16f, 0.42f, 0.24f));
-        DrawRect(caja, new Color(0.45f, 0.85f, 0.55f), filled: false, width: 2f);
+        this.Button(caja, Loc.Get("ui.preparacion.comenzar_oleada"), Palette.Success);
 
-        DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 32),
-            Loc.Get("ui.preparacion.comenzar_oleada"), HorizontalAlignment.Left, -1, 24,
-            new Color(0.90f, 0.98f, 0.92f));
-
-        DrawString(fuente, new Vector2(caja.Position.X + 22, caja.Position.Y + 58),
-            Loc.Get("ui.preparacion.espacio_sin_apuro"), HorizontalAlignment.Left, -1, 15,
-            new Color(0.62f, 0.78f, 0.68f));
+        this.Label(new Rect2(caja.Position.X, caja.End.Y - 24f, caja.Size.X, 20f),
+            Loc.Get("ui.preparacion.espacio_sin_apuro"), 13, Palette.TextMuted,
+            HorizontalAlignment.Center);
     }
 }

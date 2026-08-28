@@ -1,5 +1,6 @@
 using Godot;
 using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
 
@@ -11,6 +12,12 @@ namespace TowerOfArgentum;
 /// tiene que seguir viendo el estado de su defensa mientras decide (INTERFAZ.md
 /// §3).</para>
 ///
+/// <para>Las tarjetas son las <b>del diseño</b> —las mismas de la tienda, con la
+/// misma proporción vertical y el mismo marco de rareza— pero centradas y más
+/// grandes. Es la única pantalla que el panel del diseñador no dibuja, y la
+/// regla acá es la de siempre: cuando el diseño no tiene una pieza, se arma con
+/// las que sí tiene en vez de inventar un estilo nuevo.</para>
+///
 /// <para>⚠ <b>Muestra qué desbloquea levelear.</b> Las dos opciones dan +1 slot
 /// de perk; si eso no se ve, contratar parece siempre mejor —trae un rol nuevo—
 /// y la decisión "ancho o profundo" se cae sola.</para>
@@ -18,15 +25,20 @@ namespace TowerOfArgentum;
 public partial class PantallaEleccion : Control
 {
     private readonly Juego _juego;
-    private Font _fuente = null!;
     private int _bajoElCursor = -1;
 
-    private const int AnchoTarjeta = 460;
-    private const int AltoTarjeta = 340;
-    private const int Separacion = 40;
+    /// <summary>
+    /// La tarjeta, con la proporción de las de la tienda del diseño (132×205).
+    /// </summary>
+    /// <remarks>
+    /// Conservar la proporción es lo que hace que las tres se lean como las
+    /// mismas tarjetas de la tienda y no como otra pantalla: acá hay más lugar,
+    /// así que son más grandes, pero no son más anchas.
+    /// </remarks>
+    private const int AnchoTarjeta = 420;
 
-    /// <summary>El lado del icono del perk en la tarjeta del Oro del jefe.</summary>
-    private const int LadoIcono = 84;
+    private const int AltoTarjeta = (int)(AnchoTarjeta * 205f / 132f);
+    private const int Separacion = 40;
 
     public PantallaEleccion(Juego juego)
     {
@@ -35,7 +47,7 @@ public partial class PantallaEleccion : Control
 
     public override void _Ready()
     {
-        _fuente = ThemeDB.FallbackFont;
+        UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         // Stop y no Ignore: mientras el modal está abierto se come los clicks,
@@ -76,6 +88,7 @@ public partial class PantallaEleccion : Control
     public override void _Input(InputEvent evento)
     {
         var partida = _juego.Run;
+
         if (partida is null || !partida.WaitingForChoice)
             return;
 
@@ -89,6 +102,7 @@ public partial class PantallaEleccion : Control
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
             {
                 int i = TarjetaEn(GetGlobalMousePosition(), partida.OpenChoices.Length);
+
                 if (i >= 0)
                     _juego.Choose(i);
 
@@ -143,6 +157,7 @@ public partial class PantallaEleccion : Control
     public override void _Draw()
     {
         var partida = _juego.Run;
+
         if (partida is null || !partida.WaitingForChoice)
             return;
 
@@ -150,12 +165,16 @@ public partial class PantallaEleccion : Control
 
         // El mundo se oscurece pero se sigue viendo: el jugador decide mirando su
         // defensa, no de memoria.
-        DrawRect(new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto), new Color(0, 0, 0, 0.72f));
+        this.Scrim();
 
-        Text(Loc.Get("ui.eleccion.elegi_una"),
-            Escala.LienzoAncho / 2 - 130, 210, 44, new Color(0.95f, 0.95f, 0.92f));
-        Text(Loc.Get("ui.eleccion.no_se_puede_cerrar"),
-            Escala.LienzoAncho / 2 - 150, 250, 20, new Color(0.6f, 0.6f, 0.58f));
+        var cabecera = new Rect2(0, RectDe(0, opciones.Length).Position.Y - 110f,
+            Escala.LienzoAncho, 46f);
+
+        this.Label(cabecera, Loc.Get("ui.eleccion.elegi_una"), 42, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Label(cabecera.Row(48f, 26f), Loc.Get("ui.eleccion.no_se_puede_cerrar"), 18,
+            Palette.TextMuted, HorizontalAlignment.Center);
 
         for (int i = 0; i < opciones.Length; i++)
             DibujarTarjeta(i, opciones[i], opciones.Length, partida);
@@ -164,82 +183,113 @@ public partial class PantallaEleccion : Control
     private void DibujarTarjeta(int i, Choice opcion, int cantidad, Run partida)
     {
         var r = RectDe(i, cantidad);
-        bool resaltada = i == _bajoElCursor;
 
         bool contrata = opcion.Kind == ChoiceType.Hire;
         bool esPerk = opcion.Kind == ChoiceType.Perk;
 
-        // El Oro del jefe usa su propio acento —el dorado del tier— para que se
-        // distinga de un vistazo de las dos elecciones de roster: es otra decisión
-        // y llega en otro momento de la corrida.
+        // El Oro del jefe usa el dorado de su tier; contratar, el azul que en
+        // todo el juego marca «esta es la clase elegida»; levelear, el ámbar de
+        // lo que sube. Se distinguen antes de leer una palabra.
         var acento =
-            esPerk ? new Color(0.93f, 0.78f, 0.31f) :
-            contrata ? new Color(0.35f, 0.65f, 0.95f) :
-                       new Color(0.95f, 0.72f, 0.25f);
+            esPerk ? Palette.Rarity(CargadorDatos.Actual.Perks.Get(opcion.PerkId).Tier)
+            : contrata ? Palette.Info
+            : Palette.Warning;
 
-        DrawRect(r, new Color(0.09f, 0.09f, 0.13f, 0.97f));
-        DrawRect(r, resaltada ? acento : new Color(1, 1, 1, 0.15f), filled: false, width: resaltada ? 4f : 2f);
+        this.Slot(r, acento, elegido: i == _bajoElCursor);
 
-        // Franja de color arriba: contratar y levelear se distinguen de un
-        // vistazo, antes de leer una palabra.
-        DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 8), acento);
-
-        float x = r.Position.X + 32;
-        float y = r.Position.Y + 70;
+        var titulo = r.Row(18f, 26f);
+        var icono = UiLayout.Square(r.Row(52f, r.Size.Y * 0.30f));
+        var nombre = r.Row(52f + (r.Size.Y * 0.30f) + 10f, 44f);
+        var cuerpo = new Rect2(
+            r.Position.X + 28f, nombre.End.Y + 12f,
+            r.Size.X - 56f, r.End.Y - nombre.End.Y - 62f);
 
         if (esPerk)
         {
-            DibujarTarjetaDePerk(opcion, r, x, y, acento);
-            Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
-                new Color(0.5f, 0.5f, 0.5f));
+            DibujarPerk(opcion, titulo, icono, nombre, cuerpo, acento);
+        }
+        else
+        {
+            DibujarClase(opcion, partida, contrata, titulo, icono, nombre, cuerpo, acento);
+        }
+
+        // El número de la tecla. Con una corrida de horas, elegir con la mano
+        // izquierda sin soltar el mouse es la diferencia entre cien elecciones
+        // cómodas y cien viajes del cursor.
+        var tecla = new Rect2(r.End.X - 46f, r.End.Y - 40f, 30f, 28f);
+
+        DrawRect(tecla, Palette.BackgroundMain.Alpha(0.9f));
+        DrawRect(tecla, Palette.BorderSoft, filled: false, width: 1f);
+
+        this.Label(tecla, $"{i + 1}", 17, Palette.TextMuted, HorizontalAlignment.Center);
+    }
+
+    /// <summary>Contratar una clase nueva, o subirle el nivel a una que ya está.</summary>
+    private void DibujarClase(
+        Choice opcion, Run partida, bool contrata,
+        Rect2 titulo, Rect2 icono, Rect2 nombre, Rect2 cuerpo, Color acento)
+    {
+        // ⚠ El nombre sale de `Loc.Class`, nunca escrito a mano: el que se
+        // escribe a mano termina siendo "arquero", que es lo que uno esperaría de
+        // un tower defense y la clase que en Argentum Online no existe. El que
+        // tira flechas es el Cazador.
+        var clase = opcion.DefenderClass;
+        var stats = CargadorDatos.Actual.StatsOf(clase);
+
+        this.Label(titulo,
+            Loc.Get(contrata ? "ui.eleccion.contratar" : "ui.eleccion.subir_de_nivel").ToUpperInvariant(),
+            18, acento, HorizontalAlignment.Center);
+
+        // El muñeco y no un icono: es lo que se va a ver en el mapa.
+        var ficha = partida.Roster.Find(clase)
+            ?? new RosterClass { DefenderClass = clase, MaxLevel = 1 };
+
+        this.Portrait(icono, ficha);
+
+        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 36, Palette.TextPrimary,
+            HorizontalAlignment.Center);
+
+        this.Label(cuerpo.Row(0f, 22f), Loc.Role(clase), 16, Palette.TextMuted,
+            HorizontalAlignment.Center);
+
+        float alto = 24f;
+
+        this.StatRow(cuerpo.Row(30f, alto), Loc.Get("ui.eleccion.de_dano"), stats.Damage.ToString());
+        this.StatRow(cuerpo.Row(30f + alto, alto), Loc.Get("ui.eleccion.alcance"), stats.RangeCells.ToString());
+        this.StatRow(cuerpo.Row(30f + (alto * 2f), alto), Loc.Get("ui.eleccion.de_oro"), stats.Cost.ToString(), Palette.Gold);
+
+        this.Rule(cuerpo, 30f + (alto * 3f) + 8f);
+
+        float y = 30f + (alto * 3f) + 20f;
+
+        if (contrata)
+        {
+            this.Label(cuerpo.Row(y, 24f), Loc.Get("ui.eleccion.rol_nuevo"), 18,
+                Palette.TextSecondary, HorizontalAlignment.Center);
+
+            this.Label(cuerpo.Row(y + 26f, 24f), Loc.Get("ui.eleccion.arranca_con_slot"), 18,
+                Palette.TextSecondary, HorizontalAlignment.Center);
 
             return;
         }
 
-        Text(Loc.Get(contrata ? "ui.eleccion.contratar" : "ui.eleccion.subir_de_nivel"), x, y, 22, acento);
+        int slotsAntes = partida.Roster.Find(clase)?.OpenSlots ?? 1;
+        int tope = CargadorDatos.Actual.Classes.PerkSlotsPerClass;
+        int slotsDespues = System.Math.Min(opcion.ResultingLevel, tope);
 
-        y += 56;
-        Text(Loc.Class(opcion.DefenderClass), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
+        this.Label(cuerpo.Row(y, 24f),
+            $"{Loc.Get("ui.eleccion.level")} {opcion.ResultingLevel - 1} → {opcion.ResultingLevel}",
+            19, Palette.TextSecondary, HorizontalAlignment.Center);
 
-        y += 50;
-        var stats = CargadorDatos.Actual.StatsOf(opcion.DefenderClass);
-        Text($"{stats.Damage} {Loc.Get("ui.eleccion.de_dano")} · " +
-             $"{Loc.Get("ui.eleccion.alcance")} {stats.RangeCells} · " +
-             $"{stats.Cost} {Loc.Get("ui.eleccion.de_oro")}",
-            x, y, 19, new Color(0.7f, 0.7f, 0.68f));
-
-        y += 54;
-
-        if (contrata)
-        {
-            Text(Loc.Get("ui.eleccion.rol_nuevo"), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
-            y += 30;
-            Text(Loc.Get("ui.eleccion.arranca_con_slot"), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
-        }
-        else
-        {
-            var ficha = partida.Roster.Find(opcion.DefenderClass);
-            int slotsAntes = ficha?.OpenSlots ?? 1;
-
-            Text($"{Loc.Get("ui.eleccion.level")} {opcion.ResultingLevel - 1} → {opcion.ResultingLevel}",
-                x, y, 21, new Color(0.82f, 0.82f, 0.8f));
-
-            y += 30;
-
-            // ⚠ Esta línea es la que hace que la elección sea una elección. Sin
-            // ella, contratar parece siempre mejor porque trae algo visiblemente
-            // nuevo, y levelear parece "solo números".
-            int slotsDespues = System.Math.Min(opcion.ResultingLevel, CargadorDatos.Actual.Classes.PerkSlotsPerClass);
-
-            Text(slotsDespues > slotsAntes
-                    ? $"{Loc.Get("ui.eleccion.abre_slot")} {slotsDespues} " +
-                      $"{Loc.Get("ui.eleccion.de")} {CargadorDatos.Actual.Classes.PerkSlotsPerClass}."
-                    : Loc.Get("ui.eleccion.slots_completos"),
-                x, y, 21, new Color(0.95f, 0.85f, 0.5f));
-        }
-
-        Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
-            new Color(0.5f, 0.5f, 0.5f));
+        // ⚠ Esta línea es la que hace que la elección sea una elección. Sin ella,
+        // contratar parece siempre mejor porque trae algo visiblemente nuevo, y
+        // levelear parece "solo números".
+        this.Label(cuerpo.Row(y + 28f, 24f),
+            slotsDespues > slotsAntes
+                ? $"{Loc.Get("ui.eleccion.abre_slot")} {slotsDespues} {Loc.Get("ui.eleccion.de")} {tope}."
+                : Loc.Get("ui.eleccion.slots_completos"),
+            18, slotsDespues > slotsAntes ? Palette.Legendary : Palette.TextMuted,
+            HorizontalAlignment.Center);
     }
 
     /// <summary>
@@ -248,33 +298,36 @@ public partial class PantallaEleccion : Control
     /// <remarks>
     /// ⚠ Dice <b>a qué clase le sirve</b> y no solo el nombre. Un Oro es un
     /// comportamiento que solo pueden usar dos o tres de las nueve clases, y
-    /// elegir entre tres nombres sin saber quién los puede equipar es elegir a
-    /// ciegas — que es exactamente lo que la oferta de tres vino a arreglar.
+    /// elegir entre dos nombres sin saber quién los puede equipar es elegir a
+    /// ciegas — que es exactamente lo que la oferta del jefe vino a arreglar.
     /// </remarks>
-    private void DibujarTarjetaDePerk(Choice opcion, Rect2 r, float x, float y, Color acento)
+    private void DibujarPerk(
+        Choice opcion, Rect2 titulo, Rect2 icono, Rect2 nombre, Rect2 cuerpo, Color acento)
     {
         var def = CargadorDatos.Actual.Perks.Get(opcion.PerkId);
 
-        // ⚠ A la izquierda corriendo el texto, no arriba a la derecha. La tarjeta
-        // tiene 460 de ancho y el nombre va en cuerpo 40: «Sobrepenetración»
-        // cruza la mitad de la tarjeta, y un icono apoyado en el borde derecho se
-        // le termina encima. Corriendo el texto no se pueden pisar nunca.
-        // Solo se corren las dos líneas que quedan a la altura del icono. De la
-        // tercera para abajo el texto arranca donde arrancaba, que es donde vive
-        // la lista de clases y es la línea más larga de la tarjeta.
-        float titulo = CargadorIconos.Dibujar(this, def.Key, x, r.Position.Y + 34, LadoIcono)
-            ? x + LadoIcono + 16
-            : x;
+        this.Label(titulo, Loc.Tier(def.Tier).ToUpperInvariant(), 18, acento,
+            HorizontalAlignment.Center);
 
-        Text(Loc.Tier(def.Tier), titulo, y, 22, acento);
+        this.Slot(icono, acento);
 
-        y += 56;
-        Text(Loc.Perk(def), titulo, y, 34, new Color(0.95f, 0.95f, 0.92f));
+        if (!CargadorIconos.Dibujar(this, def.Key,
+                icono.Position.X + 10f, icono.Position.Y + 10f, icono.Size.X - 20f))
+        {
+            this.Label(icono, Loc.Perk(def)[..1].ToUpperInvariant(),
+                (int)(icono.Size.X * 0.5f), acento, HorizontalAlignment.Center);
+        }
 
-        y += 50;
-        Text($"{Loc.Effect(def.Effect)} · {def.Magnitude}%", x, y, 19, new Color(0.7f, 0.7f, 0.68f));
+        this.Label(nombre, Loc.Perk(def).ToUpperInvariant(), 30, Palette.TextPrimary,
+            HorizontalAlignment.Center);
 
-        y += 54;
+        this.Label(cuerpo.Row(0f, 24f), $"{Loc.Effect(def.Effect)} · {def.Magnitude}%", 18,
+            Palette.TextSecondary, HorizontalAlignment.Center);
+
+        this.Rule(cuerpo, 32f);
+
+        this.Label(cuerpo.Row(38f, 22f), Loc.Get("ui.eleccion.sirve_a"), 15, Palette.TextMuted,
+            HorizontalAlignment.Center);
 
         // Las clases que lo pueden equipar, no todas las del roster.
         var sirve = new System.Text.StringBuilder();
@@ -290,20 +343,10 @@ public partial class PantallaEleccion : Control
             sirve.Append(Loc.Class(c));
         }
 
-        Text(Loc.Get("ui.eleccion.sirve_a"), x, y, 19, new Color(0.6f, 0.6f, 0.58f));
-        y += 28;
-        Text(sirve.ToString(), x, y, 21, new Color(0.82f, 0.82f, 0.8f));
+        this.Paragraph(cuerpo.Row(62f, cuerpo.Size.Y - 88f), sirve.ToString(), 18,
+            Palette.TextSecondary);
 
-        y += 36;
-        Text(Loc.Get("ui.eleccion.va_a_la_mochila"), x, y, 18, new Color(0.6f, 0.6f, 0.58f));
+        this.Label(cuerpo.Row(cuerpo.Size.Y - 24f, 22f), Loc.Get("ui.eleccion.va_a_la_mochila"), 15,
+            Palette.TextMuted, HorizontalAlignment.Center);
     }
-
-    /// <summary>
-    /// ⚠ Cazador, nunca "arquero". Es el error de nombre más fácil de cometer en
-    /// este proyecto porque "arquero" es lo que uno esperaría de un tower defense,
-    /// pero en Argentum Online esa clase no existe.
-    /// </summary>
-
-    private void Text(string s, float x, float y, int tamano, Color color)
-        => DrawString(_fuente, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
 }
