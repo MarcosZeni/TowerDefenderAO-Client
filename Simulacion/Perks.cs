@@ -116,10 +116,16 @@ public enum PerkEffect
     //  Únicos — no caen ni se compran: salen de fusionar dos Oro con un plano
     // -------------------------------------------------------------------------
     //
-    //  ⚠ Cada Único COMBINA los dos Oro de su receta con las magnitudes
-    //  REBAJADAS. Un Único que sumara dos Oro completos en un solo slot sería
-    //  estrictamente mejor que tener los dos, y la mitad del premio —el slot que
-    //  se libera— dejaría de ser la mitad del premio.
+    //  ⚠ Cada Único COMBINA los dos Oro de su receta, AL VALOR PLENO DE LOS DOS.
+    //
+    //  Iban rebajados a ~80% de cada componente, con este argumento: «un Único que
+    //  sumara dos Oro completos en un solo slot sería estrictamente mejor que
+    //  tener los dos». El argumento era falso, y lo invalida una regla del mismo
+    //  archivo: LA RANURA DE COMPORTAMIENTO ES UNA. Una clase no puede equipar dos
+    //  Oro, así que «tener los dos» en la misma clase no existe.
+    //
+    //  Lo que fusionar cuesta de verdad: consume DOS de los ~8 Oro de la corrida,
+    //  y el segundo podría haber ido a otra clase que también lo usa.
     //
     //  Por eso llevan dos números: `magnitude` y `magnitudeB` de perks.json.
 

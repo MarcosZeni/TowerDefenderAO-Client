@@ -544,6 +544,8 @@ public static class CorredorHeadless
         total.GoldBeforeShopTotal += una.GoldBeforeShopTotal;
         total.GoldAfterShopTotal += una.GoldAfterShopTotal;
         total.GoldAtEnd += una.GoldAtEnd;
+        total.RosterLevelTotal += una.RosterLevelTotal;
+        total.ClassesAtMaxLevel += una.ClassesAtMaxLevel;
 
         total.OffersClass += una.OffersClass;
         total.OffersBronze += una.OffersBronze;
@@ -643,6 +645,19 @@ public static class CorredorHeadless
                      $"armas {m.GoldSpentWeapons * 100 / gastado}%");
             GD.Print("   objetivo: tablero+niveles 50-65% · perks 20-30% · planos 5-10%");
         }
+
+        // ⚠ Los dos números que desambiguan «sobró oro». Un roster lejos del máximo
+        // CON oro sobrando dice que el sumidero NO se agotó, y entonces recortar el
+        // ingreso arreglaría el síntoma equivocado.
+        int maxNivel = CargadorDatos.Actual.Classes.PerkSlotsPerClass;
+
+        // Sin decimales y sin `double`: es un mensaje de consola que lee una
+        // persona, y el promedio de «clases al máximo» se lee mejor como el total
+        // sobre N que como 3,7.
+        GD.Print($"   progresión        {m.RosterLevelTotal / corridas} niveles de roster " +
+                 $"(máximo posible {ChoiceBuilder.All.Length * maxNivel}) · " +
+                 $"{m.ClassesAtMaxLevel} clases al máximo en {corridas} corridas · " +
+                 $"{m.GoldAtEnd / corridas} de oro sin gastar");
 
         // ⚠ Ocho Oro y cero Únicos quiere decir que la fusión existe y no se juega.
         // La oleada del primer Único dice si la composición llega a tiempo: en la
@@ -988,6 +1003,19 @@ public static class CorredorHeadless
         // y arrastraría el promedio hacia abajo sin que nadie lo note.
         if (partida.Metrics.GoldAtEnd == 0)
             partida.Metrics.GoldAtEnd = partida.Gold;
+
+        // ⚠ Los dos números que desambiguan «sobró oro». Se toman al final y no
+        // durante, porque lo que interesa es dónde quedó parada la progresión: un
+        // roster lejos del máximo CON oro sobrando dice que el sumidero no se
+        // agotó, y entonces recortar el ingreso sería arreglar el síntoma
+        // equivocado.
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            partida.Metrics.RosterLevelTotal += ficha.Level;
+
+            if (ficha.Level >= ficha.MaxLevel)
+                partida.Metrics.ClassesAtMaxLevel++;
+        }
 
         return new Resultado(
             partida.Tick, partida.Wave, partida.Tower.Hp, partida.Gold, partida.State,

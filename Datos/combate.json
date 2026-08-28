@@ -245,22 +245,44 @@
   //
   // Los dos números principales de cada Único van en perks.json como "magnitude"
   // y "magnitudeB". Acá quedan los topes que no entran en esos dos.
+  // ⚠ LOS ÚNICOS VALEN LO QUE VALEN SUS DOS ORO, SIN REBAJA — y estos topes son
+  // la segunda mitad de esa regla.
+  //
+  // Estaban rebajados dos veces: la magnitud en perks.json Y el tope de acá.
+  // El slow duraba 75 ticks contra los 90 del Oro, la raíz 12 contra 15, el botín
+  // topeaba en 8/50 contra 10/60. Sumado a la rebaja de magnitud, un Único
+  // terminaba valiendo bastante menos que sus dos componentes juntos.
+  //
+  // La regla que invalidaba el argumento de la rebaja es del mismo sistema: LA
+  // RANURA DE COMPORTAMIENTO ES UNA, así que «tener los dos Oro» en la misma
+  // clase no existe y no había con qué comparar. Lo que fusionar cuesta —dos de
+  // los ~8 Oro de la corrida— ya es la decisión.
+  //
+  // Medido con la rebaja: el `techo` fabricaba un Único por corrida y llegaba
+  // exactamente igual de lejos que la política que no fusiona nunca (69 contra 69
+  // oleadas en 24 corridas).
   "uniques": {
-    // Onda de Frío (Mago): splash + slow menor.
+    // Onda de Frío (Mago): splash + slow, los dos al valor del Oro.
+    // 3 secundarios es lo mismo que «behaviors.splash.maxSecondaries».
     "frostWaveMaxSecondaries": 3,
-    "frostWaveSlowTicks": 75,
+    "frostWaveSlowTicks": 90,
 
     // Perforación (Cazador): concentración + transferencia de overkill.
+    // ⚠ El radio es MAYOR que el del Oro (1.500) y siempre lo fue: es identidad
+    // del Único, no una rebaja al revés.
     "perforationRadiusThousandths": 2000,
 
-    // Invisibilidad (Ladrón): botín + overkill, los dos rebajados.
-    "invisibilityMaxGoldPerEnemy": 8,
-    "invisibilityMaxGoldPerWave": 50,
+    // Invisibilidad (Ladrón): botín + overkill, con los topes del Oro.
+    "invisibilityMaxGoldPerEnemy": 10,
+    "invisibilityMaxGoldPerWave": 60,
 
-    // Terrible Hambre de Igôr (Druida): raíz más corta + quemadura moderada.
-    "terribleHungerRootTicks": 12,
+    // Terrible Hambre de Igôr (Druida): raíz + quemadura. Los 15 ticks son los
+    // mismos de «states.root.durationTicks», y la raíz sigue arrastrando su
+    // período refractario y su tope por enemigo.
+    "terribleHungerRootTicks": 15,
 
-    // Fuerza (Guerrero): empuje + vulnerabilidad breve.
+    // Fuerza (Guerrero): empuje + vulnerabilidad. Los 3 empujones son los mismos
+    // de «states.push.maxPerEnemy», así que ya estaba al valor pleno.
     "strengthMaxPushPerEnemy": 3
   },
 

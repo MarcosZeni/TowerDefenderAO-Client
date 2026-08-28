@@ -322,8 +322,8 @@ public readonly record struct EffectiveStats(
     /// </summary>
     /// <remarks>
     /// Cero en los que hacen una sola. Lo usan todos los Únicos —cada uno es la
-    /// fusión de dos Oro rebajados— y las cadenas y quemaduras, que pegan
-    /// distinto al objetivo y a los secundarios.
+    /// fusión de dos Oro, al valor pleno de los dos— y las cadenas y quemaduras,
+    /// que pegan distinto al objetivo y a los secundarios.
     /// </remarks>
     int BehaviorMagnitudeB,
 

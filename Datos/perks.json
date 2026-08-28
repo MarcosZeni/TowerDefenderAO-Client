@@ -190,43 +190,62 @@
     //  UNIQUE: NO caen, NO se compran. Se fusionan, y ocupan UN SOLO slot
     // =========================================================================
     //
-    //  El slot liberado es la mitad del premio. Los nombres salen de los 41
-    //  hechizos reales de Dat\Hechizos.dat de Austral, y viven en lang\.
+    //  Los nombres salen de los 41 hechizos reales de Dat\Hechizos.dat de Austral,
+    //  y viven en lang\.
     //
-    //  ⚠ CADA ÚNICO COMBINA SUS DOS ORO CON LAS MAGNITUDES REBAJADAS. Si sumara
-    //  los dos completos, tener el Único sería estrictamente mejor que tener los
-    //  dos Oro y la decisión de fusionar dejaría de ser una decisión: sería un
-    //  trámite que conviene siempre.
+    //  ⚠ CADA ÚNICO VALE EXACTAMENTE LO QUE VALEN SUS DOS ORO, SIN REBAJA.
+    //
+    //  Antes iban rebajados a ~80% de cada componente, con este argumento: «si
+    //  sumara los dos completos, tener el Único sería estrictamente mejor que
+    //  tener los dos Oro». EL ARGUMENTO ERA FALSO, y la regla que lo invalida es
+    //  del mismo sistema: LA RANURA DE COMPORTAMIENTO ES UNA. Una clase no puede
+    //  equipar dos Oro —la mochila rebota el segundo—, así que «tener los dos» en
+    //  la misma clase no existe y no había con qué comparar.
+    //
+    //  Lo que fusionar cuesta de verdad, y sigue costando: se consumen DOS de los
+    //  ~8 Oro de toda la corrida, y el segundo podría haber ido a otra clase que
+    //  también lo usa. Eso ya es la decisión; la rebaja encima era un peaje que no
+    //  compraba nada.
+    //
+    //  ⚠ Y lo que medía: con la rebaja, la política `techo` fabricaba un Único por
+    //  corrida y llegaba EXACTAMENTE igual de lejos que la que no fusiona nunca
+    //  —69 contra 69 oleadas en 24 corridas—. Un premio que cuesta dos jefes, un
+    //  plano y una fusión no puede valer cero.
+    //
+    //  El premio sigue siendo doble: los dos efectos juntos, y en UN SOLO slot.
     //
     //  Los dos números de cada uno son "magnitude" y "magnitudeB", en el orden en
     //  que la receta de planos.json nombra los componentes.
 
-    // Concentración (4% por stack, máx 5 = +20%) + Sobrepenetración (35%).
-    { "id": 26, "key": "perforacion",    "tier": "unique", "effect": "Perforation",    "magnitude":  4, "magnitudeB": 35, "classes": ["Hunter"] },
+    // Concentración (5% por stack, máx 5 = +25%) + Sobrepenetración (40%).
+    { "id": 26, "key": "perforacion",    "tier": "unique", "effect": "Perforation",    "magnitude":  5, "magnitudeB": 40, "classes": ["Hunter"] },
 
-    // Onda Expansiva (30% a máx 3) + Escarcha (-20% por 75 ticks).
-    { "id": 27, "key": "ondaDeFrio",     "tier": "unique", "effect": "FrostWave",      "magnitude": 30, "magnitudeB": 20, "classes": ["Mage"] },
+    // Onda Expansiva (35% a máx 3) + Escarcha (-25% por 90 ticks).
+    { "id": 27, "key": "ondaDeFrio",     "tier": "unique", "effect": "FrostWave",      "magnitude": 35, "magnitudeB": 25, "classes": ["Mage"] },
 
-    // Guardia del Umbral (+40% vs los que muerden la Torre) + Quebranto (+6%).
-    { "id": 28, "key": "iraDeDios",      "tier": "unique", "effect": "WrathOfGod",     "magnitude": 40, "magnitudeB":  6, "classes": ["Paladin"] },
+    // Guardia del Umbral (+50% vs los que muerden la Torre) + Quebranto (+8%).
+    { "id": 28, "key": "iraDeDios",      "tier": "unique", "effect": "WrathOfGod",     "magnitude": 50, "magnitudeB":  8, "classes": ["Paladin"] },
 
-    // Hemorragia (25%) + Oportunista (+30% bajo el umbral de vida).
-    { "id": 29, "key": "apocalipsis",    "tier": "unique", "effect": "Apocalypse",     "magnitude": 25, "magnitudeB": 30, "classes": ["Assassin"] },
+    // Hemorragia (30%) + Oportunista (+35% bajo el umbral de vida).
+    { "id": 29, "key": "apocalipsis",    "tier": "unique", "effect": "Apocalypse",     "magnitude": 30, "magnitudeB": 35, "classes": ["Assassin"] },
 
-    // Raíces (12 ticks) + Tormenta de Fuego (quemadura del 20%).
+    // Raíces (15 ticks, en combate.json) + Tormenta de Fuego (quemadura del 20%).
+    // ⚠ "magnitudeB" queda en 0 y NO es un olvido: la duración de la raíz no es
+    // una magnitud del perk, sale de «uniques.terribleHungerRootTicks».
     { "id": 30, "key": "terribleHambre", "tier": "unique", "effect": "TerribleHunger", "magnitude": 20, "magnitudeB":  0, "classes": ["Druid"] },
 
-    // Inspiración (+8% cadencia) + Quebranto (+6% vulnerable).
-    { "id": 31, "key": "tormentaDivina", "tier": "unique", "effect": "DivineStorm",    "magnitude":  8, "magnitudeB":  6, "classes": ["Cleric"] },
+    // Inspiración (+10% cadencia) + Quebranto (+8% vulnerable).
+    { "id": 31, "key": "tormentaDivina", "tier": "unique", "effect": "DivineStorm",    "magnitude": 10, "magnitudeB":  8, "classes": ["Cleric"] },
 
-    // Inspiración (+8% cadencia) + Debilidad (-15% daño a la Torre).
-    { "id": 32, "key": "ceguera",        "tier": "unique", "effect": "Blindness",      "magnitude":  8, "magnitudeB": 15, "classes": ["Bard"] },
+    // Inspiración (+10% cadencia) + Debilidad (-20% daño a la Torre).
+    { "id": 32, "key": "ceguera",        "tier": "unique", "effect": "Blindness",      "magnitude": 10, "magnitudeB": 20, "classes": ["Bard"] },
 
     // ⚠ La magnitud es la DISTANCIA DEL EMPUJÓN en milésimas de celda, igual que
-    // en Golpe Sísmico. Golpe Sísmico (500) + Quebranto (+8% vulnerable).
+    // en Golpe Sísmico. Golpe Sísmico (500) + Quebranto (+8% vulnerable). Estos
+    // dos ya estaban al valor pleno, así que no cambian.
     { "id": 33, "key": "fuerza",         "tier": "unique", "effect": "Strength",       "magnitude": 500, "magnitudeB": 8, "classes": ["Warrior"] },
 
-    // Saqueo (+15% oro, topes propios) + Sobrepenetración (30%).
-    { "id": 34, "key": "invisibilidad",  "tier": "unique", "effect": "Invisibility",   "magnitude": 15, "magnitudeB": 30, "classes": ["Thief"] }
+    // Saqueo (+20% oro, topes propios) + Sobrepenetración (40%).
+    { "id": 34, "key": "invisibilidad",  "tier": "unique", "effect": "Invisibility",   "magnitude": 20, "magnitudeB": 40, "classes": ["Thief"] }
   ]
 }

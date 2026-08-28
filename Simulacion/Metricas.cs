@@ -44,6 +44,25 @@ public sealed class RunMetrics
     /// <summary>Oro sin gastar cuando la corrida terminó, de la forma que sea.</summary>
     public int GoldAtEnd { get; set; }
 
+    /// <summary>
+    /// Suma de los niveles del roster al terminar, y cuántas clases llegaron al
+    /// máximo.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Son los dos números que dicen si el sumidero de oro se agotó.</b>
+    /// Sin ellos, «terminó con 29.000 sin gastar» tiene dos lecturas opuestas que
+    /// piden arreglos contrarios: o sobra ingreso —y hay que recortarlo— o se
+    /// acabó en qué gastarlo —y hay que abrir un sumidero—.</para>
+    ///
+    /// <para>El nivel cuesta <c>300 × nivelDestino²</c>, o sea 27.000 llevar una
+    /// clase de 1 a 6 y 243.000 las nueve. Si el roster termina lejos del máximo
+    /// <b>y</b> sobra oro, el sumidero no se agotó: lo que falta es que el jugador
+    /// tenga motivo para usarlo.</para>
+    /// </remarks>
+    public int RosterLevelTotal { get; set; }
+
+    public int ClassesAtMaxLevel { get; set; }
+
     // -------------------------------------------------------------------------
     //  Las ofertas: qué VIO el jugador
     // -------------------------------------------------------------------------

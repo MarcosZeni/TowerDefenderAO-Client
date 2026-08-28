@@ -1947,7 +1947,7 @@ public sealed class Run
                 return;
 
             // =================================================================
-            //  Los Únicos: los dos Oro de su receta, rebajados
+            //  Los Únicos: los dos Oro de su receta, al valor pleno de los dos
             // =================================================================
 
             // Onda Expansiva + Escarcha.
