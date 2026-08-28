@@ -429,10 +429,19 @@ public static class CargadorDatos
                 new PerWaveCurves(
                     new LinearCurve(0, 0), new LinearCurve(0, 0), new LinearCurve(0, 0),
                     30, 1, 30, 30, 1, 0, 0),
-                new ShopData(0, 0, 0, new LinearCurve(0, 0), new LinearCurve(0, 0)),
+                new ShopData(
+                    Slots: 1, IntervalWaves: 1,
+                    ClassWeight: 0, BronzeWeight: 1, SilverWeight: 0,
+                    GoldWeight: 0, BlueprintWeight: 0, WeaponWeight: 0,
+                    MaxGoldOffers: 0, MaxBlueprintOffers: 0, MinUsableOffers: 0,
+                    SilverMinWave: 1, GoldMinWave: 1, BlueprintMinWave: 1,
+                    RecipeWeightMultiplier: 1,
+                    new LinearCurve(0, 0), new LinearCurve(0, 0), new LinearCurve(0, 0),
+                    new LinearCurve(0, 0), new LinearCurve(0, 0), ClassCostMultiplier: 0),
                 new DropData(0, 0, 1, 1, 1, 0, false),
-                new WaveData(1, 1, 1, 1, 1, 1, 1, 1, 30),
-                new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0),
+                new WaveData(1, 1, 1, 1, 1, 1, 1, 1, 30,
+                    new SpawnFormations(1, 0, 0, 50, 150, 5, 60, 260)),
+                new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0),
                 new BossData(1, 0, "")),
 
             // ⚠ Todos estos números son MÍNIMOS QUE NO ROMPEN, no valores de
@@ -445,7 +454,8 @@ public static class CargadorDatos
                 new StateRules(60, 90, 180, 60, 300, 90, 15, 120, 6, 3, 90, 3, 120, 10, 60, 90, 180),
                 new BehaviorRules(1, 2000, 2, 1500, 3, 1800, 105, 2, 1500, 7, 5, 60, 4, 6, 5, 8, 4, 15, 1000, 40, 1500, 25, 80, 45),
                 new UniqueRules(3, 75, 2000, 8, 50, 12, 3),
-                new WeaponRules(4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60)),
+                new WeaponRules(4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60, 70, 150, 15, 120, 150),
+                new EnemyTraits(35, 15, 90, 10, 30, 20, 10, 1500)),
         };
 
         datos.BuildIndexes();

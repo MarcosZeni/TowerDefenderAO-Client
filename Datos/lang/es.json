@@ -279,9 +279,62 @@
     "ui.preparacion.instrucciones": "poné defensores, equipá y comprá — el reloj está detenido",
     "ui.preparacion.jefe": "(JEFE)",
     "ui.preparacion.con_perk": "con perk",
+
+    // ⚠ Los rasgos van en su propio renglón: no son un número más de vida o
+    // velocidad, cambian una situación. Contra un líder conviene concentrar fuego
+    // en él antes que repartir, y eso es una respuesta distinta.
+    "ui.preparacion.con_rasgo": "con rasgo (impulsivo o líder)",
     "ui.preparacion.ahi_vienen": "AHÍ VIENEN...",
     "ui.preparacion.comenzar_oleada": "COMENZAR OLEADA",
     "ui.preparacion.espacio_sin_apuro": "espacio · sin apuro, el reloj está detenido",
+
+    // --- La tienda rotativa de la corrida ------------------------------------
+    //
+    // ⚠ Abre cada 3 oleadas, junto a la elección, y son CUATRO ofertas que NO SE
+    // REPONEN: comprar deja el hueco vacío hasta la próxima. «No se repone» va en
+    // pantalla porque es la regla que hace que la decisión sea una decisión, y no
+    // se puede deducir mirando.
+    "ui.tienda.titulo": "TIENDA",
+    "ui.tienda.no_se_repone": "no se repone: lo que compres deja el lugar vacío",
+    "ui.tienda.vendido": "vendido",
+    "ui.tienda.reclutar": "RECLUTAR",
+    "ui.tienda.plano": "PLANO",
+    "ui.tienda.arma": "ARMA",
+    "ui.tienda.dano": "daño",
+    "ui.tienda.alcance": "alcance",
+    "ui.tienda.cadencia": "cadencia",
+    "ui.tienda.ticks": "ticks",
+    "ui.tienda.costo_colocacion": "cada ficha cuesta",
+    "ui.tienda.cualquier_clase": "cualquier clase",
+    "ui.tienda.sin_habilidad": "sin habilidad",
+
+    // ⚠ Lo comprado en la tienda de la corrida NO es la compra de la billetera.
+    // El plano permanente se compra en el menú principal y queda para siempre en
+    // la cuenta; este muere con la corrida. Si no se dijera, el jugador pagaría
+    // dos veces por lo que cree que es lo mismo.
+    "ui.tienda.solo_esta_corrida": "solo para esta corrida",
+
+    // --- El panel del defensor: targeting y soporte ---------------------------
+    //
+    // ⚠ El targeting es lo único que se decide POR DEFENSOR y no por clase: dos
+    // paladines de la misma ficha quieren cosas distintas según dónde estén
+    // parados.
+    "ui.defensor.apunta_a": "apunta a",
+    "ui.defensor.cerrar": "click de nuevo o Esc para cerrar",
+    "ui.defensor.radio": "radio",
+    "ui.defensor.aliados": "aliados",
+    "ui.defensor.cadencia": "cadencia",
+    "ui.defensor.manda_el_perk": "manda el perk · la habilidad del arma está muda",
+    "ui.defensor.manda_el_arma": "manda el arma · el perk de comportamiento está mudo",
+
+    // ⚠ Los cuatro modos. «Primero» y «más cerca de la Torre» NO son lo mismo:
+    // el primero mide avance sobre la ruta, el segundo distancia a la Torre en el
+    // mapa, y en un layout que serpentea eligen enemigos distintos.
+    "ui.targeting.First": "el más adelantado",
+    "ui.targeting.Strongest": "el de más vida",
+    "ui.targeting.Weakest": "el de menos vida",
+    "ui.targeting.NearestTower": "el más cerca de la Torre",
+
     "ui.hud.torre": "TORRE",
     "ui.hud.oleada": "OLEADA",
     "ui.hud.ticks": "ticks",
@@ -308,6 +361,15 @@
     "ui.mochila.ticks": "ticks",
     "ui.mochila.habilidad": "habilidad:",
     "ui.mochila.arma_tapa_rasgo": "⚠ la habilidad del arma reemplaza al perk de comportamiento",
+
+    // ⚠ La ranura de comportamiento sigue siendo UNA: esto no permite tener los
+    // dos, permite elegir cuál habla. La última línea es la que evita el
+    // malentendido caro — el jugador supone que elegir el perk apaga el arma
+    // entera, y lo que se apaga es solo su habilidad.
+    "ui.mochila.comportamiento_activo": "comportamiento activo",
+    "ui.mochila.el_perk": "el perk",
+    "ui.mochila.el_arma": "el arma",
+    "ui.mochila.stats_del_arma_quedan": "los stats del arma se conservan en los dos casos",
     "ui.mochila.subir_nivel": "subir a nivel",
     "ui.mochila.nivel_maximo": "nivel máximo",
     "ui.mochila.sin_oro": "no alcanza el oro",

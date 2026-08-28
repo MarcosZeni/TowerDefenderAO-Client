@@ -278,6 +278,38 @@
     "bounceBounces": 1,
     "maxChainSecondaries": 5,
 
+    // ⚠ El segundo disparo de Doble NO es un golpe entero. Un golpe completo
+    // equivale a duplicar el daño directo —+100%— y a ese precio ninguna otra
+    // habilidad puede competir por la misma ranura. Con 70 sigue siendo
+    // clarísimamente legendaria y deja lugar para que Cadena, Ejecutar y Codicia
+    // sean elecciones y no consuelos.
+    "doubleShotPercent": 70,
+
+    // ⚠ Techo del daño SECUNDARIO TOTAL de Cadena, en porcentaje del golpe
+    // directo. Sin él, el daño escala lineal con la densidad: cinco secundarios
+    // al 60% son +300% en una oleada apretada y +0% en una vacía, o sea una
+    // habilidad cuyo poder lo decide la formación y no el jugador. Con 150, si
+    // cada salto pega 60 la repartición es 60 / 60 / 30 / 0 / 0.
+    "chainSecondaryCapPercent": 150,
+
+    // ⚠ Codicia SÍ lleva topes ahora. La economía tiene realimentación positiva
+    // —más oro, más defensores, más kills, más oro— así que una habilidad
+    // económica sin techo no es fuerte: es la única build. Los dos hacen falta:
+    // sin el de oleada, sesenta bichos marcados pagan sesenta veces el tope
+    // individual.
+    //
+    // Sigue siendo mejor que el perk Saqueo, como corresponde a una legendaria,
+    // pero ya no puede duplicar la economía de una oleada entera.
+    "greedMaxExtraPerEnemy": 15,
+    "greedMaxExtraPerWave": 120,
+
+    // ⚠ Techo de curación de Vampirismo POR OLEADA, en puntos de vida de la
+    // Torre. La ventana de 30 ticks por clase limita el ritmo pero no el total:
+    // una oleada larga con una build de cadencia seguía curando más de lo que la
+    // oleada podía bajar, y la Torre quedaba prácticamente inmortal. Con 150 la
+    // habilidad sigue siendo una herramienta seria de recuperación.
+    "vampirismMaxHealingPerWave": 150,
+
     // ⚠ Techo del bonus ACUMULADO por muertes de la oleada, no por muerte. Se
     // reinicia al lanzar cada oleada: el techo real tiene que ser cuánto se
     // puede matar de una vez, no cuánto se lleva matado en cien oleadas.
@@ -315,5 +347,43 @@
     // el premio de una corrida. El perk Saqueo, que hace lo mismo más chico, sí
     // lo lleva.
     "greedMarkDurationTicks": 60
+  },
+
+  // ---------------------------------------------------------------------------
+  //  Los rasgos de los enemigos
+  // ---------------------------------------------------------------------------
+  //
+  //  Tres mecánicas, y las tres siguen la misma regla: NO agregan resistencias,
+  //  ni inmunidades, ni curación, ni destruyen defensores. Solo hacen que el
+  //  último tramo de una pelea sea más urgente, que es lo que se puede leer en
+  //  pantalla sin explicar nada.
+  //
+  //  ⚠ Ninguno da daño extra. Un enemigo que además pega más fuerte al enfurecer
+  //  convierte una filtración en una derrota instantánea, y el jugador no tiene
+  //  forma de haberlo previsto.
+  //
+  //  "enrage" lo tienen TODOS los jefes, y una sola vez por pelea: al bajar del
+  //  umbral de vida aceleran un rato. El jefe final acelera menos porque es el
+  //  final de cien oleadas y ahí una aceleración grande es una derrota que no se
+  //  ve venir.
+  //
+  //  "impulsive" y "leader" son rasgos OCASIONALES de la tropa; quién los trae lo
+  //  decide el armador de la oleada y se paga del presupuesto (curvas.json
+  //  §npcPerks). Acá vive solo qué hacen.
+  //
+  //  ⚠ El aura del líder NO APILA con otra, igual que todos los estados del
+  //  juego: gana la potencia más fuerte. Sin la regla, tres líderes juntos son un
+  //  +30% que ningún número del catálogo anticipa.
+  "enemyTraits": {
+    "enrageHpPercent": 35,
+    "enrageSpeedPercent": 15,
+    "enrageTicks": 90,
+    "finalBossEnrageSpeedPercent": 10,
+
+    "impulsiveHpPercent": 30,
+    "impulsiveSpeedPercent": 20,
+
+    "leaderSpeedPercent": 10,
+    "leaderRadiusThousandths": 1500
   }
 }

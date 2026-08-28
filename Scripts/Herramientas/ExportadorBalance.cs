@@ -138,8 +138,8 @@ public static class ExportadorBalance
         List<object[]> filas =
         [
             [
-                "DefenderClass", "Level", "ExtraDanoPorc", "DanoEfectivo", "DPS",
-                "SlotsPerkAbiertos", "VisualTier",
+                "DefenderClass", "Level", "ExtraDanoPorc", "DanoInterno",
+                "DanoEfectivo", "DPS", "SlotsPerkAbiertos", "VisualTier",
             ],
         ];
 
@@ -149,18 +149,31 @@ public static class ExportadorBalance
 
             for (int nivel = 1; nivel <= CargadorDatos.Actual.Classes.PerkSlotsPerClass; nivel++)
             {
-                // La MISMA cuenta que Roster.StatsDe: (nivel-1)*8 puntos
-                // porcentuales, sumados antes de multiplicar (Enteros).
+                // ⚠ SE ESCALA A CENTÉSIMAS ANTES DE APLICAR EL PORCENTAJE, igual
+                // que Roster.StatsOf. Esta hoja lo hacía al revés —porcentaje sobre
+                // los puntos enteros del JSON— y por eso MENTÍA: decía que el
+                // cazador pegaba 4 en los niveles 1 a 4 y que subirlo de nivel no
+                // hacía nada.
+                //
+                // El bug estaba SOLO acá: la simulación viene escalando bien desde
+                // la propuesta V2. Pero una hoja de balance que miente es peor que
+                // no tenerla — se leyó como «la progresión de daño se trunca» y casi
+                // dispara un rebalanceo de las nueve clases que no hacía falta.
                 int extra = (nivel - 1) * CargadorDatos.Actual.Classes.ExtraDamagePerLevel;
-                int dano = Ints.WithPercents(s.Damage, extra);
+                int interno = Ints.WithPercents(Ints.ToHundredths(s.Damage), extra);
 
                 int slots = Ints.Clamp(nivel, 1, CargadorDatos.Actual.Classes.PerkSlotsPerClass);
                 int tier = nivel <= 2 ? 1 : nivel <= 4 ? 2 : 3;
 
+                // El efectivo se muestra en PUNTOS con decimales —4,32 y no 432—
+                // porque es el número que el jugador ve en la ficha. El interno va
+                // al lado para que se pueda auditar la cuenta sin rehacerla.
+                double efectivo = interno / (double)Ints.HundredthsPerPoint;
+
                 filas.Add(
                 [
-                    c.ToString(), nivel, extra, dano,
-                    Red(dano * 30.0 / s.CadenceTicks), slots, tier,
+                    c.ToString(), nivel, extra, interno, Red(efectivo),
+                    Red(efectivo * 30.0 / s.CadenceTicks), slots, tier,
                 ]);
             }
         }
@@ -265,9 +278,9 @@ public static class ExportadorBalance
         {
             string fuente = p.Tier switch
             {
-                PerkTier.Bronze => $"drop comun {cd.Drops.BronzeChance}% / tienda {cd.Shop.BronzeChance}%",
-                PerkTier.Silver => $"drop comun {100 - cd.Drops.BronzeChance}% / tienda {100 - cd.Shop.BronzeChance}%",
-                PerkTier.Gold => $"SOLO el jefe de area ({cd.RunCurve.AreaCount} por corrida)",
+                PerkTier.Bronze => $"drop comun {cd.Drops.BronzeChance}% / tienda peso {cd.Shop.BronzeWeight}",
+                PerkTier.Silver => $"drop comun {100 - cd.Drops.BronzeChance}% / tienda peso {cd.Shop.SilverWeight} desde ol {cd.Shop.SilverMinWave}",
+                PerkTier.Gold => $"jefe de area ({cd.RunCurve.AreaCount} por corrida, elige 1 de {cd.Drops.BossGoldOptions}) / tienda peso {cd.Shop.GoldWeight} desde ol {cd.Shop.GoldMinWave}",
                 _ => "SOLO fusion de dos Gold + plano",
             };
 
@@ -401,12 +414,12 @@ public static class ExportadorBalance
             ["PrecioEnTienda", $"Value * {a.ShopPriceMultiplier}", ""],
             ["BossDropBudget", Recta(c.PorOleada.BossDropBudget), "n = oleada"],
             ["ShopItemBudget", Recta(c.PorOleada.ShopItemBudget), "n = oleada"],
-            ["StockTienda", $"{c.Shop.PerksInStock} perks + {c.Shop.WeaponsInStock} armas", "se renueva por oleada, no se acumula"],
+            ["StockTienda", $"{c.Shop.Slots} ofertas cada {c.Shop.IntervalWaves} oleadas", "no se acumula y NO SE REPONE al comprar"],
             ["CommonPool", string.Join(", ", a.CommonPool), ""],
             ["RarePool", string.Join(", ", a.RarePool), "solo epicas"],
             ["BreakerPool", string.Join(", ", a.BreakerPool), "solo legendarias"],
             ["ClasesDelArma", 1, "una sola, sorteada del roster: un arma para una clase que no tenes es mochila tirada"],
-            ["TiendaVendeOro", "NO", "el jefe es la unica fuente de perks Gold"],
+            ["TiendaVendeOro", "SI, caro", $"peso {c.Shop.GoldWeight}, max {c.Shop.MaxGoldOffers} por tienda, desde ol {c.Shop.GoldMinWave}. El jefe sigue REGALANDO uno por area"],
             ["ArmasSonPorcentuales", "si", "Damage/Cadence/Range del arma son puntos % sobre la base de la clase"],
         ];
     }
@@ -504,11 +517,23 @@ public static class ExportadorBalance
             // --- Drops y tienda ---
             ["ChanceDropComun", c.Drops.CommonChance, "curvas.json", "%; no sube con la oleada, sube la CALIDAD"],
             ["ChanceBronceEnDrop", c.Drops.BronzeChance, "curvas.json", "% bronce; el resto plata"],
-            ["ChanceBronceEnTienda", c.Shop.BronzeChance, "curvas.json", ""],
-            ["PerksInStock", c.Shop.PerksInStock, "curvas.json", "no se acumula entre oleadas"],
-            ["WeaponsInStock", c.Shop.WeaponsInStock, "curvas.json", ""],
-            ["PrecioPerkBronceFormula", Recta(c.Shop.BronzePerkPrice), "curvas.json", ""],
+            ["TiendaRanuras", c.Shop.Slots, "curvas.json", "no se reponen al comprar: el hueco queda vacio"],
+            ["TiendaCadaCuantasOleadas", c.Shop.IntervalWaves, "curvas.json", "abre JUNTO a la pantalla de eleccion, no cada oleada"],
+            ["TiendaPesoClase", c.Shop.ClassWeight, "curvas.json", "cuando no quedan clases, se reparte entre bronce y plata"],
+            ["TiendaPesoBronce", c.Shop.BronzeWeight, "curvas.json", ""],
+            ["TiendaPesoPlata", c.Shop.SilverWeight, "curvas.json", $"desde la oleada {c.Shop.SilverMinWave}"],
+            ["TiendaPesoOro", c.Shop.GoldWeight, "curvas.json", $"desde la oleada {c.Shop.GoldMinWave}, max {c.Shop.MaxGoldOffers} por tienda"],
+            ["TiendaPesoPlano", c.Shop.BlueprintWeight, "curvas.json", $"desde la oleada {c.Shop.BlueprintMinWave}, max {c.Shop.MaxBlueprintOffers} por tienda"],
+            ["TiendaPesoArma", c.Shop.WeaponWeight, "curvas.json", "NO sale del analisis: sin esto las armas serian 8 por corrida"],
+            ["TiendaMinimoUtiles", c.Shop.MinUsableOffers, "curvas.json", "de las 4, cuantas tienen que servirle al roster de hoy"],
+            ["TiendaPesoReceta", c.Shop.RecipeWeightMultiplier, "curvas.json", "x2 a la pieza que falta de un plano conocido. Perseguir, no garantizar"],
+            ["PrecioPerkBronceFormula", Recta(c.Shop.BronzePerkPrice), "curvas.json", "compra menor: no rompe un plan economico"],
             ["PrecioPerkPlataFormula", Recta(c.Shop.SilverPerkPrice), "curvas.json", "el triple: se paga el SLOT, no solo el numero"],
+            ["PrecioPerkOroFormula", Recta(c.Shop.GoldPerkPrice), "curvas.json", "crece el DOBLE que plata: en la ol 50 compite con un nivel 3"],
+            ["PrecioPlanoFormula", Recta(c.Shop.BlueprintPrice), "curvas.json", "un tercio del Oro: no da poder hoy, es una apuesta"],
+            ["PrecioReclutarFormula",
+                $"{Recta(c.Shop.ClassPrice)} + {c.Shop.ClassCostMultiplier} * costoBase",
+                "curvas.json", "recluta la CLASE; las fichas se siguen pagando aparte"],
 
             // --- La escala interna ---
             ["EscalaDanoYHp", Ints.HundredthsPerPoint, "Ints.HundredthsPerPoint", "centesimas de punto; los JSON van en puntos enteros"],
@@ -630,6 +655,19 @@ public static class ExportadorBalance
             [
                 "Politica", "Seed", "Wave", "Ticks", "Defenders", "Classes",
                 "Backpack", "GoldLeft", "State",
+
+                // ⚠ Las columnas de tienda son lo que la hoja vieja no podía dar.
+                // «Terminó con 12.000 sin gastar» no dice si sobra oro, si los
+                // precios están mal o si no había nada que valiera la pena: con la
+                // tienda rotativa el oro compra poder horizontal (clases), vertical
+                // (perks) y habilitadores de build (planos), y sin desglose las
+                // tres se confunden en un solo número.
+                "Shops", "OffersGold", "BoughtGold", "OffersBlueprint", "BoughtBlueprint",
+                "BoughtClass", "BoughtBronze", "BoughtSilver", "BoughtWeapon",
+                "GoldSpentDefenders", "GoldSpentLevels", "GoldSpentPerks",
+                "GoldSpentBlueprints", "GoldSpentClasses", "GoldSpentWeapons",
+                "GoldPerksObtained", "UniquesCrafted", "WaveOfFirstUnique",
+                "SecondaryDamage", "OverkillDamage", "TowerDamageTaken",
             ],
         ];
 
@@ -646,12 +684,21 @@ public static class ExportadorBalance
                 // Las mismas seeds que --balance, para poder comparar fila a fila.
                 ulong seed = (ulong)(i + 1) * 2_654_435_761UL;
                 var r = CorredorHeadless.Correr(seed, new ActionLog(), null, null, politicas[p]);
+                var m = r.Metrics;
 
                 filas.Add(
                 [
                     nombres[p], seed.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     r.Wave, r.Ticks, r.Defenders, r.ClasesRoster, r.Backpack, r.Gold,
                     r.State.ToString(),
+
+                    m.ShopsVisited, m.OffersGold, m.BoughtGold, m.OffersBlueprint, m.BoughtBlueprint,
+                    m.BoughtClass, m.BoughtBronze, m.BoughtSilver, m.BoughtWeapon,
+                    m.GoldSpentDefenders, m.GoldSpentLevels,
+                    m.GoldSpentBronze + m.GoldSpentSilver + m.GoldSpentGoldPerks,
+                    m.GoldSpentBlueprints, m.GoldSpentClasses, m.GoldSpentWeapons,
+                    m.GoldPerksObtained, m.UniquesCrafted, m.WaveOfFirstUnique,
+                    m.SecondaryDamage, m.OverkillDamage, m.TowerDamageTaken,
                 ]);
 
                 suma += r.Wave;
@@ -667,8 +714,14 @@ public static class ExportadorBalance
         filas.Add([]);
         filas.Add(["Resumen", "Peor", "Media", "Mejor", "ObjetivoMin", "ObjetivoMax", "Cumple"]);
 
-        int[] minObjetivo = [30, 60, 90];
-        int[] maxObjetivo = [40, 75, 100];
+        // ⚠ Los objetivos del techo BAJARON de 90-100 a 75-85, y no es una
+        // rendición. Medido antes de la tienda rotativa y del targeting, normal
+        // daba 66 y techo 67: jugar mejor no pagaba NADA, y ese era el problema
+        // real. La meta inmediata es SEPARACIÓN; recién con el techo claramente
+        // arriba del normal tiene sentido recalibrar las áreas 7 y 8 para que una
+        // build excelente llegue a 100.
+        int[] minObjetivo = [34, 63, 75];
+        int[] maxObjetivo = [40, 72, 85];
 
         for (int p = 0; p < politicas.Length; p++)
         {
@@ -680,6 +733,14 @@ public static class ExportadorBalance
                 minObjetivo[p], maxObjetivo[p], cumple ? "si" : "NO",
             ]);
         }
+
+        // ⚠ LA FILA QUE MÁS IMPORTA. Las tres de arriba dicen si cada cota cae en
+        // su rango; esta dice si jugar mejor PAGA. Con techo − normal por debajo de
+        // 5, todas las mecánicas de decisión —tienda, targeting, planos, fusión—
+        // están de adorno, y eso no se ve mirando las tres medias por separado.
+        filas.Add([]);
+        filas.Add(["SeparacionTechoNormal", resumen[2, 1] - resumen[1, 1], "objetivo >= 8",
+            resumen[2, 1] - resumen[1, 1] >= 8 ? "si" : "NO"]);
 
         return filas;
     }

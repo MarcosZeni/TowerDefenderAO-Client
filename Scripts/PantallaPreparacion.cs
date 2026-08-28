@@ -213,6 +213,22 @@ public partial class PantallaPreparacion : Control
                     fuente.GetStringSize(buffeados, HorizontalAlignment.Left, -1, 16).X);
             }
 
+            // ⚠ Los rasgos —impulsivo y líder— van en su propio renglón y en otro
+            // color. No son un número más de vida o velocidad: cambian una
+            // situación, y contra un líder conviene concentrar fuego en él antes
+            // que repartir. Sumarlos al contador de perks escondería justamente la
+            // parte que exige una respuesta distinta.
+            if (fila.ConRasgo > 0)
+            {
+                string rasgos = $"{fila.ConRasgo} {Loc.Get("ui.preparacion.con_rasgo")}";
+
+                DrawString(fuente, new Vector2(x, y + 68), rasgos,
+                    HorizontalAlignment.Left, -1, 16, new Color(0.70f, 0.55f, 0.95f));
+
+                ancho = System.Math.Max(ancho,
+                    fuente.GetStringSize(rasgos, HorizontalAlignment.Left, -1, 16).X);
+            }
+
             x += ancho + 34;
 
             if (x > Escala.LienzoAncho - 420)

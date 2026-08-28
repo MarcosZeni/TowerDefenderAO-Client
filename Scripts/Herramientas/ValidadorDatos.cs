@@ -154,6 +154,16 @@ public static class ValidadorDatos
                 faltan.Add($"ability.{h}.name");
         }
 
+        // ⚠ Los cuatro modos de targeting también. Una clave cruda se muestra tal
+        // cual —«ui.targeting.NearestTower»— y el jugador no tiene forma de saber
+        // qué elige: es el único menú del juego cuyas cuatro opciones se parecen
+        // entre sí, así que el texto ES la mecánica.
+        foreach (var m in System.Enum.GetValues<TargetingMode>())
+        {
+            if (Loc.Get($"ui.targeting.{m}") == $"ui.targeting.{m}")
+                faltan.Add($"ui.targeting.{m}");
+        }
+
         if (faltan.Count > 0)
             problemas.Add($"faltan {faltan.Count} texto(s) en Datos\\lang\\{Loc.Referencia}.json: {string.Join(", ", faltan)}");
         else
@@ -701,5 +711,79 @@ public static class ValidadorDatos
             problemas.Add($"la oleada {CargadorDatos.Actual.Curves.RunCurve.WavesPerRun} no tiene jefe: es como se gana la corrida");
 
         avisos.Add($"curva: oleada 1 trae {npcsOleada1} enemigos, la 100 trae {npcsOleada100}");
+
+        ValidarTienda(datos, problemas, avisos);
+    }
+
+    /// <summary>
+    /// La tienda rotativa: que abra, que llegue a ofrecer de todo, y que los
+    /// precios crezcan en el orden que el diseño dice.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La escalera de precios es la mecánica.</b> Bronce es la compra
+    /// menor —se puede hacer sin romper un plan económico—, Plata la media, Oro la
+    /// premium que obliga a renunciar a algo, y el plano una inversión más barata
+    /// que el Oro porque no da poder hoy. Si el orden se rompe con un número mal
+    /// puesto, la tienda deja de producir decisiones y nadie se entera: las cuatro
+    /// cartas siguen apareciendo igual.</para>
+    ///
+    /// <para>Se chequea en la oleada 100 y no en la 1 porque las rectas tienen
+    /// pendientes distintas: un orden correcto al principio puede invertirse al
+    /// final, y ahí es donde más plata hay en juego.</para>
+    /// </remarks>
+    private static void ValidarTienda(BalanceData datos, List<string> problemas, List<string> avisos)
+    {
+        var s = datos.Curves.Shop;
+        int ultima = datos.Curves.RunCurve.WavesPerRun;
+
+        int cuantas = 0;
+
+        for (int oleada = 1; oleada <= ultima; oleada++)
+        {
+            if (s.OpensAt(oleada))
+                cuantas++;
+        }
+
+        if (cuantas == 0)
+            problemas.Add("la tienda no abre nunca: revisá «shop.intervalWaves» en curvas.json");
+
+        // ⚠ Un mínimo por oleada más alto que la corrida entera apaga la categoría
+        // en silencio: las cartas siguen saliendo, solo que nunca de ese tipo.
+        if (s.GoldMinWave > ultima)
+            problemas.Add($"«shop.goldMinWave» ({s.GoldMinWave}) pasa de la última oleada ({ultima}): la tienda nunca vendería Oro");
+
+        if (s.BlueprintMinWave > ultima)
+            problemas.Add($"«shop.blueprintMinWave» ({s.BlueprintMinWave}) pasa de la última oleada ({ultima}): nunca vendería planos");
+
+        if (s.SilverMinWave > ultima)
+            problemas.Add($"«shop.silverMinWave» ({s.SilverMinWave}) pasa de la última oleada ({ultima}): nunca vendería Plata");
+
+        foreach (int oleada in new[] { 1, ultima })
+        {
+            int bronce = s.PerkPrice(PerkTier.Bronze, oleada);
+            int plata = s.PerkPrice(PerkTier.Silver, oleada);
+            int oro = s.PerkPrice(PerkTier.Gold, oleada);
+            int plano = s.BlueprintPrice.En(oleada);
+
+            if (bronce >= plata || plata >= oro)
+            {
+                problemas.Add(
+                    $"en la oleada {oleada} los precios no escalan: bronce {bronce}, plata {plata}, oro {oro}. " +
+                    "La escalera bronce < plata < oro es lo que hace que cada tier sea una decisión distinta.");
+            }
+
+            // El plano no da poder hoy: tiene que ser más barato que el Oro, o
+            // nadie apuesta a una receta pudiendo comprar el comportamiento.
+            if (plano >= oro)
+                problemas.Add($"en la oleada {oleada} el plano ({plano}) cuesta igual o más que un Oro ({oro}): la apuesta nunca conviene");
+        }
+
+        int oroFinal = s.PerkPrice(PerkTier.Gold, ultima);
+        int nivel3 = datos.Curves.Economy.LevelUpPrice(3);
+
+        avisos.Add(
+            $"tienda: {cuantas} por corrida × {s.Slots} ofertas · " +
+            $"Oro desde la oleada {s.GoldMinWave} · " +
+            $"un Oro en la 100 sale {oroFinal} contra {nivel3} de un nivel 3");
     }
 }

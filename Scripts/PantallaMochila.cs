@@ -146,6 +146,28 @@ public partial class PantallaMochila : Control
             return;
         }
 
+        // ⚠ Elegir qué comportamiento manda. Solo si hay conflicto: sin arma con
+        // habilidad Y perk de Oro/Único puestos no hay nada que decidir.
+        //
+        // Existe porque antes ganaba el arma siempre y eso hacía que encontrar una
+        // excelente se sintiera como un CASTIGO: obligaba a apagar un Único que
+        // costó dos jefes y un plano, así que el jugador terminaba no equipándola.
+        // Los stats del arma se conservan en los dos casos.
+        if (_claseElegida is { } conConflicto && partida.HayConflictoDeComportamiento(conConflicto))
+        {
+            if (RectComportamiento(elDelPerk: true).HasPoint(posicion))
+            {
+                _juego.ElegirComportamiento(conConflicto, preferirElPerk: true);
+                return;
+            }
+
+            if (RectComportamiento(elDelPerk: false).HasPoint(posicion))
+            {
+                _juego.ElegirComportamiento(conConflicto, preferirElPerk: false);
+                return;
+            }
+        }
+
         // Un slot de perk de la clase mirada: sacarlo pide confirmación.
         if (_claseElegida is { } clase)
         {
@@ -192,6 +214,17 @@ public partial class PantallaMochila : Control
     /// <summary>El botón de comprar el próximo nivel de la clase mirada.</summary>
     private static Rect2 RectSubirNivel()
         => new(1200, 528, 300, 52);
+
+    /// <summary>
+    /// Los dos botones de «qué comportamiento manda»: el del perk o el del arma.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Aparecen <b>solo</b> cuando la clase tiene las dos cosas puestas. Sin
+    /// conflicto no hay nada que elegir, y un par de botones permanentes que casi
+    /// siempre no hacen nada es peor que no tenerlos.
+    /// </remarks>
+    private static Rect2 RectComportamiento(bool elDelPerk)
+        => new(elDelPerk ? 1200 : 1360, 604, 148, 46);
 
     private static Rect2 RectConfirmar()
         => new(Escala.LienzoAncho / 2 - 220, Escala.LienzoAlto / 2 + 30, 200, 56);
@@ -424,6 +457,7 @@ public partial class PantallaMochila : Control
         Text(Loc.Get("ui.mochila.sacar_destruye"), 1200, 496, 16, Gris);
 
         DibujarSubirNivel(partida, ficha);
+        DibujarComportamiento(partida, ficha);
     }
 
     /// <summary>
@@ -473,6 +507,45 @@ public partial class PantallaMochila : Control
         {
             Text(Loc.Get("ui.mochila.sin_oro"),
                 caja.Position.X + caja.Size.X + 14, caja.Position.Y + 33, 16, Gris);
+        }
+    }
+
+    /// <summary>
+    /// Los dos botones de «qué comportamiento manda»: el del perk o el del arma.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La ranura de comportamiento sigue siendo UNA.</b> Esto no permite
+    /// tener los dos: permite elegir cuál habla. Tenerlos juntos multiplicaría las
+    /// combinaciones a balancear por el catálogo entero de armas.</para>
+    ///
+    /// <para><b>Los stats del arma se conservan en los dos casos</b>, y ese es todo
+    /// el punto. Antes ganaba el arma siempre, así que encontrar una excelente
+    /// obligaba a apagar un Único que costó dos jefes y un plano; el jugador
+    /// terminaba dejándola sin equipar, que es lo peor que le puede pasar a un
+    /// drop. La línea de abajo lo dice explícitamente, porque si no se dice el
+    /// jugador va a suponer que elegir el perk le apaga el arma entera.</para>
+    /// </remarks>
+    private void DibujarComportamiento(Run partida, RosterClass ficha)
+    {
+        if (!partida.HayConflictoDeComportamiento(ficha.DefenderClass))
+            return;
+
+        Text(Loc.Get("ui.mochila.comportamiento_activo"), 1200, 592, 17, Gris);
+
+        Boton(RectComportamiento(elDelPerk: true), Loc.Get("ui.mochila.el_perk"), ficha.PreferPerkBehavior);
+        Boton(RectComportamiento(elDelPerk: false), Loc.Get("ui.mochila.el_arma"), !ficha.PreferPerkBehavior);
+
+        Text(Loc.Get("ui.mochila.stats_del_arma_quedan"), 1200, 674, 15, Gris);
+
+        void Boton(Rect2 caja, string etiqueta, bool activo)
+        {
+            DrawRect(caja, activo ? new Color(0.16f, 0.34f, 0.22f) : new Color(0.10f, 0.11f, 0.14f));
+
+            DrawRect(caja, activo ? new Color(0.45f, 0.85f, 0.55f) : new Color(1, 1, 1, 0.14f),
+                filled: false, width: 1.5f);
+
+            Text(etiqueta, caja.Position.X + 16, caja.Position.Y + 30, 18,
+                activo ? new Color(0.90f, 0.98f, 0.92f) : Gris);
         }
     }
 

@@ -197,25 +197,115 @@
     "npcPerkChance":         { "divisor": 2, "min": 0, "max": 30 }
   },
 
-  // --- La tienda de la corrida ----------------------------------------------
+  // --- La tienda rotativa de la corrida --------------------------------------
   //
-  // ⚠ LA TIENDA NO VENDE ORO: el jefe es la única fuente. Si lo vendiera, matar
-  // al jefe dejaría de ser especial y el jugador con oro podría saltear la parte
-  // difícil del juego.
+  // ⚠ LA TIENDA AHORA SÍ VENDE ORO, y eso es un cambio de diseño, no un ajuste.
+  // Antes el jefe era la única fuente y la regla existía para que matarlo valiera
+  // algo. Lo que la reemplaza es más fino: el jefe sigue REGALANDO un Oro por
+  // área —ocho garantizados, gratis— y la tienda solo ofrece la POSIBILIDAD de
+  // comprar uno más, caro, compitiendo contra un nivel y contra el tablero. Matar
+  // al jefe sigue siendo la forma barata de conseguir comportamientos.
   //
-  // El stock NO SE ACUMULA: lo que no se compró desaparece. Sin eso la tienda se
-  // vuelve una lista creciente que hay que revisar entera cada vez, y elegir deja
-  // de ser una decisión para volverse una tarea.
+  // La contrapartida está en "drops.bossGoldOptions", que bajó de 3 a 2: con la
+  // tienda vendiendo Oro además de ocho elecciones de tres, armar el Único que
+  // uno quiere dejaba de ser una apuesta.
   //
-  // El Plata cuesta el triple que el Bronce, no el doble, porque además de ser
-  // más grande OCUPA UNO DE LOS MISMOS SEIS SLOTS: lo que se paga es el lugar,
-  // no solo el número.
+  // ⚠ LA TIENDA ABRE JUNTO A LA PANTALLA DE ELECCIÓN, no después de cada oleada.
+  // Cada "intervalWaves" oleadas —la 3, la 6, la 9…— o sea unas 33 veces en una
+  // corrida completa. Que las dos decisiones caigan juntas es lo que las pone a
+  // competir: la elección da poder gratis, la tienda lo cobra.
+  //
+  // El stock NO SE ACUMULA Y NO SE REPONE: lo que no se compró desaparece, y
+  // comprar una oferta no trae una quinta. Sin lo primero la tienda se vuelve una
+  // lista creciente que hay que revisar entera; sin lo segundo un jugador rico
+  // vacía el catálogo entero en una sola visita.
+  //
+  // --- Los pesos por categoría ----------------------------------------------
+  //
+  // ⚠ SE SORTEA PRIMERO LA CATEGORÍA Y DESPUÉS EL OBJETO. En una sola bolsa
+  // uniforme los Oro serían comunísimos —hay 22 nombres distintos contra 9
+  // clases— y agregar un perk nuevo cambiaría en silencio la probabilidad de
+  // todas las demás categorías.
+  //
+  // Los cinco primeros son los del análisis de la tienda rotativa. "weaponWeight"
+  // es el sexto y NO sale de ahí: el análisis no sabía que la tienda ya vendía
+  // armas. Sacarlas dejaría el generador de armas entero en ocho ítems por
+  // corrida —solo los del jefe— y todo el sistema de habilidades de arma se
+  // volvería contenido muerto. Los pesos son RELATIVOS, no porcentajes, así que
+  // el sexto no altera la proporción entre los otros cinco.
+  //
+  // ⚠ Cuando ya no quedan clases por reclutar, el peso de clase se reparte solo
+  // entre Bronce y Plata. Volcarlo a Oro y Planos haría que el late game vomite
+  // rarezas justo cuando el jugador ya tiene oro de sobra.
+  //
+  // --- Cuándo se habilita cada categoría ------------------------------------
+  //
+  // Un Oro en la oleada 3 es económicamente imposible y el jugador todavía no
+  // tiene con qué armar una build alrededor. Los mínimos coinciden con el primer
+  // jefe (oleada 12), que es cuando el sistema de comportamientos existe de
+  // verdad.
+  //
+  // --- Los precios ----------------------------------------------------------
+  //
+  // Todos son base + perWave × oleada. La escalera busca una SENSACIÓN:
+  //
+  //   Bronce      compra menor: se puede hacer sin romper un plan económico.
+  //   Plata/clase compra media: obliga a pensar, normalmente es accesible.
+  //   Oro         compra premium: obliga a renunciar a algo importante.
+  //   Plano       inversión: no da poder hoy, así que es más barato que el Oro.
+  //
+  // El Oro crece el doble de rápido que el Plata a propósito: en la oleada 50
+  // sale 2.400 contra los 2.700 que cuesta llevar una clase a nivel 3. Comprar un
+  // comportamiento compite casi exactamente con comprar profundidad, que es la
+  // tensión que la tienda existe para crear.
+  //
+  // ⚠ EL PRECIO DEL ORO ES UNIFORME, no por perk. Si Concentración se compra el
+  // 90% de las veces y Preparación el 5% al mismo precio, eso dice que los perks
+  // necesitan rebalance — con precios distintos ese síntoma queda tapado.
+  //
+  // "classPrice" recluta la CLASE, no un defensor puesto: después las fichas se
+  // siguen pagando a su costo base. El término × costoBase existe para que un
+  // mago no salga lo mismo que un ladrón, pero pesa poco (×2 sobre ~78 de media)
+  // para que las caras no queden fuera del mercado.
+  //
+  // ⚠ LOS ÚNICOS NO SE VENDEN NUNCA. La tienda vende ingredientes y
+  // conocimiento; el producto final se fabrica. Vender el Único borraría de un
+  // saque buscar los componentes, comprar el plano y decidir si conservarlos.
   "shop": {
-    "perksInStock": 2,
-    "weaponsInStock": 2,
-    "bronzeChance": 65,
+    "slots": 4,
+    "intervalWaves": 3,
+
+    "classWeight": 24,
+    "bronzeWeight": 30,
+    "silverWeight": 30,
+    "goldWeight": 8,
+    "blueprintWeight": 8,
+    "weaponWeight": 10,
+
+    "maxGoldOffers": 1,
+    "maxBlueprintOffers": 1,
+
+    // De las cuatro cartas, al menos estas tienen que poder aportarle a una clase
+    // que el jugador ya tiene. No hace falta que las cuatro sirvan —la
+    // incertidumbre es parte de la decisión— pero cuatro cartas muertas es una
+    // pantalla que no existe.
+    "minUsableOffers": 2,
+
+    "silverMinWave": 6,
+    "goldMinWave": 12,
+    "blueprintMinWave": 12,
+
+    // Si el jugador conoce un plano y tiene uno de sus dos Oro, la pieza que le
+    // falta entra al sorteo con este peso multiplicado; lo mismo con el plano de
+    // dos Oro que ya tiene. ×2 y no ×10: la build se puede PERSEGUIR, no
+    // garantizar.
+    "recipeWeightMultiplier": 2,
+
     "bronzePerkPrice": { "base":  80, "perWave":  6 },
-    "silverPerkPrice":  { "base": 240, "perWave": 18 }
+    "silverPerkPrice": { "base": 240, "perWave": 18 },
+    "goldPerkPrice":   { "base": 600, "perWave": 36 },
+    "blueprintPrice":  { "base": 280, "perWave": 14 },
+    "classPrice":      { "base": 450, "perWave":  8, "classCostMultiplier": 2 }
   },
 
   // --- Los drops -------------------------------------------------------------
@@ -236,8 +326,14 @@
   // ⚠ EL JEFE OFRECE VARIOS Y EL JUGADOR ELIGE UNO. Con un solo Oro al azar por
   // jefe y ocho jefes por corrida, ver los DOS componentes de una receta
   // concreta era cuestión de suerte, y los Únicos eran una lotería en vez de un
-  // objetivo de build. Ofrecer tres y dejar elegir da agencia sin regalar poder:
-  // sigue saliendo un solo Oro por jefe.
+  // objetivo de build. Ofrecer varios y dejar elegir da agencia sin regalar
+  // poder: sigue saliendo un solo Oro por jefe.
+  //
+  // ⚠ "bossGoldOptions" BAJÓ DE 3 A 2 al entrar la tienda rotativa. Ocho
+  // elecciones de tres MÁS Oro comprable daba demasiada consistencia: casi
+  // cualquier partida podía armar el Único que quisiera. Con dos, la elección
+  // del jefe sigue existiendo y la tienda es la que paga por convertirla en
+  // certeza.
   //
   // "synergyWeight": si el jugador ya tiene un Oro que participa en un plano que
   // conoce, su pareja entra al sorteo con este peso multiplicado. Es la mitad
@@ -257,7 +353,7 @@
   "drops": {
     "commonChance": 4,
     "bronzeChance": 70,
-    "bossGoldOptions": 3,
+    "bossGoldOptions": 2,
     "synergyWeight": 3,
     "goldPoolSize": 13,
     "goldPoolPerNewClass": 2,
@@ -307,9 +403,45 @@
     "currentAreaWeight": 40,
     "previousAreaWeight": 15,
     "previousAreaWeightFirst": 110,
-    "previousAreaFadeWaves": 5,
+    "previousAreaFadeWaves": 8,
     "npcCost": { "hpDivisor": 4, "maxDamageDivisor": 2, "speedDivisor": 8 },
-    "defaultSpawnInterval": 30
+    "defaultSpawnInterval": 30,
+
+    // --- La FORMA en que entra la oleada -------------------------------------
+    //
+    // ⚠ Esto NO toca el HP, ni el oro, ni el presupuesto. Solo cambia la
+    // separación temporal entre NPCs CONSERVANDO EL PROMEDIO, así que la oleada
+    // dura aproximadamente lo mismo y no es una palanca de dificultad encubierta.
+    //
+    // Lo que sí cambia es el valor RELATIVO de casi todo el catálogo: en ráfaga,
+    // splash, cadena y quemadura valen el doble y el single target sufre; en
+    // uniforme pasa lo contrario, y Concentración y el targeting «más fuerte»
+    // toman valor. Es la lección de Rogue Tower: que los enemigos lleguen
+    // separados o juntos altera qué torres sirven, sin tocar una estadística.
+    //
+    // Los números son PORCENTAJES del intervalo base de la oleada:
+    //
+    //   uniforme  100 - 100 - 100 - 100          (promedio 100)
+    //   parejas    50 - 150 -  50 - 150          (promedio 100)
+    //   ráfaga     60 -  60 -  60 -  60 - 260    (promedio 100)
+    //
+    // ⚠ Los promedios TIENEN que dar 100. Si no dan, la formación se convierte en
+    // una oleada más corta o más larga y eso sí es dificultad — encubierta y sin
+    // que aparezca en el presupuesto, que es el único número que se mira.
+    //
+    // La formación la sortea la seed una vez por oleada, con estos pesos.
+    "spawnFormations": {
+      "uniformWeight": 50,
+      "pairsWeight": 30,
+      "burstWeight": 20,
+
+      "pairShortPercent": 50,
+      "pairLongPercent": 150,
+
+      "burstSize": 5,
+      "burstShortPercent": 60,
+      "burstLongPercent": 260
+    }
   },
 
   // --- Los perks de los NPCs -------------------------------------------------
@@ -333,6 +465,26 @@
   //
   // ⚠ La velocidad tiene techo porque UN BICHO LO BASTANTE RÁPIDO CRUZA EL MAPA
   // ENTRE DOS DISPAROS y no hay defensa que lo toque.
+  //
+  // --- Los dos RASGOS, que no son números -----------------------------------
+  //
+  // Vida y velocidad suben una estadística. Estos dos cambian una SITUACIÓN, y
+  // por eso se pagan del mismo presupuesto pero se tiran aparte y una sola vez
+  // por NPC.
+  //
+  // "impulsive": al bajar del 30% de vida acelera un 20%, UNA sola vez. Tiene
+  // varias respuestas —Oportunista, focus fire, slow, burst, defensa cerca de la
+  // Torre— así que no es un enemigo lock-and-key: la recomendación de Defender's
+  // Quest es evitar los bichos que admiten una única respuesta correcta.
+  //
+  // "leader": aura de +10% de velocidad a los enemigos a menos de 1,5 celdas de
+  // ruta. No apila con otro líder y desaparece al morir, así que crea un objetivo
+  // PRIORITARIO sin agregar resistencias ni inmunidades — que es lo que hace que
+  // la composición de la oleada importe además del HP individual.
+  //
+  // ⚠ Las chances son bajas y el costo alto a propósito: son la SAL de la oleada.
+  // Un líder en cada oleada deja de ser un objetivo prioritario y se vuelve otro
+  // número de velocidad.
   "npcPerks": {
     "healthCost": 20,
     "speedCost": 15,
@@ -341,7 +493,13 @@
     "maxHealth": 200,
     "maxSpeed": 64,
     "healthChanceInRoll": 50,
-    "speedChanceInLeftover": 25
+    "speedChanceInLeftover": 25,
+
+    "impulsiveCost": 12,
+    "impulsiveChance": 14,
+    "leaderCost": 30,
+    "leaderChance": 5,
+    "maxLeadersPerWave": 3
   },
 
   // --- El jefe ---------------------------------------------------------------

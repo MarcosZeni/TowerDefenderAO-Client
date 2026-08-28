@@ -154,15 +154,76 @@ public sealed record PerWaveCurves(
         PerkChanceMin, PerkChanceMax);
 }
 
+/// <summary>
+/// La tienda rotativa. Ver <c>curvas.json</c> §shop.
+/// </summary>
+/// <remarks>
+/// <para>⚠ <b>Abre junto a la pantalla de elección</b>, cada
+/// <see cref="IntervalWaves"/> oleadas, y no después de cada una. Que las dos
+/// decisiones caigan juntas es lo que las pone a competir: la elección da poder
+/// gratis, la tienda lo cobra.</para>
+///
+/// <para>⚠ <b>Se sortea primero la categoría y después el objeto.</b> En una sola
+/// bolsa uniforme los Oro serían comunísimos —hay 22 nombres distintos contra 9
+/// clases— y agregar un perk nuevo cambiaría en silencio la probabilidad de todas
+/// las demás categorías.</para>
+/// </remarks>
 public sealed record ShopData(
-    int PerksInStock,
-    int WeaponsInStock,
-    int BronzeChance,
+    int Slots,
+    int IntervalWaves,
+    int ClassWeight,
+    int BronzeWeight,
+    int SilverWeight,
+    int GoldWeight,
+    int BlueprintWeight,
+    int WeaponWeight,
+    int MaxGoldOffers,
+    int MaxBlueprintOffers,
+    int MinUsableOffers,
+    int SilverMinWave,
+    int GoldMinWave,
+    int BlueprintMinWave,
+    int RecipeWeightMultiplier,
     LinearCurve BronzePerkPrice,
-    LinearCurve SilverPerkPrice)
+    LinearCurve SilverPerkPrice,
+    LinearCurve GoldPerkPrice,
+    LinearCurve BlueprintPrice,
+    LinearCurve ClassPrice,
+    int ClassCostMultiplier)
 {
-    public int PerkPrice(PerkTier tier, int oleada)
-        => tier == PerkTier.Bronze ? BronzePerkPrice.En(oleada) : SilverPerkPrice.En(oleada);
+    /// <summary>
+    /// El precio de un perk de ese tier en esa oleada.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Uniforme dentro del tier, no por perk.</b> Si Concentración se compra
+    /// el 90% de las veces y Preparación el 5% al mismo precio, eso dice que los
+    /// perks necesitan rebalance; con precios distintos ese síntoma queda tapado.
+    /// Los Únicos no se venden nunca, así que caen al precio de Oro solo por
+    /// completitud del <c>switch</c>.
+    /// </remarks>
+    public int PerkPrice(PerkTier tier, int oleada) => tier switch
+    {
+        PerkTier.Bronze => BronzePerkPrice.En(oleada),
+        PerkTier.Silver => SilverPerkPrice.En(oleada),
+        _ => GoldPerkPrice.En(oleada),
+    };
+
+    /// <summary>
+    /// Lo que sale <b>reclutar</b> una clase: no un defensor puesto.
+    /// </summary>
+    /// <remarks>
+    /// Después de reclutarla, cada ficha de esa clase se sigue pagando a su costo
+    /// base. El término × costo base existe para que un mago no salga lo mismo que
+    /// un ladrón, y pesa poco a propósito: con un multiplicador grande las clases
+    /// caras quedarían fuera del mercado y la tienda dejaría de ofrecerlas de
+    /// hecho.
+    /// </remarks>
+    public int ClassRecruitPrice(int oleada, int costoBase)
+        => ClassPrice.En(oleada) + (ClassCostMultiplier * costoBase);
+
+    /// <summary>¿Esta oleada abre tienda?</summary>
+    public bool OpensAt(int oleada)
+        => IntervalWaves > 0 && oleada > 0 && oleada % IntervalWaves == 0;
 }
 
 /// <summary>Cómo caen los perks. Ver <c>curvas.json</c> §drops.</summary>
@@ -182,6 +243,61 @@ public sealed record DropData(
     int GoldPoolPerNewClass,
     bool FinalBossDrops);
 
+/// <summary>
+/// Cómo entra la oleada: la separación temporal entre NPCs, conservando el
+/// promedio.
+/// </summary>
+/// <remarks>
+/// <para>⚠ <b>No toca HP, ni oro, ni presupuesto.</b> Solo cambia el ritmo, y por
+/// eso los promedios de las tres formas <b>tienen que dar 100</b>: si no dan, la
+/// formación se vuelve una oleada más corta o más larga, o sea dificultad
+/// encubierta que no aparece en el presupuesto.</para>
+///
+/// <para>Lo que sí cambia es el valor <b>relativo</b> del catálogo: en ráfaga
+/// splash, cadena y quemadura valen el doble; en uniforme toman valor
+/// Concentración y el targeting «más fuerte». Es la lección de Rogue Tower —que
+/// los enemigos lleguen juntos o separados altera qué torres sirven, sin tocar
+/// una estadística.</para>
+/// </remarks>
+public sealed record SpawnFormations(
+    int UniformWeight,
+    int PairsWeight,
+    int BurstWeight,
+    int PairShortPercent,
+    int PairLongPercent,
+    int BurstSize,
+    int BurstShortPercent,
+    int BurstLongPercent)
+{
+    /// <summary>
+    /// El porcentaje del intervalo base que le toca al spawn número
+    /// <paramref name="indice"/> (0 el primero).
+    /// </summary>
+    public int PercentAt(SpawnFormation forma, int indice) => forma switch
+    {
+        SpawnFormation.Pairs => indice % 2 == 0 ? PairShortPercent : PairLongPercent,
+
+        SpawnFormation.Burst => BurstSize <= 1
+            ? 100
+            : (indice % BurstSize == BurstSize - 1 ? BurstLongPercent : BurstShortPercent),
+
+        _ => 100,
+    };
+}
+
+/// <summary>Las tres formas en que puede entrar una oleada.</summary>
+public enum SpawnFormation
+{
+    /// <summary>Parejo. El ritmo neutro.</summary>
+    Uniform = 0,
+
+    /// <summary>De a dos pegados y después un hueco.</summary>
+    Pairs = 1,
+
+    /// <summary>Cinco muy juntos y después un hueco grande.</summary>
+    Burst = 2,
+}
+
 public sealed record WaveData(
     int MaxNpcs,
     int CurrentAreaWeight,
@@ -191,8 +307,18 @@ public sealed record WaveData(
     int HpDivisor,
     int MaxDamageDivisor,
     int SpeedDivisor,
-    int DefaultSpawnInterval);
+    int DefaultSpawnInterval,
+    SpawnFormations Formations);
 
+/// <summary>
+/// Lo que el presupuesto de la oleada le puede comprar a un NPC.
+/// </summary>
+/// <remarks>
+/// Vida y velocidad suben una estadística. <b>Impulsivo y Líder cambian una
+/// situación</b>, y por eso se tiran aparte, una sola vez por NPC, con chance
+/// baja y costo alto: son la sal de la oleada. Un líder en cada oleada deja de
+/// ser un objetivo prioritario y se vuelve otro número de velocidad.
+/// </remarks>
 public sealed record NpcPerkData(
     int HealthCost,
     int SpeedCost,
@@ -201,7 +327,12 @@ public sealed record NpcPerkData(
     int MaxHealth,
     int MaxSpeed,
     int HealthChanceInRoll,
-    int SpeedChanceInLeftover);
+    int SpeedChanceInLeftover,
+    int ImpulsiveCost,
+    int ImpulsiveChance,
+    int LeaderCost,
+    int LeaderChance,
+    int MaxLeadersPerWave);
 
 public sealed record BossData(int ExtraHealthDivisor, int MaxExtraHealth, string FinalBossName);
 
@@ -321,6 +452,14 @@ public sealed record UniqueRules(
     int StrengthMaxPushPerEnemy);
 
 /// <summary>Los topes de las habilidades de arma que no son la magnitud.</summary>
+/// <remarks>
+/// ⚠ Los cuatro últimos son los techos que faltaban. <b>Doble</b> pegaba un golpe
+/// entero —o sea +100% de daño directo— y a ese precio ninguna otra habilidad
+/// competía por la ranura. <b>Cadena</b> escalaba lineal con la densidad, así que
+/// su poder lo decidía la formación de la oleada y no el jugador. Y las dos
+/// económicas —<b>Codicia</b> y <b>Vampirismo</b>— no tenían techo, que en un
+/// sistema con realimentación positiva no las hace fuertes: las hace obligatorias.
+/// </remarks>
 public sealed record WeaponRules(
     int MaxSplashSecondaries,
     int BounceBounces,
@@ -332,7 +471,35 @@ public sealed record WeaponRules(
     int ExecuteThresholdBoss,
     bool FinalBossImmuneToExecute,
     int VampirismCooldownTicks,
-    int GreedMarkDurationTicks);
+    int GreedMarkDurationTicks,
+    int DoubleShotPercent,
+    int ChainSecondaryCapPercent,
+    int GreedMaxExtraPerEnemy,
+    int GreedMaxExtraPerWave,
+    int VampirismMaxHealingPerWave);
+
+/// <summary>
+/// Los tres rasgos que cambian una situación en vez de una estadística.
+/// </summary>
+/// <remarks>
+/// <para>Ninguno agrega resistencias, inmunidades, curación ni destrucción de
+/// defensores, y <b>ninguno da daño extra</b>: un enemigo que además pega más
+/// fuerte al enfurecer convierte una filtración en una derrota instantánea que el
+/// jugador no tenía cómo prever. Solo hacen más urgente el último tramo.</para>
+///
+/// <para>El aura del Líder <b>no apila</b>, igual que todos los estados del
+/// juego: gana la potencia más fuerte. Sin la regla, tres líderes juntos son un
+/// +30% que ningún número del catálogo anticipa.</para>
+/// </remarks>
+public sealed record EnemyTraits(
+    int EnrageHpPercent,
+    int EnrageSpeedPercent,
+    int EnrageTicks,
+    int FinalBossEnrageSpeedPercent,
+    int ImpulsiveHpPercent,
+    int ImpulsiveSpeedPercent,
+    int LeaderSpeedPercent,
+    int LeaderRadiusThousandths);
 
 /// <summary>
 /// Los números del tick, los que antes eran literales dentro de
@@ -350,7 +517,8 @@ public sealed record CombatData(
     StateRules States,
     BehaviorRules Behaviors,
     UniqueRules Uniques,
-    WeaponRules Weapons);
+    WeaponRules Weapons,
+    EnemyTraits Traits);
 
 // =============================================================================
 //  clases.json
@@ -1168,6 +1336,7 @@ public static class TableReader
         var intervalo = Obj(porOleada, "spawnIntervalTicks", archivo);
         var chancePerk = Obj(porOleada, "npcPerkChance", archivo);
         var costoNpc = Obj(oleada, "npcCost", archivo);
+        var formaciones = Obj(oleada, "spawnFormations", archivo);
 
         var curvas = new CurveData(
             new TowerData(
@@ -1214,11 +1383,27 @@ public static class TableReader
                 Int(chancePerk, "max", archivo)),
 
             new ShopData(
-                Int(tienda, "perksInStock", archivo),
-                Int(tienda, "weaponsInStock", archivo),
-                Int(tienda, "bronzeChance", archivo),
+                Int(tienda, "slots", archivo),
+                Int(tienda, "intervalWaves", archivo),
+                Int(tienda, "classWeight", archivo),
+                Int(tienda, "bronzeWeight", archivo),
+                Int(tienda, "silverWeight", archivo),
+                Int(tienda, "goldWeight", archivo),
+                Int(tienda, "blueprintWeight", archivo),
+                Int(tienda, "weaponWeight", archivo),
+                Int(tienda, "maxGoldOffers", archivo),
+                Int(tienda, "maxBlueprintOffers", archivo),
+                Int(tienda, "minUsableOffers", archivo),
+                Int(tienda, "silverMinWave", archivo),
+                Int(tienda, "goldMinWave", archivo),
+                Int(tienda, "blueprintMinWave", archivo),
+                Int(tienda, "recipeWeightMultiplier", archivo),
                 Curve(tienda, "bronzePerkPrice", archivo),
-                Curve(tienda, "silverPerkPrice", archivo)),
+                Curve(tienda, "silverPerkPrice", archivo),
+                Curve(tienda, "goldPerkPrice", archivo),
+                Curve(tienda, "blueprintPrice", archivo),
+                Curve(tienda, "classPrice", archivo),
+                Int(Obj(tienda, "classPrice", archivo), "classCostMultiplier", archivo)),
 
             new DropData(
                 Int(drops, "commonChance", archivo),
@@ -1238,7 +1423,16 @@ public static class TableReader
                 Int(costoNpc, "hpDivisor", archivo),
                 Int(costoNpc, "maxDamageDivisor", archivo),
                 Int(costoNpc, "speedDivisor", archivo),
-                Int(oleada, "defaultSpawnInterval", archivo)),
+                Int(oleada, "defaultSpawnInterval", archivo),
+                new SpawnFormations(
+                    Int(formaciones, "uniformWeight", archivo),
+                    Int(formaciones, "pairsWeight", archivo),
+                    Int(formaciones, "burstWeight", archivo),
+                    Int(formaciones, "pairShortPercent", archivo),
+                    Int(formaciones, "pairLongPercent", archivo),
+                    Int(formaciones, "burstSize", archivo),
+                    Int(formaciones, "burstShortPercent", archivo),
+                    Int(formaciones, "burstLongPercent", archivo))),
 
             new NpcPerkData(
                 Int(perksNpc, "healthCost", archivo),
@@ -1248,7 +1442,12 @@ public static class TableReader
                 Int(perksNpc, "maxHealth", archivo),
                 Int(perksNpc, "maxSpeed", archivo),
                 Int(perksNpc, "healthChanceInRoll", archivo),
-                Int(perksNpc, "speedChanceInLeftover", archivo)),
+                Int(perksNpc, "speedChanceInLeftover", archivo),
+                Int(perksNpc, "impulsiveCost", archivo),
+                Int(perksNpc, "impulsiveChance", archivo),
+                Int(perksNpc, "leaderCost", archivo),
+                Int(perksNpc, "leaderChance", archivo),
+                Int(perksNpc, "maxLeadersPerWave", archivo)),
 
             new BossData(
                 Int(jefe, "extraHealthDivisor", archivo),
@@ -1311,6 +1510,64 @@ public static class TableReader
         if (curvas.Drops.GoldPoolSize < 1)
             throw new InvalidBalanceDataException($"{archivo}: «goldPoolSize» tiene que ser 1 o más");
 
+        // ⚠ Una tienda de 0 ranuras no es «tienda apagada»: es una pantalla vacía
+        // que igual frena la corrida cada tres oleadas.
+        if (curvas.Shop.Slots < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «shop.slots» tiene que ser 1 o más");
+
+        // Con intervalo 0 la tienda no abriría nunca y todo el sistema quedaría
+        // muerto en silencio, sin un error que lo diga.
+        if (curvas.Shop.IntervalWaves < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «shop.intervalWaves» tiene que ser 1 o más");
+
+        int pesoTotal = curvas.Shop.ClassWeight + curvas.Shop.BronzeWeight + curvas.Shop.SilverWeight
+                        + curvas.Shop.GoldWeight + curvas.Shop.BlueprintWeight + curvas.Shop.WeaponWeight;
+
+        if (pesoTotal <= 0)
+            throw new InvalidBalanceDataException($"{archivo}: los pesos de «shop» suman 0. La tienda no podría sortear nada.");
+
+        // ⚠ Sin tope de Oro por tienda, una pantalla Oro/Oro/Oro/Oro convierte una
+        // visita en un salto de poder enorme y arruina la comparación entre
+        // corridas — que es todo lo que un ranking global mide.
+        if (curvas.Shop.MaxGoldOffers < 0 || curvas.Shop.MaxBlueprintOffers < 0)
+            throw new InvalidBalanceDataException($"{archivo}: los topes de «shop» no pueden ser negativos");
+
+        if (curvas.Shop.MinUsableOffers > curvas.Shop.Slots)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «shop.minUsableOffers» ({curvas.Shop.MinUsableOffers}) no puede pasar " +
+                $"de «shop.slots» ({curvas.Shop.Slots}): la garantía sería imposible de cumplir");
+        }
+
+        // ⚠ Los promedios de las tres formaciones TIENEN que dar 100. Si no dan,
+        // la formación se convierte en una oleada más corta o más larga, o sea
+        // dificultad encubierta que no aparece en el presupuesto — que es el único
+        // número que se mira para saber cuán dura es una oleada.
+        var f = curvas.Wave.Formations;
+
+        if (f.UniformWeight + f.PairsWeight + f.BurstWeight <= 0)
+            throw new InvalidBalanceDataException($"{archivo}: los pesos de «spawnFormations» suman 0");
+
+        if (f.BurstSize < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «burstSize» tiene que ser 1 o más");
+
+        if (f.PairShortPercent + f.PairLongPercent != 200)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: la formación «parejas» promedia " +
+                $"{(f.PairShortPercent + f.PairLongPercent) / 2}% en vez de 100%. " +
+                "Una formación que no conserva el promedio es dificultad encubierta.");
+        }
+
+        int totalRafaga = (f.BurstShortPercent * (f.BurstSize - 1)) + f.BurstLongPercent;
+
+        if (totalRafaga != f.BurstSize * 100)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: la formación «ráfaga» promedia {totalRafaga / f.BurstSize}% en vez de 100%. " +
+                "Una formación que no conserva el promedio es dificultad encubierta.");
+        }
+
         return curvas;
     }
 
@@ -1331,6 +1588,7 @@ public static class TableReader
         var comp = Obj(raiz, "behaviors", archivo);
         var unicos = Obj(raiz, "uniques", archivo);
         var arma = Obj(raiz, "weaponAbilities", archivo);
+        var rasgos = Obj(raiz, "enemyTraits", archivo);
 
         var slow = Obj(estados, "slow", archivo);
         var raiz2 = Obj(estados, "root", archivo);
@@ -1433,7 +1691,22 @@ public static class TableReader
                 Int(arma, "executeThresholdBoss", archivo),
                 Bool(arma, "finalBossImmuneToExecute", true),
                 Int(arma, "vampirismCooldownTicks", archivo),
-                Int(arma, "greedMarkDurationTicks", archivo)));
+                Int(arma, "greedMarkDurationTicks", archivo),
+                Int(arma, "doubleShotPercent", archivo),
+                Int(arma, "chainSecondaryCapPercent", archivo),
+                Int(arma, "greedMaxExtraPerEnemy", archivo),
+                Int(arma, "greedMaxExtraPerWave", archivo),
+                Int(arma, "vampirismMaxHealingPerWave", archivo)),
+
+            new EnemyTraits(
+                Int(rasgos, "enrageHpPercent", archivo),
+                Int(rasgos, "enrageSpeedPercent", archivo),
+                Int(rasgos, "enrageTicks", archivo),
+                Int(rasgos, "finalBossEnrageSpeedPercent", archivo),
+                Int(rasgos, "impulsiveHpPercent", archivo),
+                Int(rasgos, "impulsiveSpeedPercent", archivo),
+                Int(rasgos, "leaderSpeedPercent", archivo),
+                Int(rasgos, "leaderRadiusThousandths", archivo)));
 
         // ⚠ Un slow del 100% no es un enemigo lento: es un enemigo parado, y un
         // enemigo parado fuera del alcance de todos clava la oleada para siempre.
@@ -1485,6 +1758,41 @@ public static class TableReader
 
         if (combate.Weapons.RangePortionScale == 0)
             throw new InvalidBalanceDataException($"{archivo}: «rangePortionScale» no puede ser 0");
+
+        // ⚠ Un segundo disparo del 100% es duplicar el daño directo, y a ese
+        // precio ninguna otra habilidad compite por la misma ranura. Arriba de
+        // 100 sería directamente mejor que dos armas.
+        if (combate.Weapons.DoubleShotPercent is < 1 or > 100)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «doubleShotPercent» tiene que estar entre 1 y 100. " +
+                "Con 100 el segundo golpe es entero y ninguna otra habilidad puede competir.");
+        }
+
+        // Sin techo, el daño de Cadena escala lineal con la densidad de la
+        // oleada: su poder lo decidiría la formación y no el jugador.
+        if (combate.Weapons.ChainSecondaryCapPercent < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «chainSecondaryCapPercent» tiene que ser 1 o más");
+
+        // ⚠ Los dos topes de Codicia hacen falta juntos: sin el de oleada,
+        // sesenta bichos marcados pagan sesenta veces el tope individual y la
+        // build de economía vuelve a ser obligatoria.
+        if (combate.Weapons.GreedMaxExtraPerEnemy < 1 || combate.Weapons.GreedMaxExtraPerWave < 1)
+            throw new InvalidBalanceDataException($"{archivo}: los topes de Codicia tienen que ser 1 o más");
+
+        if (combate.Weapons.VampirismMaxHealingPerWave < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «vampirismMaxHealingPerWave» tiene que ser 1 o más");
+
+        // ⚠ Un umbral de enfurecer del 100% quiere decir «desde el primer golpe»,
+        // que no es un tramo final: es el jefe entero acelerado.
+        if (combate.Traits.EnrageHpPercent is < 1 or > 99)
+            throw new InvalidBalanceDataException($"{archivo}: «enrageHpPercent» tiene que estar entre 1 y 99");
+
+        if (combate.Traits.ImpulsiveHpPercent is < 1 or > 99)
+            throw new InvalidBalanceDataException($"{archivo}: «impulsiveHpPercent» tiene que estar entre 1 y 99");
+
+        if (combate.Traits.EnrageTicks < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «enrageTicks» tiene que ser 1 o más");
 
         return combate;
     }

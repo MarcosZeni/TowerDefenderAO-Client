@@ -253,6 +253,44 @@ public partial class Juego : Node2D
     public void SubirNivel(DefenderClass clase)
         => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.BuyLevel, (int)clase, 0, 0));
 
+    /// <summary>
+    /// Compra una oferta de la tienda rotativa.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Lo que va al log es el <b>índice</b> de la oferta, no qué era: el stock lo
+    /// regenera el servidor de la seed. Guardar el contenido dejaría que un cliente
+    /// modificado reclamara haber comprado algo que no estaba a la venta.
+    /// </remarks>
+    public void Comprar(int indice)
+        => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.Buy, indice, 0, 0));
+
+    /// <summary>
+    /// Le cambia el modo de targeting a un defensor puesto.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Va por <see cref="Defender.PlacementId"/> y no por celda: es del
+    /// <b>defensor</b>, no de la clase ni del lugar. Dos paladines de la misma
+    /// ficha quieren targeting distinto según dónde estén parados, y esa decisión
+    /// de colocación es la mitad del valor de la mecánica.
+    /// </remarks>
+    public void CambiarTargeting(int idColocacion, TargetingMode modo)
+        => _log.Agregar(new PlayerAction(
+            Run.TickDeAccion, ActionType.SetTargeting, idColocacion, (int)modo, 0));
+
+    /// <summary>
+    /// Elige cuál de los dos comportamientos de una clase está activo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ La ranura sigue siendo <b>una</b>: esto no permite tener el Oro y la
+    /// habilidad del arma a la vez, permite decidir cuál habla. Los <b>stats</b>
+    /// del arma se conservan en los dos casos, y ese es todo el punto — antes el
+    /// arma ganaba siempre y encontrar una excelente obligaba a apagar un Único que
+    /// costó dos jefes y un plano.
+    /// </remarks>
+    public void ElegirComportamiento(DefenderClass clase, bool preferirElPerk)
+        => _log.Agregar(new PlayerAction(
+            Run.TickDeAccion, ActionType.SetBehavior, (int)clase, preferirElPerk ? 1 : 0, 0));
+
     /// <summary>La clase que se pone con el próximo click, para la UI.</summary>
     public DefenderClass ClaseElegida => _claseElegida;
 
@@ -421,15 +459,51 @@ public partial class Juego : Node2D
 
         if (boton.ButtonIndex == MouseButton.Left)
         {
+            // ⚠ Click en una celda OCUPADA selecciona; en una vacía, pone.
+            //
+            // No hay conflicto porque las dos cosas son excluyentes por
+            // construcción: `PuedePoner` ya rechazaba la celda ocupada, así que
+            // ese click no hacía absolutamente nada. Ahora abre el panel de
+            // targeting, que es lo único que se decide por defensor y no por clase.
+            var ocupada = Run.DefensorEn(celda.Value);
+
+            if (ocupada is not null)
+            {
+                // Volver a clickear el mismo lo deselecciona: el panel se cierra
+                // desde donde se abrió, sin buscar una cruz.
+                DefensorSeleccionado = DefensorSeleccionado == ocupada.PlacementId
+                    ? -1
+                    : ocupada.PlacementId;
+
+                return;
+            }
+
+            DefensorSeleccionado = -1;
             PonerEn(boton.Position);
         }
         else if (boton.ButtonIndex == MouseButton.Right)
         {
             var defensor = Run.DefensorEn(celda.Value);
             if (defensor is not null)
+            {
+                if (DefensorSeleccionado == defensor.PlacementId)
+                    DefensorSeleccionado = -1;
+
                 Encolar(t => PlayerAction.Sell(t, defensor.PlacementId));
+            }
         }
     }
+
+    /// <summary>
+    /// El defensor cuyo panel de targeting está abierto, o <c>-1</c>.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Va por <see cref="Defender.PlacementId"/> y no por celda ni por
+    /// referencia: el defensor puede venderse mientras el panel está abierto, y un
+    /// id que ya no existe simplemente no encuentra a nadie. Con una referencia
+    /// guardada, el panel seguiría mostrando un defensor que ya no está en el mapa.
+    /// </remarks>
+    public int DefensorSeleccionado { get; set; } = -1;
 
     /// <summary>
     /// Las teclas de la corrida, todas remapeables desde el menú de opciones.

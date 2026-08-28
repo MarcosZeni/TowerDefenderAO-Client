@@ -91,12 +91,64 @@ public sealed class Run
     /// </remarks>
     private readonly List<int> _poolOro = [];
 
-    /// <summary>Oro extra que ya pagó Saqueo en esta oleada. Tiene tope.</summary>
+    /// <summary>
+    /// Oro extra que ya pagaron las marcas de botín en esta oleada. Tiene tope.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lo comparten Saqueo —el perk de Oro— y Codicia —la habilidad de arma
+    /// legendaria—, y compartirlo es lo correcto: <b>es un presupuesto de oro
+    /// extra por oleada</b>, no el contador de una habilidad. Un enemigo lleva una
+    /// sola marca a la vez, así que las dos nunca se pisan sobre el mismo bicho;
+    /// lo que sí se pisan es el techo total, que es justo lo que se quiere acotar.</para>
+    ///
+    /// <para>⚠ Codicia dejó de ser la única habilidad sin techo. La economía tiene
+    /// realimentación positiva —más oro, más defensores, más kills, más oro— así
+    /// que una habilidad económica sin techo no es fuerte: <b>es la única
+    /// build</b>. Sigue siendo mejor que Saqueo, como corresponde a una
+    /// legendaria, pero ya no puede duplicar la economía de una oleada entera.</para>
+    /// </remarks>
     private int _oroBotinOleada;
+
+    /// <summary>
+    /// Vida que ya curó Vampirismo en esta oleada, en la escala interna. Tiene tope.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ La ventana de 30 ticks por clase limita el <b>ritmo</b>, no el total: una
+    /// oleada larga con una build de cadencia seguía curando más de lo que la
+    /// oleada podía bajar, y la Torre quedaba prácticamente inmortal.
+    /// </remarks>
+    private int _curaVampirismoOleada;
 
     /// <summary>Ticks entre spawn y spawn de la oleada actual.</summary>
     /// <remarks>Arranca en el de <c>curvas.json</c> hasta que la primera oleada imponga el suyo.</remarks>
     private int _intervaloSpawn;
+
+    /// <summary>
+    /// Con qué forma entra la oleada actual. La sortea el armador.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Conserva el promedio del intervalo</b>, así que la oleada dura lo
+    /// mismo: no es dificultad encubierta. Lo que cambia es el valor <b>relativo</b>
+    /// del catálogo, que es la lección de Rogue Tower — que los enemigos lleguen
+    /// juntos o separados altera qué torres sirven sin tocar una estadística.
+    /// </remarks>
+    private SpawnFormation _formacionOleada;
+
+    /// <summary>Cuántos NPCs entraron ya en la oleada actual. Es el índice de la formación.</summary>
+    private int _spawneadosEnOleada;
+
+    /// <summary>
+    /// La preparación en curso renovó el stock de la tienda.
+    /// </summary>
+    /// <remarks>
+    /// Bandera y no un módulo recalculado en dos lugares: para cuando se lanza la
+    /// oleada, <c>Wave</c> ya avanzó, y la cuenta habría que hacerla contra
+    /// <c>Wave - 1</c>. Un desfasaje de uno en ese módulo ya movió una vez el
+    /// momento en que abre la tienda —una oleada antes de la elección, cuando el
+    /// punto entero es que caigan juntas— y de paso dejó vivo un stock que la
+    /// elección podía invalidar.
+    /// </remarks>
+    private bool _tiendaAbierta;
 
     /// <summary>Oro que paga limpiar la oleada actual.</summary>
     private int _bonusOroOleada;
@@ -109,6 +161,19 @@ public sealed class Run
 
     /// <summary>La tienda de la corrida. El stock lo decide la seed.</summary>
     public Shop Shop { get; } = new();
+
+    /// <summary>
+    /// Lo que pasó adentro de la corrida, contado mientras pasa.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Es salida, no entrada.</b> Nada de acá se lee para decidir nada, así
+    /// que contar de más no puede cambiar una corrida y no entra al hash. Existe
+    /// porque tres veces seguidas razonar sobre el balance dio la conclusión
+    /// equivocada y medirlo dio la correcta — y con la tienda rotativa, «terminó
+    /// con 12.000 sin gastar» sin desglose no dice si sobra oro, si los precios
+    /// están mal o si no había nada que valiera la pena.
+    /// </remarks>
+    public RunMetrics Metrics { get; } = new();
 
     /// <summary>
     /// Las 3 opciones de la pantalla de elección, cuando está abierta.
@@ -202,6 +267,12 @@ public sealed class Run
 
             if (compra.HealthPerk > 0 || compra.SpeedPerk > 0)
                 fila.ConPerk++;
+
+            // ⚠ Los rasgos van aparte y también tienen que verse: un líder que se
+            // ve igual que un lobo normal es una mecánica invisible, y el jugador
+            // que pierde contra algo que no sabía que estaba ahí no aprende nada.
+            if (compra.Impulsive || compra.Leader)
+                fila.ConRasgo++;
         }
 
         var salida = new List<WavePreview>(orden.Count);
@@ -467,6 +538,14 @@ public sealed class Run
                 Fuse(accion.A, accion.B, (DefenderClass)accion.C);
                 break;
 
+            case ActionType.SetTargeting:
+                SetTargeting(accion.A, (TargetingMode)accion.B);
+                break;
+
+            case ActionType.SetBehavior:
+                SetBehavior((DefenderClass)accion.A, accion.B != 0);
+                break;
+
             // El resto entra con sus sistemas. Se ignoran en silencio y no se
             // rompe: un log viejo tiene que poder re-simularse aunque el sistema
             // todavía no exista.
@@ -485,6 +564,7 @@ public sealed class Run
 
         var stats = _datos.StatsOf(clase);
         Gold -= stats.Cost;
+        Metrics.GoldSpentDefenders += stats.Cost;
 
         _defensores.Add(new Defender
         {
@@ -569,6 +649,10 @@ public sealed class Run
             // Mochila llena: se pierde, igual que un drop común. La UI de verdad
             // abre el diálogo de "tirá uno" antes de llegar acá.
             Backpack.StorePerk(opcion.PerkId);
+
+            if (_datos.Perks.Get(opcion.PerkId).Tier == PerkTier.Gold)
+                Metrics.GoldPerksObtained++;
+
             OpenChoices = [];
             return;
         }
@@ -731,6 +815,7 @@ public sealed class Run
             return;
 
         Gold -= precio;
+        Metrics.GoldSpentLevels += precio;
         Roster.LevelUp(clase);
     }
 
@@ -795,6 +880,14 @@ public sealed class Run
         Backpack.RemoveAt(mayor);
         Backpack.RemoveAt(menor);
 
+        Metrics.UniquesCrafted++;
+
+        // La oleada del PRIMER Único es la métrica que dice si la composición es
+        // alcanzable: en la 90 el sistema existe pero no llega a jugarse, en la 20
+        // llega demasiado fácil.
+        if (Metrics.WaveOfFirstUnique == 0)
+            Metrics.WaveOfFirstUnique = Wave;
+
         // Si no hay slot libre —o si la clase ya tiene un comportamiento puesto—
         // el Único va a la mochila y el jugador decide después. Perderlo por no
         // tener lugar sería castigar la mecánica que el juego quiere enseñar, y
@@ -803,6 +896,66 @@ public sealed class Run
             ficha.Perks.Add(plano.ResultingUnique);
         else
             Backpack.StorePerk(plano.ResultingUnique);
+    }
+
+    /// <summary>
+    /// Le cambia el modo de targeting a un defensor puesto.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es del defensor, no de la clase</b>, y es la única cosa del
+    /// juego que lo es. La regla «todo es de la clase, nunca de la unidad» habla
+    /// de <b>stats</b> —para que no existan unidades viejas que se quedan atrás— y
+    /// esto no es un stat: es la misma memoria por unidad que ya llevan la
+    /// concentración y el contador de golpes.</para>
+    ///
+    /// <para>Y tiene que ser por unidad para que la mecánica valga: dos paladines
+    /// de la misma ficha quieren targeting distinto según dónde estén parados, y
+    /// esa decisión de colocación es la mitad de lo que el targeting aporta.</para>
+    ///
+    /// <para>Se puede cambiar en cualquier momento y no cuesta nada. Cobrar por
+    /// cambiarlo convertiría una decisión táctica en una decisión económica, que es
+    /// otra cosa y ya tiene dónde tomarse.</para>
+    /// </remarks>
+    private void SetTargeting(int idColocacion, TargetingMode modo)
+    {
+        if (!System.Enum.IsDefined(modo))
+            return;
+
+        foreach (var d in _defensores)
+        {
+            if (d.PlacementId == idColocacion)
+            {
+                d.Targeting = modo;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Elige cuál de los dos comportamientos de una clase está activo.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La ranura sigue siendo una.</b> Esto no permite tener el Oro y la
+    /// habilidad del arma a la vez: permite decidir cuál de los dos habla. Tenerlos
+    /// juntos multiplicaría las combinaciones a balancear por el catálogo entero de
+    /// armas.</para>
+    ///
+    /// <para><b>Los stats del arma se conservan en los dos casos</b>, y ese es todo
+    /// el punto: antes ganaba el arma siempre, así que encontrar una excelente
+    /// obligaba a apagar un Único que costó dos jefes y un plano. El jugador
+    /// terminaba no equipándola —lo peor que le puede pasar a un drop— para no
+    /// perder la build.</para>
+    ///
+    /// <para>Es de la CLASE y no del defensor, al revés que el targeting: el arma y
+    /// los perks viven en la ficha, así que la decisión vive donde viven las cosas
+    /// entre las que se decide.</para>
+    /// </remarks>
+    private void SetBehavior(DefenderClass clase, bool preferirElPerk)
+    {
+        var ficha = Roster.Find(clase);
+
+        if (ficha is not null)
+            ficha.PreferPerkBehavior = preferirElPerk;
     }
 
     /// <summary>Oro y Único son comportamiento; Bronce y Plata son números.</summary>
@@ -824,16 +977,19 @@ public sealed class Run
     }
 
     /// <summary>
-    /// La clase tiene un comportamiento puesto Y un arma con habilidad, así que
-    /// el comportamiento está mudo.
+    /// La clase tiene un comportamiento puesto <b>y</b> un arma con habilidad, así
+    /// que uno de los dos está mudo.
     /// </summary>
     /// <remarks>
-    /// ⚠ Existe para que la interfaz lo pueda <b>decir</b> (Drops_v2). La
-    /// exclusión se mantiene —arma y perk son la misma ranura— pero antes era
-    /// invisible: un Oro raro podía quedar anulado por equipar un arma y el
-    /// jugador no se enteraba nunca.
+    /// <para>⚠ Existe para que la interfaz lo pueda <b>decir</b>. La exclusión se
+    /// mantiene —arma y perk son la misma ranura— pero antes era invisible: un Oro
+    /// raro quedaba anulado por equipar un arma y el jugador no se enteraba nunca.</para>
+    ///
+    /// <para>Ahora además la pantalla tiene que ofrecer <b>elegir</b> cuál habla:
+    /// eso es <see cref="SetBehavior"/>, y cuál está ganando lo dice
+    /// <see cref="RosterClass.PreferPerkBehavior"/>.</para>
     /// </remarks>
-    public bool ArmaTapaElRasgo(DefenderClass clase)
+    public bool HayConflictoDeComportamiento(DefenderClass clase)
     {
         var ficha = Roster.Find(clase);
 
@@ -842,6 +998,10 @@ public sealed class Run
 
         return Backpack.WeaponById(ficha.Weapon)?.Ability is not (null or WeaponAbility.None);
     }
+
+    /// <summary>El arma le está tapando el perk: hay conflicto y gana el arma.</summary>
+    public bool ArmaTapaElRasgo(DefenderClass clase)
+        => HayConflictoDeComportamiento(clase) && Roster.Find(clase)?.PreferPerkBehavior == false;
 
     /// <summary>
     /// Compra una oferta de la tienda.
@@ -863,12 +1023,75 @@ public sealed class Run
         if (oferta.Sold || Gold < oferta.Price)
             return;
 
-        // ⚠ Si la mochila está llena la compra no pasa y el oro NO se gasta.
-        // Cobrarle al jugador por algo que no entra sería el peor error posible de
-        // esta pantalla, y es exactamente el que sale de descontar antes de
-        // guardar.
-        if (!Backpack.Store(new StoredItem(oferta.Kind, oferta.Id)))
-            return;
+        // ⚠ Cada categoría se entrega en un lugar distinto, y solo dos de las
+        // cuatro ocupan mochila. Reclutar toca el roster y aprender un plano toca
+        // el conocimiento de la corrida: exigirles lugar de mochila haría que
+        // comprar una clase con la mochila llena rebotara en silencio.
+        //
+        // ⚠ Y en TODOS los casos se entrega ANTES de descontar. Cobrarle al
+        // jugador por algo que no entra es el peor error posible de esta pantalla,
+        // y es exactamente el que sale de descontar primero.
+        switch (oferta.Kind)
+        {
+            case ShopKind.Perk:
+                if (!Backpack.Store(new StoredItem(ItemType.Perk, oferta.Id)))
+                    return;
+
+                Metrics.CountPurchase(_datos.Perks.Get(oferta.Id).Tier, oferta.Price);
+                break;
+
+            case ShopKind.Weapon:
+                if (!Backpack.Store(new StoredItem(ItemType.Weapon, oferta.Id)))
+                    return;
+
+                Metrics.BoughtWeapon++;
+                Metrics.GoldSpentWeapons += oferta.Price;
+                break;
+
+            case ShopKind.Class:
+            {
+                var clase = (DefenderClass)oferta.Id;
+
+                // Una clase ya reclutada rebota: el generador de la tienda no la
+                // ofrece, pero un log manipulado sí puede pedirla.
+                if (Roster.Has(clase))
+                    return;
+
+                Roster.Hire(clase);
+
+                // Contratar abre Oro nuevo, igual que contratar por elección: sin
+                // esto, reclutar en la tienda dejaría a la clase nueva sin
+                // comportamiento propio para siempre.
+                AmpliarPoolDeOro(clase);
+
+                Metrics.BoughtClass++;
+                Metrics.GoldSpentClasses += oferta.Price;
+                break;
+            }
+
+            default:
+            {
+                if (oferta.Id < 0 || oferta.Id >= _datos.Blueprints.All.Count)
+                    return;
+
+                var plano = _datos.Blueprints.All[oferta.Id];
+
+                if (plano.Initial || _planosAprendidos.Contains(plano.Key))
+                    return;
+
+                // ⚠ SOLO PARA ESTA CORRIDA. El plano comprado con la billetera
+                // desde el menú principal queda aprendido para siempre en la
+                // cuenta; este muere con la corrida. Si persistiera, una corrida
+                // afortunada regalaría progresión permanente y el precio de la
+                // billetera dejaría de significar nada — y los planos son la única
+                // progresión permanente del proyecto.
+                _planosAprendidos.Add(plano.Key);
+
+                Metrics.BoughtBlueprint++;
+                Metrics.GoldSpentBlueprints += oferta.Price;
+                break;
+            }
+        }
 
         Gold -= oferta.Price;
         Shop.Sell(indice);
@@ -876,6 +1099,26 @@ public sealed class Run
 
     /// <summary>Los planos que la cuenta tiene aprendidos. Los manda el servidor.</summary>
     public void AprenderPlano(string nombre) => _planosAprendidos.Add(nombre);
+
+    /// <summary>
+    /// ¿Esta corrida ya conoce la receta del plano número <paramref name="indice"/>?
+    /// </summary>
+    /// <remarks>
+    /// Cuenta los tres orígenes juntos, que es lo que le importa a la pantalla: el
+    /// de <c>initial: true</c>, el comprado con la billetera en el menú principal y
+    /// el comprado con oro en la tienda de esta corrida. Adentro de la corrida los
+    /// tres se usan igual; la diferencia —cuál sobrevive a la corrida— es cosa de
+    /// la cuenta, no de la simulación.
+    /// </remarks>
+    public bool ConocePlano(int indice)
+    {
+        if (indice < 0 || indice >= _datos.Blueprints.All.Count)
+            return false;
+
+        var plano = _datos.Blueprints.All[indice];
+
+        return plano.Initial || _planosAprendidos.Contains(plano.Key);
+    }
 
     private void Sell(int idColocacion)
     {
@@ -947,9 +1190,28 @@ public sealed class Run
             DistanceTravelled = 0,
             ExtraHealthPerk = compra.HealthPerk,
             ExtraSpeedPerk = compra.SpeedPerk,
+
+            // Los dos rasgos también los decidió el armador y también los pagó del
+            // presupuesto. Acá solo se copian: tirarlos en esta fase movería el
+            // punto de consumo del RNG.
+            Impulsive = compra.Impulsive,
+            Leader = compra.Leader,
         });
 
-        _ticksParaProximoSpawn = _intervaloSpawn;
+        // ⚠ EL RITMO DE ENTRADA NO ES CONSTANTE: lo pone la formación de la
+        // oleada, que conserva el promedio pero no la separación.
+        //
+        // No es una palanca de dificultad encubierta —la oleada dura lo mismo—
+        // pero cambia el valor RELATIVO de casi todo el catálogo: en ráfaga
+        // splash, cadena y quemadura valen el doble y el single target sufre; en
+        // uniforme toman valor Concentración y el targeting «más fuerte».
+        //
+        // El índice es el del NPC dentro de la oleada, así que la forma se lee
+        // igual sin importar cuántos se hayan comprado.
+        int indice = _spawneadosEnOleada++;
+
+        _ticksParaProximoSpawn = System.Math.Max(1, Ints.MultiplyPercent(
+            _intervaloSpawn, _datos.Curves.Wave.Formations.PercentAt(_formacionOleada, indice)));
     }
 
     // =========================================================================
@@ -988,8 +1250,16 @@ public sealed class Run
             if (e.ExtraGoldPercent > 0 && Tick >= e.ExtraGoldExpiryTick)
                 e.ExtraGoldPercent = 0;
 
+            // El acelerón de enfurecer vence; el de impulsivo no —lo deja con
+            // expiración en int.MaxValue—, y por eso son el mismo campo: son el
+            // mismo efecto con distinta duración.
+            if (e.TraitSpeedPercent > 0 && Tick >= e.TraitSpeedExpiryTick)
+                e.TraitSpeedPercent = 0;
+
             if (!e.Alive)
                 continue;
+
+            DispararRasgoDeVelocidad(e);
 
             // Los tres DoT cobran en orden fijo. Es daño SECUNDARIO: no dispara
             // comportamientos, no aplica estados y no crea más secundarios.
@@ -1002,6 +1272,8 @@ public sealed class Run
             }
         }
 
+        RecalcularAurasDeLider();
+
         // Las auras de cadencia también vencen acá: son estado del defensor, pero
         // se apagan por tiempo igual que los del enemigo.
         foreach (var d in _defensores)
@@ -1011,6 +1283,117 @@ public sealed class Run
         }
 
         ResolverEcos();
+    }
+
+    /// <summary>
+    /// Enfurecer y Impulsivo: el acelerón del tramo final, una sola vez.
+    /// </summary>
+    /// <remarks>
+    /// <para>Son la misma mecánica con dos disparadores y dos duraciones, así que
+    /// van en la misma función y en el mismo campo del enemigo. <b>Ninguno da daño
+    /// extra</b>, ni cura, ni vuelve inmune, ni destruye defensores: un enemigo
+    /// que además pega más fuerte al enfurecer convierte una filtración en una
+    /// derrota instantánea que el jugador no tenía cómo prever.</para>
+    ///
+    /// <para><b>Enfurecer</b> lo tienen todos los jefes: al bajar del 35% aceleran
+    /// un 15% durante 90 ticks. El jefe final acelera menos —es el final de cien
+    /// oleadas, y ahí una aceleración grande es una derrota que no se ve venir.</para>
+    ///
+    /// <para><b>Impulsivo</b> es un rasgo ocasional de la tropa: bajo el 30%
+    /// acelera un 20% y no se le vence. Tiene varias respuestas —Oportunista,
+    /// concentrar fuego, slow, burst, defensa cerca de la Torre— así que no es un
+    /// enemigo «lock-and-key», que es lo que Defender's Quest recomienda
+    /// evitar.</para>
+    ///
+    /// <para>⚠ <b>Una sola vez por bicho</b>, y por eso la bandera. Sin ella, un
+    /// enemigo que sube y baja del umbral —cura no hay, pero el HP máximo sí puede
+    /// mirarse mal— refrescaría el acelerón para siempre.</para>
+    /// </remarks>
+    private void DispararRasgoDeVelocidad(Enemy e)
+    {
+        if (e.SpeedTraitFired || e.MaxHp <= 0)
+            return;
+
+        var t = _datos.Combat.Traits;
+
+        if (e.IsBoss)
+        {
+            if (e.Hp * 100 / e.MaxHp > t.EnrageHpPercent)
+                return;
+
+            e.SpeedTraitFired = true;
+            e.TraitSpeedPercent = EsJefeFinal(e)
+                ? t.FinalBossEnrageSpeedPercent
+                : t.EnrageSpeedPercent;
+
+            e.TraitSpeedExpiryTick = Tick + t.EnrageTicks;
+            return;
+        }
+
+        if (!e.Impulsive || e.Hp * 100 / e.MaxHp > t.ImpulsiveHpPercent)
+            return;
+
+        e.SpeedTraitFired = true;
+        e.TraitSpeedPercent = t.ImpulsiveSpeedPercent;
+
+        // Impulsivo no vence: el bicho ya está herido y le queda poca ruta. Poner
+        // una duración sería un número más que balancear para un efecto que dura,
+        // en la práctica, lo que tarda en morir.
+        e.TraitSpeedExpiryTick = int.MaxValue;
+    }
+
+    /// <summary>
+    /// Reparte el aura de los Líderes vivos.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Se recalcula entera cada tick, desde cero.</b> Es más trabajo que
+    /// aplicarla al aparecer y vencerla por tiempo, y es lo correcto: <b>el aura
+    /// muere con el líder</b>, y eso es exactamente lo que lo vuelve un objetivo
+    /// prioritario sin agregar una sola resistencia ni inmunidad. Con expiración
+    /// por tiempo, matarlo no se notaría hasta segundos después.</para>
+    ///
+    /// <para>⚠ <b>No apila</b>, igual que todos los estados del juego: gana la
+    /// potencia más fuerte. Sin la regla, tres líderes juntos son un +30% que
+    /// ningún número del catálogo anticipa.</para>
+    ///
+    /// <para>El radio se mide sobre la <b>ruta</b> y no sobre el mapa, que es como
+    /// se mide toda la cercanía entre enemigos en este juego: la posición de un
+    /// enemigo es un solo número.</para>
+    /// </remarks>
+    private void RecalcularAurasDeLider()
+    {
+        // Barato y en orden de spawn. La lista se recorre dos veces solo si hay al
+        // menos un líder vivo, que es la excepción y no la regla.
+        bool hayLider = false;
+
+        foreach (var e in _enemigos)
+        {
+            e.LeaderAuraPercent = 0;
+            hayLider |= e.Leader && e.Alive;
+        }
+
+        if (!hayLider)
+            return;
+
+        var t = _datos.Combat.Traits;
+
+        foreach (var lider in _enemigos)
+        {
+            if (!lider.Leader || !lider.Alive)
+                continue;
+
+            foreach (var otro in _enemigos)
+            {
+                if (!otro.Alive || ReferenceEquals(otro, lider))
+                    continue;
+
+                long d = System.Math.Abs(otro.DistanceTravelled - lider.DistanceTravelled);
+
+                // No apila: se conserva la potencia más fuerte.
+                if (d <= t.LeaderRadiusThousandths && otro.LeaderAuraPercent < t.LeaderSpeedPercent)
+                    otro.LeaderAuraPercent = t.LeaderSpeedPercent;
+            }
+        }
     }
 
     /// <summary>
@@ -1147,7 +1530,11 @@ public sealed class Run
             // sube el daño de nadie, baja el castigo por filtrar. Es una utilidad
             // distinta del slow, y es la que le faltaba al catálogo — todo lo
             // demás era alguna forma de pegar más fuerte.
-            Tower.Receive(Ints.WithPercents(e.Damage, -e.WeakenPercent));
+            int golpe = Ints.WithPercents(e.Damage, -e.WeakenPercent);
+
+            Tower.Receive(golpe);
+            Metrics.TowerDamageTaken += golpe;
+
             e.AttackCooldown = e.CadenceTicks;
         }
 
@@ -1313,13 +1700,29 @@ public sealed class Run
     /// único momento en que se sabe: una vez que la fase 8 saca al muerto de la
     /// lista, cuánto le sobró al golpe ya no existe en ningún lado.</para>
     /// </remarks>
-    private static int GolpeDirecto(Defender defensor, Enemy objetivo, int dano)
+    private int GolpeDirecto(Defender defensor, Enemy objetivo, int dano)
     {
         int real = Ints.WithPercents(dano, BonusRecibido(objetivo, defensor.DefenderClass));
 
+        bool vivíaAntes = objetivo.Alive;
+
         objetivo.Hp -= real;
 
-        return objetivo.Hp < 0 ? -objetivo.Hp : 0;
+        int overkill = objetivo.Hp < 0 ? -objetivo.Hp : 0;
+
+        // La muerte se le atribuye al golpe que la causó, que es el único momento
+        // en que se sabe: la fase 8 saca al muerto de la lista sin registrar quién
+        // fue.
+        if (vivíaAntes && !objetivo.Alive)
+            Metrics.KillsByClass[(int)defensor.DefenderClass]++;
+
+        // ⚠ Métrica, no simulación: el daño que EFECTIVAMENTE hizo falta va a la
+        // clase, y lo que sobró va aparte. Sumar el golpe entero mezclaría las dos
+        // cosas y «Cazador hizo el 40% del daño» diría también cuánto desperdició.
+        Metrics.DamageByClass[(int)defensor.DefenderClass] += real - overkill;
+        Metrics.OverkillDamage += overkill;
+
+        return overkill;
     }
 
     /// <summary>
@@ -1331,10 +1734,18 @@ public sealed class Run
     /// acotable a todo el sistema: sin ella, Cadena crea Cadena y el eco dispara
     /// otro eco.
     /// </remarks>
-    private static void GolpeSecundario(Enemy objetivo, int dano)
+    private void GolpeSecundario(Enemy objetivo, int dano)
     {
-        if (dano > 0)
-            objetivo.Hp -= dano;
+        if (dano <= 0)
+            return;
+
+        objetivo.Hp -= dano;
+
+        // ⚠ Métrica, no simulación. Si esto se acerca al daño directo total, los
+        // comportamientos dejaron de ser condimento y pasaron a ser la fuente de
+        // daño — que es el síntoma de que un tope está mal puesto, y es
+        // exactamente lo que le pasaba a Cadena antes del techo.
+        Metrics.SecondaryDamage += dano;
     }
 
     /// <summary>
@@ -2037,14 +2448,18 @@ public sealed class Run
                 return;
 
             case WeaponAbility.DoubleShot:
-                // Un segundo golpe completo. Es la habilidad más simple y de las
-                // más fuertes: duplica todo lo que el defensor haga, incluidos los
-                // perks numéricos.
+                // ⚠ El segundo golpe NO es entero: pega el 70% (combate.json).
+                //
+                // Un golpe completo equivale a duplicar el daño directo —+100%— y
+                // a ese precio ninguna otra habilidad puede competir por la misma
+                // ranura: Doble era la respuesta correcta siempre. Con 70 sigue
+                // siendo clarísimamente legendaria y deja lugar para que Cadena,
+                // Ejecutar y Codicia sean elecciones y no consuelos.
                 //
                 // ⚠ Va como SECUNDARIO: duplica el daño, no el disparo. Si contara
                 // como directo dispararía otra vez todos los comportamientos, y el
                 // arma que ya tapa al perk terminaría procándolo dos veces.
-                GolpeSecundario(objetivo, dano);
+                GolpeSecundario(objetivo, Ints.MultiplyPercent(dano, _datos.Combat.Weapons.DoubleShotPercent));
                 return;
 
             case WeaponAbility.Execute:
@@ -2074,16 +2489,23 @@ public sealed class Run
 
             case WeaponAbility.Chain:
             {
-                // Le pega a hasta 5 secundarios en alcance (propuesta V2). Sin el
-                // techo, el daño escalaba lineal con la densidad y una oleada
-                // apretada lo multiplicaba por diez.
+                // Le pega a hasta 5 secundarios en alcance, y ahora además con
+                // TECHO DE DAÑO TOTAL (combate.json).
+                //
+                // ⚠ El tope de cantidad solo no alcanzaba. Con cinco secundarios al
+                // 60% cada uno, Cadena vale +300% en una oleada apretada y +0% en
+                // una vacía: una habilidad cuyo poder lo decide la FORMACIÓN de la
+                // oleada y no el jugador. Con el techo al 150% del golpe directo, la
+                // repartición de un 60% queda 60 / 60 / 30 / 0 / 0: el efecto
+                // conserva su identidad y deja de multiplicar el DPS por densidad.
                 long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
-                int extra = Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
+                int porSalto = Ints.MultiplyPercent(dano, stats.AbilityMagnitude);
+                int presupuesto = Ints.MultiplyPercent(dano, _datos.Combat.Weapons.ChainSecondaryCapPercent);
                 int alcanzados = 0;
 
                 foreach (var otro in _enemigos)
                 {
-                    if (alcanzados >= _datos.Combat.Weapons.MaxChainSecondaries)
+                    if (alcanzados >= _datos.Combat.Weapons.MaxChainSecondaries || presupuesto <= 0)
                         break;
 
                     if (!otro.Alive || ReferenceEquals(otro, objetivo))
@@ -2096,7 +2518,13 @@ public sealed class Run
 
                     if (d2 <= alcance2)
                     {
-                        GolpeSecundario(otro, extra);
+                        // Lo que queda del presupuesto, si el salto entero no entra.
+                        // Así el último toque es parcial en vez de desaparecer, que
+                        // es más legible en pantalla y no cambia el total.
+                        int golpe = System.Math.Min(porSalto, presupuesto);
+
+                        GolpeSecundario(otro, golpe);
+                        presupuesto -= golpe;
                         alcanzados++;
                     }
                 }
@@ -2105,10 +2533,20 @@ public sealed class Run
             }
 
             case WeaponAbility.Vampirism:
-                // Cura la Torre — con techo en su vida máxima y UN proc por clase
-                // cada 30 ticks (propuesta V2). El arma es de la clase: sin la
-                // ventana, diez unidades con la misma arma curaban cientos por
-                // segundo y la Torre se volvía inmortal.
+            {
+                // Cura la Torre — con techo en su vida máxima, UN proc por clase
+                // cada 30 ticks, y ahora además un TOPE POR OLEADA.
+                //
+                // ⚠ La ventana limitaba el RITMO, no el total. Una oleada larga con
+                // una build de cadencia seguía curando más de lo que la oleada podía
+                // bajar, y la Torre quedaba prácticamente inmortal: el techo real
+                // tiene que ser cuánto se puede curar en una oleada, igual que con
+                // Sed y con Saqueo.
+                int tope = Ints.ToHundredths(_datos.Combat.Weapons.VampirismMaxHealingPerWave);
+
+                if (_curaVampirismoOleada >= tope)
+                    return;
+
                 if (!_ultimaCuraPorClase.TryGetValue(defensor.DefenderClass, out int ultima) ||
                     Tick - ultima >= _datos.Combat.Weapons.VampirismCooldownTicks)
                 {
@@ -2116,13 +2554,20 @@ public sealed class Run
                     // hay que escalarla como el HP de la Torre. Sin esto, curar 8
                     // sobre una Torre de 100.000 internos sería curar 0,08 y la
                     // habilidad quedaría muda.
-                    Tower.Hp = System.Math.Min(
-                        Tower.MaxHp, Tower.Hp + Ints.ToHundredths(stats.AbilityMagnitude));
+                    int cura = System.Math.Min(
+                        Ints.ToHundredths(stats.AbilityMagnitude), tope - _curaVampirismoOleada);
 
+                    // Lo que la Torre no puede recibir tampoco se descuenta del
+                    // tope: curar contra una Torre llena no gastó nada.
+                    int antes = Tower.Hp;
+                    Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + cura);
+
+                    _curaVampirismoOleada += Tower.Hp - antes;
                     _ultimaCuraPorClase[defensor.DefenderClass] = Tick;
                 }
 
                 return;
+            }
 
             case WeaponAbility.Greed:
                 // El oro extra se cobra en la fase de muertes, cuando se sepa si
@@ -2130,13 +2575,18 @@ public sealed class Run
                 // marcada para siempre, un tanque golpeado una vez era alcancía
                 // aunque lo matara otro, minutos después.
                 //
-                // ⚠ Codicia NO lleva topes de oro, al revés que el perk Saqueo:
-                // es una habilidad de arma legendaria, o sea el premio de una
-                // corrida entera. Saqueo hace lo mismo más chico y por eso paga el
-                // precio de los dos techos.
+                // ⚠ CODICIA AHORA SÍ LLEVA TOPES. La economía tiene realimentación
+                // positiva —más oro, más defensores, más kills, más oro— así que
+                // una habilidad económica sin techo no es fuerte: es la única
+                // build. Sigue siendo mejor que el perk Saqueo, como corresponde a
+                // una legendaria, pero ya no puede duplicar la economía de una
+                // oleada entera.
+                //
+                // Los dos topes hacen falta juntos: sin el de oleada, sesenta
+                // bichos marcados pagan sesenta veces el tope individual.
                 objetivo.ExtraGoldPercent = stats.AbilityMagnitude;
-                objetivo.ExtraGoldMax = 0;
-                objetivo.ExtraGoldWaveCap = 0;
+                objetivo.ExtraGoldMax = _datos.Combat.Weapons.GreedMaxExtraPerEnemy;
+                objetivo.ExtraGoldWaveCap = _datos.Combat.Weapons.GreedMaxExtraPerWave;
                 objetivo.ExtraGoldExpiryTick = Tick + _datos.Combat.Weapons.GreedMarkDurationTicks;
                 return;
 
@@ -2294,14 +2744,27 @@ public sealed class Run
     }
 
     /// <summary>
-    /// A quién le pega un defensor: <b>al más adelantado que tenga en alcance</b>.
+    /// A quién le pega un defensor, según su <see cref="Defender.Targeting"/>.
     /// </summary>
     /// <remarks>
-    /// Empate por <see cref="Enemigo.IdSpawn"/> menor. Los empates son
-    /// frecuentes —dos bichos iguales spawneados con un tick de diferencia van
-    /// juntos toda la ruta— así que sin una regla explícita el objetivo lo
-    /// decidiría el orden de la lista, que es justo lo que no puede decidir
-    /// nada.
+    /// <para><b>Es la mecánica de más profundidad por menos complejidad del
+    /// género</b>, y no toca una sola estadística: cambia tácticamente el
+    /// resultado con los mismos números. Un cazador con Concentración en «más
+    /// fuerte» se pega a tanques y jefes y acumula stacks; un asesino con
+    /// Oportunista en «menos HP» se vuelve un rematador; un paladín con Guardia
+    /// del Umbral en «más cerca de la Torre» contiene filtraciones.</para>
+    ///
+    /// <para>El de siempre —<see cref="TargetingMode.First"/>, el más adelantado—
+    /// sigue siendo el valor por defecto, así que un defensor puesto y nunca
+    /// tocado se comporta exactamente igual que antes.</para>
+    ///
+    /// <para>⚠ <b>El desempate es por <see cref="Enemy.SpawnId"/> menor en los
+    /// cuatro modos.</b> Los empates son frecuentísimos —dos bichos iguales
+    /// spawneados con un tick de diferencia van juntos toda la ruta y tienen el
+    /// mismo HP— así que sin una regla explícita el objetivo lo decidiría el orden
+    /// de la lista, que es justo lo que no puede decidir nada. Como los candidatos
+    /// vienen en orden de spawn y solo se reemplaza con <c>&gt;</c> estricto, el
+    /// que llegó primero se queda: <b>no hacer nada ES la regla</b>.</para>
     /// </remarks>
     private Enemy? ElegirObjetivo(Defender defensor, int alcanceMilesimas)
     {
@@ -2319,6 +2782,7 @@ public sealed class Run
             defensor.Cell, Ints.ThousandthsToCellsUp(alcanceMilesimas), _candidatos);
 
         Enemy? mejor = null;
+        long mejorPuntaje = 0;
 
         foreach (int i in _candidatos)
         {
@@ -2334,16 +2798,58 @@ public sealed class Run
             if (d2 > alcanceCuadrado)
                 continue;
 
-            if (mejor is null || e.DistanceTravelled > mejor.DistanceTravelled)
+            long puntaje = PuntajeDeObjetivo(defensor.Targeting, e, celda);
+
+            if (mejor is null || puntaje > mejorPuntaje)
             {
                 mejor = e;
+                mejorPuntaje = puntaje;
             }
-            // El empate se resuelve por id de spawn menor. Como los candidatos
-            // vienen en orden de spawn, el que llegó primero es el que ya está en
-            // `mejor`: no hacer nada ES la regla.
         }
 
         return mejor;
+    }
+
+    /// <summary>
+    /// Cuánto «quiere» este modo a este enemigo. <b>Más alto gana.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>Un solo número y una sola comparación para los cuatro modos, en vez
+    /// de cuatro bucles casi iguales: así el desempate por id de spawn está
+    /// escrito una vez, y agregar un quinto modo no puede olvidarse de él.</para>
+    ///
+    /// <para>Los dos modos «menos» se invierten con una resta en vez de comparar
+    /// al revés, por lo mismo. Todo <c>long</c> y todo entero: el HP llega a
+    /// millones en la escala interna y la distancia al cuadrado en milésimas pasa
+    /// holgadamente de <c>int</c>.</para>
+    /// </remarks>
+    private long PuntajeDeObjetivo(TargetingMode modo, Enemy e, Cell celda)
+    {
+        switch (modo)
+        {
+            case TargetingMode.Strongest:
+                return e.Hp;
+
+            case TargetingMode.Weakest:
+                // Invertido con una resta: el de menos vida saca el puntaje más
+                // alto, y el empate lo sigue resolviendo el orden de spawn.
+                return long.MaxValue - e.Hp;
+
+            case TargetingMode.NearestTower:
+            {
+                // ⚠ NO es lo mismo que Primero. Aquel mide avance sobre la ruta;
+                // esto mide distancia a la Torre en el mapa. En un layout que
+                // serpentea, el tramo final puede pasar al lado de uno temprano y
+                // los dos modos eligen enemigos distintos.
+                long d2 = Ints.SquaredDistance(
+                    celda.X, celda.Y, Tower.Cell.X, Tower.Cell.Y);
+
+                return long.MaxValue - d2;
+            }
+
+            default:
+                return e.DistanceTravelled;
+        }
     }
 
     // =========================================================================
@@ -2747,6 +3253,11 @@ public sealed class Run
         if (!Tower.Standing)
         {
             State = RunState.Lost;
+
+            // El oro sin gastar al morir es la métrica que más veces mintió: sin
+            // desglose no dice si sobra oro, si los precios están mal o si no había
+            // nada que valiera la pena comprar.
+            Metrics.GoldAtEnd = Gold;
             return;
         }
 
@@ -2760,6 +3271,7 @@ public sealed class Run
             // ⚠ Se gana matando al jefe de la 100, no "sobreviviendo". La
             // corrida TERMINA acá: no hay modo sin fin y no hay área 9.
             State = RunState.Won;
+            Metrics.GoldAtEnd = Gold;
             return;
         }
 
@@ -2844,7 +3356,50 @@ public sealed class Run
         var receta = Balance.RecipeOf(Wave + 1, _datos);
         _oleadaArmada = WaveBuilder.Armar(receta, _rng, _datos);
 
-        Shop.Refresh(Wave + 1, Roster, Backpack, _rng, _datos);
+        // ⚠ LA TIENDA YA NO SE RENUEVA TODAS LAS OLEADAS: abre cada
+        // «intervalWaves», junto a la pantalla de elección. Son unas 33 tiendas en
+        // una corrida completa en vez de 100.
+        //
+        // No es un recorte de contenido: es lo que pone las dos decisiones a
+        // competir. La elección da poder gratis y la tienda lo cobra, y con la
+        // tienda abriendo todas las oleadas el jugador nunca tenía que decidir
+        // entre las dos — siempre había otra tienda a una oleada de distancia.
+        //
+        // ⚠ SE MIRA LA OLEADA QUE SE ACABA DE LIMPIAR, no la que viene.
+        //
+        // La elección periódica dispara en FaseChequeos cuando la oleada limpiada
+        // es múltiplo de «wavesBetweenChoices», y recién en el tick siguiente se
+        // llega acá a armar la preparación. Preguntar por `Wave + 1` abría la
+        // tienda una oleada ANTES —al terminar la 2, la 5, la 8— y las dos
+        // decisiones dejaban de caer juntas, que es el punto entero de la mecánica.
+        //
+        // Y tenía una consecuencia peor: el stock quedaba vivo mientras la
+        // elección contrataba una clase, así que una oferta de «reclutar Cazador»
+        // podía sobrevivir a que el jugador ya tuviera Cazador. Comprarla rebota
+        // sin marcarse vendida, y un bot que reintenta con el reloj congelado
+        // se cuelga para siempre. Medido: `--balance 24` sin terminar en 30 minutos.
+        _tiendaAbierta = _datos.Curves.Shop.OpensAt(Wave);
+
+        if (_tiendaAbierta)
+        {
+            Metrics.GoldBeforeShopTotal += Gold;
+
+            Shop.Refresh(Wave + 1, Roster, Backpack, _planosAprendidos, _rng, _datos);
+            Metrics.CountOffers(Shop.Stock, _datos);
+
+            foreach (var oferta in Shop.Stock)
+            {
+                // Una oferta que el bolsillo alcanza a pagar es la definición
+                // operativa de «la tienda ofreció algo». Si este número se despega
+                // de ShopsVisited, la pantalla está frenando la corrida sin dar
+                // nada — que es peor que no abrirla.
+                if (oferta.Price <= Gold)
+                {
+                    Metrics.ShopsWithSomethingUsable++;
+                    break;
+                }
+            }
+        }
 
         WaitingForWaveStart = true;
     }
@@ -2869,10 +3424,37 @@ public sealed class Run
         // cuánto se puede saquear en una oleada, no en cien.
         _oroBotinOleada = 0;
 
+        // ⚠ Y con el tope de curación de Vampirismo, que es nuevo y va por lo
+        // mismo: la ventana de 30 ticks limitaba el RITMO pero no el total, así
+        // que una oleada larga con una build de cadencia seguía curando más de lo
+        // que la oleada podía bajar.
+        _curaVampirismoOleada = 0;
+
+        // Lo que quedó en el bolsillo al arrancar la oleada es lo que la tienda
+        // NO se llevó. Se mide solo en las oleadas de tienda: en las otras sería
+        // el mismo número contado tres veces.
+        //
+        // ⚠ Sale de la bandera y no de recalcular el módulo. `Wave` ya se
+        // incrementó arriba, así que la cuenta habría que hacerla contra `Wave - 1`
+        // — y ese es exactamente el tipo de desfasaje de uno que ya rompió una vez
+        // el momento en que abre la tienda.
+        if (_tiendaAbierta)
+        {
+            Metrics.GoldAfterShopTotal += Gold;
+            _tiendaAbierta = false;
+        }
+
+        // ⚠ La tienda CIERRA al lanzar la oleada. Es cuando el panel deja de verse,
+        // y dejar el stock comprable después sería que la interfaz diga una cosa y
+        // la simulación acepte otra.
+        Shop.Close();
+
         foreach (var compra in armada.Npcs)
             _porSpawnear.Enqueue(compra);
 
         _intervaloSpawn = armada.SpawnIntervalTicks;
+        _formacionOleada = armada.Formation;
+        _spawneadosEnOleada = 0;
         _bonusOroOleada = armada.BonusOro;
         _ticksParaProximoSpawn = 0;
         _oleadaArmada = null;

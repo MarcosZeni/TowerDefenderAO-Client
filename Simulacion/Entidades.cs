@@ -24,6 +24,55 @@ public enum DefenderClass
 }
 
 /// <summary>
+/// A quién le apunta un defensor cuando tiene varios en alcance.
+/// </summary>
+/// <remarks>
+/// <para><b>Es la mecánica de más profundidad por menos complejidad que existe en
+/// el género.</b> No toca una sola estadística: cambia tácticamente el resultado
+/// con los mismos números, que es exactamente lo que hacía falta para que jugar
+/// mejor se note. Bloons usa First / Last / Close / Strong desde hace años por lo
+/// mismo.</para>
+///
+/// <para>Cuatro y no diez. Con diez modos la pantalla se vuelve un menú que hay
+/// que estudiar, y la mitad no cambian nada en la práctica.</para>
+///
+/// <para>⚠ <b>Es del DEFENSOR, no de la clase.</b> Es la única cosa que no sigue
+/// la regla «todo es de la clase»: dos paladines de la misma ficha quieren
+/// targeting distinto según dónde estén parados —el de la entrada abre la oleada,
+/// el de la Torre contiene filtraciones—, y esa decisión de colocación es la
+/// mitad del valor de la mecánica. No es un stat: es memoria de esta unidad,
+/// igual que <see cref="Defender.FocusStacks"/>.</para>
+///
+/// <para>⚠ El desempate es <b>siempre</b> por <see cref="Enemy.SpawnId"/> menor,
+/// en los cuatro modos. Los empates son frecuentísimos —dos bichos iguales con un
+/// tick de diferencia van juntos toda la ruta y tienen el mismo HP— así que sin
+/// una regla explícita el objetivo lo decidiría el orden de la lista.</para>
+/// </remarks>
+public enum TargetingMode
+{
+    /// <summary>El más adelantado en la ruta. El de siempre, y el que viene por defecto.</summary>
+    First = 0,
+
+    /// <summary>El de más vida actual: tanques y jefes.</summary>
+    Strongest = 1,
+
+    /// <summary>El de menos vida actual: rematar.</summary>
+    Weakest = 2,
+
+    /// <summary>
+    /// El que esté físicamente más cerca de la Torre.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>No es lo mismo que <see cref="First"/>.</b> Primero mide avance sobre
+    /// la ruta; esto mide distancia a la Torre en el mapa. En un layout que
+    /// serpentea, el tramo final puede pasar al lado de un tramo temprano, y ahí
+    /// los dos modos eligen enemigos distintos. Es el modo para contener
+    /// filtraciones.
+    /// </remarks>
+    NearestTower = 3,
+}
+
+/// <summary>
 /// Un enemigo caminando la ruta.
 /// </summary>
 /// <remarks>
@@ -231,9 +280,78 @@ public sealed class Enemy
     /// </remarks>
     public int ExtraGoldWaveCap { get; set; }
 
+    // -------------------------------------------------------------------------
+    //  Los tres rasgos: enfurecer, impulsivo y líder
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ NINGUNO DA DAÑO EXTRA, y ninguno cura, teletransporta, se vuelve inmune
+    //  ni destruye defensores. Los tres hacen lo mismo: mueven la VELOCIDAD, que
+    //  es el único eje que hace más urgente un tramo sin volverlo impredecible.
+    //  Un enemigo que además pega más fuerte al enfurecer convierte una
+    //  filtración en una derrota instantánea que el jugador no tenía cómo prever.
+
+    /// <summary>
+    /// Rasgo de tropa: al bajar del umbral de vida acelera, <b>una sola vez</b>.
+    /// </summary>
+    /// <remarks>
+    /// Lo decide el armador de la oleada y se paga del presupuesto, igual que los
+    /// buffs de vida y velocidad. Tiene varias respuestas —Oportunista, concentrar
+    /// fuego, slow, burst, defensa cerca de la Torre— así que no es un enemigo
+    /// «lock-and-key»: la recomendación de Defender's Quest es justamente evitar
+    /// los bichos que admiten una única respuesta correcta.
+    /// </remarks>
+    public bool Impulsive { get; init; }
+
+    /// <summary>
+    /// Rasgo de tropa: le da un aura de velocidad a los que van cerca por ruta.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>El aura muere con él.</b> Eso es lo que lo vuelve un objetivo
+    /// prioritario sin agregar una sola resistencia ni inmunidad: matarlo primero
+    /// frena a todo el grupo.
+    /// </remarks>
+    public bool Leader { get; init; }
+
+    /// <summary>Ya disparó el acelerón. Vale para impulsivo y para el enfurecer del jefe.</summary>
+    public bool SpeedTraitFired { get; set; }
+
+    /// <summary>
+    /// Acelerón temporal activo, en puntos porcentuales. Lo vence la fase 3.
+    /// </summary>
+    /// <remarks>
+    /// Impulsivo lo deja permanente —<see cref="TraitSpeedExpiryTick"/> en
+    /// <c>int.MaxValue</c>—; el enfurecer del jefe lo deja por unos ticks. Es el
+    /// mismo campo porque son el mismo efecto con distinta duración, y dos campos
+    /// separados serían dos lugares donde olvidarse de sumar uno.
+    /// </remarks>
+    public int TraitSpeedPercent { get; set; }
+
+    public int TraitSpeedExpiryTick { get; set; }
+
+    /// <summary>
+    /// Aura de velocidad recibida de un Líder cercano, en puntos porcentuales.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>No apila</b>, igual que todos los estados del juego: gana la potencia
+    /// más fuerte. Sin la regla, tres líderes juntos son un +30% que ningún número
+    /// del catálogo anticipa. La recalcula la fase 3 desde cero en cada tick, así
+    /// que no hace falta vencerla: si el líder murió, el aura ya no está.
+    /// </remarks>
+    public int LeaderAuraPercent { get; set; }
+
     public bool Alive => Hp > 0;
 
-    public int EffectiveSpeed => Ints.WithPercents(Speed, ExtraSpeedPerk - SlowPercent);
+    /// <summary>
+    /// La velocidad con la que camina este tick.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Todos los aportes se suman <b>antes</b> de multiplicar, por
+    /// <see cref="Ints.WithPercents"/>: aplicarlos de a uno perdería una fracción
+    /// en cada división y dos enemigos con los mismos efectos en distinto orden
+    /// caminarían distinto.
+    /// </remarks>
+    public int EffectiveSpeed => Ints.WithPercents(
+        Speed, ExtraSpeedPerk + TraitSpeedPercent + LeaderAuraPercent - SlowPercent);
 
     /// <summary>¿Está inmovilizado ahora?</summary>
     public bool Rooted(int tick) => tick < RootedUntilTick;
@@ -318,6 +436,22 @@ public sealed class Defender
     public int CadenceBuffPercent { get; set; }
 
     public int CadenceBuffExpiryTick { get; set; }
+
+    /// <summary>
+    /// A quién le apunta cuando tiene varios en alcance.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es lo único del defensor que el jugador elige y que no es de la
+    /// clase.</b> Y tiene que serlo: dos paladines de la misma ficha quieren
+    /// targeting distinto según dónde estén parados —el de la entrada abre la
+    /// oleada, el de la Torre contiene filtraciones—, y esa decisión de colocación
+    /// es la mitad del valor de la mecánica.</para>
+    ///
+    /// <para>Arranca en <see cref="TargetingMode.First"/>, que es lo que hacía el
+    /// juego antes de que el modo existiera: un defensor puesto y nunca tocado se
+    /// comporta exactamente igual que siempre.</para>
+    /// </remarks>
+    public TargetingMode Targeting { get; set; } = TargetingMode.First;
 
     /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la

@@ -465,8 +465,19 @@ public static class CorredorHeadless
         BalanceDe(corridas, Politica.Techo);
 
         GD.Print("");
-        GD.Print("── Objetivos de Resumen_Balance ────────────────────");
-        GD.Print("   bot/piso 30-40 · competente 60-75 · build optimizada 90-100");
+        GD.Print("── Objetivos ───────────────────────────────────────");
+
+        // ⚠ Los objetivos de techo BAJARON, y no es una rendición: es lo que se
+        // busca DESPUÉS de la tienda rotativa y del targeting, antes de recalibrar
+        // las áreas 7 y 8. Medido antes de esos dos sistemas, normal daba 66 y
+        // techo 67 — o sea que jugar mejor no pagaba nada, y ese era el problema
+        // real, no que el techo no llegara a 100.
+        //
+        // La meta inmediata es SEPARACIÓN: piso 34-40, normal 63-72, techo 75-85.
+        // Recién con techo claramente arriba de normal tiene sentido recalibrar
+        // las dos últimas áreas para que una build excelente llegue a 90-100.
+        GD.Print("   piso 34-40 · normal 63-72 · techo 75-85");
+        GD.Print("   lo que importa es la DISTANCIA techo-normal: si es <5, jugar mejor no paga");
     }
 
     private static void BalanceDe(int corridas, Politica politica)
@@ -483,10 +494,17 @@ public static class CorredorHeadless
         int suma = 0, peor = int.MaxValue, mejor = 0;
         int sumaOro = 0, peorOro = int.MaxValue, mejorOro = 0;
 
+        // Las métricas de todas las corridas, sumadas. Se reportan al final: el
+        // porcentaje de compra de una sola corrida es ruido, el de veinticuatro es
+        // una medición.
+        var total = new RunMetrics();
+
         for (int i = 0; i < corridas; i++)
         {
             ulong seed = (ulong)(i + 1) * 2_654_435_761UL;
             var r = Correr(seed, ConAcciones(seed), politica);
+
+            Acumular(total, r.Metrics);
 
             suma += r.Wave;
             if (r.Wave < peor) peor = r.Wave;
@@ -514,9 +532,145 @@ public static class CorredorHeadless
         // ⚠ En «piso» este número NO mide la economía: esa política no compra
         // nada, así que lo que reporta es cuánto ingresa, no cuánto sobra.
         GD.Print($"── {nombre} · oro sin gastar:  peor {peorOro} · media {sumaOro / corridas} · mejor {mejorOro} ──");
+
+        ReportarTienda(nombre, total, corridas);
     }
 
-    internal readonly record struct Resultado(int Ticks, int Wave, int HpTorre, int Gold, RunState State, int Defenders, int ClasesRoster, int Backpack);
+    /// <summary>Suma las métricas de una corrida al acumulado de la política.</summary>
+    private static void Acumular(RunMetrics total, RunMetrics una)
+    {
+        total.ShopsVisited += una.ShopsVisited;
+        total.ShopsWithSomethingUsable += una.ShopsWithSomethingUsable;
+        total.GoldBeforeShopTotal += una.GoldBeforeShopTotal;
+        total.GoldAfterShopTotal += una.GoldAfterShopTotal;
+        total.GoldAtEnd += una.GoldAtEnd;
+
+        total.OffersClass += una.OffersClass;
+        total.OffersBronze += una.OffersBronze;
+        total.OffersSilver += una.OffersSilver;
+        total.OffersGold += una.OffersGold;
+        total.OffersBlueprint += una.OffersBlueprint;
+        total.OffersWeapon += una.OffersWeapon;
+
+        total.BoughtClass += una.BoughtClass;
+        total.BoughtBronze += una.BoughtBronze;
+        total.BoughtSilver += una.BoughtSilver;
+        total.BoughtGold += una.BoughtGold;
+        total.BoughtBlueprint += una.BoughtBlueprint;
+        total.BoughtWeapon += una.BoughtWeapon;
+
+        total.GoldSpentClasses += una.GoldSpentClasses;
+        total.GoldSpentBronze += una.GoldSpentBronze;
+        total.GoldSpentSilver += una.GoldSpentSilver;
+        total.GoldSpentGoldPerks += una.GoldSpentGoldPerks;
+        total.GoldSpentBlueprints += una.GoldSpentBlueprints;
+        total.GoldSpentWeapons += una.GoldSpentWeapons;
+        total.GoldSpentLevels += una.GoldSpentLevels;
+        total.GoldSpentDefenders += una.GoldSpentDefenders;
+
+        total.GoldPerksObtained += una.GoldPerksObtained;
+        total.UniquesCrafted += una.UniquesCrafted;
+        total.WaveOfFirstUnique += una.WaveOfFirstUnique;
+
+        total.SecondaryDamage += una.SecondaryDamage;
+        total.OverkillDamage += una.OverkillDamage;
+        total.TowerDamageTaken += una.TowerDamageTaken;
+
+        for (int i = 0; i < total.DamageByClass.Length; i++)
+        {
+            total.DamageByClass[i] += una.DamageByClass[i];
+            total.KillsByClass[i] += una.KillsByClass[i];
+        }
+    }
+
+    /// <summary>
+    /// El desglose de la tienda y de a dónde se fue el oro.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>«Terminó con 12.000 sin gastar» no dice nada solo.</b> Con la
+    /// tienda rotativa el oro compra poder horizontal —clases—, vertical —perks— y
+    /// habilitadores de build —planos—, así que sin desglose no se sabe si sobra
+    /// oro, si los precios están mal, o si no había nada que valiera la pena.</para>
+    ///
+    /// <para>Los porcentajes de compra son la señal principal. Los rangos que el
+    /// diseño busca: Bronce 40-65%, Plata 25-50%, Oro 15-35%, Plano 10-30%. Un Oro
+    /// comprado el 90% de las veces está demasiado barato; el 3%, demasiado caro o
+    /// demasiado temprano.</para>
+    ///
+    /// <para>Y el reparto del gasto: defensores + niveles 50-65%, perks 20-30%,
+    /// planos 5-10%. Los dos extremos que hay que evitar son el 90% en perks —poner
+    /// defensores dejó de competir— y el 2% —la tienda es decorativa—.</para>
+    /// </remarks>
+    private static void ReportarTienda(string nombre, RunMetrics m, int corridas)
+    {
+        if (m.ShopsVisited == 0)
+        {
+            GD.Print($"── {nombre} · tienda: no se abrió ninguna ──");
+            return;
+        }
+
+        static int Porc(int comprados, int ofrecidos)
+            => ofrecidos == 0 ? 0 : comprados * 100 / ofrecidos;
+
+        GD.Print($"── {nombre} · tienda ────────────────────────────────");
+        GD.Print($"   {m.ShopsVisited / corridas} tiendas por corrida · " +
+                 $"{Porc(m.ShopsWithSomethingUsable, m.ShopsVisited)}% con algo pagable · " +
+                 $"oro medio al abrir {m.GoldBeforeShopTotal / m.ShopsVisited} → " +
+                 $"al cerrar {m.GoldAfterShopTotal / m.ShopsVisited}");
+
+        GD.Print($"   ofertas/compras   clase {m.BoughtClass}/{m.OffersClass} ({Porc(m.BoughtClass, m.OffersClass)}%) · " +
+                 $"bronce {m.BoughtBronze}/{m.OffersBronze} ({Porc(m.BoughtBronze, m.OffersBronze)}%) · " +
+                 $"plata {m.BoughtSilver}/{m.OffersSilver} ({Porc(m.BoughtSilver, m.OffersSilver)}%)");
+
+        GD.Print($"                     oro {m.BoughtGold}/{m.OffersGold} ({Porc(m.BoughtGold, m.OffersGold)}%) · " +
+                 $"plano {m.BoughtBlueprint}/{m.OffersBlueprint} ({Porc(m.BoughtBlueprint, m.OffersBlueprint)}%) · " +
+                 $"arma {m.BoughtWeapon}/{m.OffersWeapon} ({Porc(m.BoughtWeapon, m.OffersWeapon)}%)");
+        GD.Print("   objetivo: bronce 40-65% · plata 25-50% · oro 15-35% · plano 10-30%");
+
+        long gastado = m.GoldSpentClasses + m.GoldSpentBronze + m.GoldSpentSilver
+                       + m.GoldSpentGoldPerks + m.GoldSpentBlueprints + m.GoldSpentWeapons
+                       + m.GoldSpentLevels + m.GoldSpentDefenders;
+
+        if (gastado > 0)
+        {
+            long perks = m.GoldSpentBronze + m.GoldSpentSilver + m.GoldSpentGoldPerks;
+            long tablero = m.GoldSpentDefenders + m.GoldSpentLevels;
+
+            GD.Print($"   gasto             tablero+niveles {tablero * 100 / gastado}% · " +
+                     $"perks {perks * 100 / gastado}% · " +
+                     $"planos {m.GoldSpentBlueprints * 100 / gastado}% · " +
+                     $"clases {m.GoldSpentClasses * 100 / gastado}% · " +
+                     $"armas {m.GoldSpentWeapons * 100 / gastado}%");
+            GD.Print("   objetivo: tablero+niveles 50-65% · perks 20-30% · planos 5-10%");
+        }
+
+        // ⚠ Ocho Oro y cero Únicos quiere decir que la fusión existe y no se juega.
+        // La oleada del primer Único dice si la composición llega a tiempo: en la
+        // 90 el sistema existe pero no se juega; en la 20, llega demasiado fácil.
+        int conUnico = m.UniquesCrafted > 0 ? m.WaveOfFirstUnique / System.Math.Max(1, m.UniquesCrafted) : 0;
+
+        GD.Print($"   build             {m.GoldPerksObtained / corridas} Oro por corrida · " +
+                 $"{m.UniquesCrafted} Únicos en {corridas} corridas · " +
+                 $"primer Único ~oleada {conUnico}");
+
+        // Si el secundario se acerca al directo, los comportamientos dejaron de ser
+        // condimento y pasaron a ser la fuente de daño: es el síntoma de un tope
+        // mal puesto, y es exactamente lo que le pasaba a Cadena.
+        long directo = 0;
+
+        foreach (long d in m.DamageByClass)
+            directo += d;
+
+        if (directo > 0)
+        {
+            GD.Print($"   daño              secundario {m.SecondaryDamage * 100 / directo}% del directo · " +
+                     $"overkill {m.OverkillDamage * 100 / directo}%");
+        }
+    }
+
+    internal readonly record struct Resultado(
+        int Ticks, int Wave, int HpTorre, int Gold, RunState State,
+        int Defenders, int ClasesRoster, int Backpack, RunMetrics Metrics);
 
     /// <summary>
     /// Corre una sola corrida contando lo que pasa adentro.
@@ -566,7 +720,7 @@ public static class CorredorHeadless
                 //
                 // Se arranca la oleada recién cuando no queda nada por hacer.
                 bool puso = ColocarUnoEnPreparacion(partida, log, pendientes, Politica.Normal);
-                bool compro = !puso && ComprarLoQuePueda(partida, log);
+                bool compro = !puso && ComprarLoQuePueda(partida, log, Politica.Normal);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
@@ -751,19 +905,34 @@ public static class CorredorHeadless
                 bool fusiono = !puso && politica == Politica.Techo
                                && FusionarSiPuede(partida, log);
 
-                bool compro = !puso && !fusiono && avanzado && ComprarLoQuePueda(partida, log);
+                bool compro = !puso && !fusiono && avanzado && ComprarLoQuePueda(partida, log, politica);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
                 bool libero = !puso && !fusiono && !compro && avanzado
                               && LiberarMochila(partida, log);
 
+                // ⚠ Las dos decisiones que no cuestan oro van ANTES del sumidero,
+                // y solo en el techo: targeting y comportamiento activo son
+                // exactamente lo que separa jugar bien de jugar, y si las tres
+                // políticas las usaran, las tres cotas medirían lo mismo y las dos
+                // mecánicas no aparecerían en la medición.
+                //
+                // Gratis, así que no compiten con nada: van antes de gastar.
+                bool apunto = !puso && !fusiono && !compro && !libero
+                              && politica == Politica.Techo
+                              && AjustarTargeting(partida, log);
+
+                bool eligio = !puso && !fusiono && !compro && !libero && !apunto
+                              && politica == Politica.Techo
+                              && ElegirComportamiento(partida, log);
+
                 // Último: el sumidero del sobrante. Poner un defensor más siempre
                 // vale más que un nivel comprado.
-                bool subio = !puso && !fusiono && !compro && !libero && avanzado
-                             && SubirNivelSiSobra(partida, log);
+                bool subio = !puso && !fusiono && !compro && !libero && !apunto && !eligio
+                             && avanzado && SubirNivelSiSobra(partida, log);
 
-                if (!puso && !fusiono && !compro && !libero && !subio)
+                if (!puso && !fusiono && !compro && !libero && !apunto && !eligio && !subio)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -814,9 +983,16 @@ public static class CorredorHeadless
             partida.Advance();
         }
 
+        // Una corrida que se corta contra el techo de ticks nunca pasó por
+        // FaseChequeos con un estado terminal, así que el oro final quedaría en 0
+        // y arrastraría el promedio hacia abajo sin que nadie lo note.
+        if (partida.Metrics.GoldAtEnd == 0)
+            partida.Metrics.GoldAtEnd = partida.Gold;
+
         return new Resultado(
             partida.Tick, partida.Wave, partida.Tower.Hp, partida.Gold, partida.State,
-            partida.Defenders.Count, partida.Roster.Classes.Count, partida.Backpack.Ocupados);
+            partida.Defenders.Count, partida.Roster.Classes.Count, partida.Backpack.Ocupados,
+            partida.Metrics);
     }
 
     /// <summary>
@@ -1157,16 +1333,40 @@ public static class CorredorHeadless
     /// estado que mira siempre es el de después de aplicar la anterior.</para>
     /// </remarks>
     /// <summary>
-    /// ¿Quedan al menos tres lugares en la mochila?
+    /// ¿Este Oro conviene <b>guardarlo</b> en vez de equiparlo? Solo para el techo.
     /// </summary>
     /// <remarks>
-    /// Es la válvula del techo, que guarda los Oro esperando la pareja de una
-    /// receta. Guardar sin límite termina con la mochila trabada de Oro, y una
-    /// mochila trabada apaga la tienda: se dejan de comprar perks y armas a cambio
-    /// de esperar una receta que puede no salir.
+    /// <para>⚠ <b>Un Oro equipado ya no se puede fusionar</b>: <c>Run.Fuse</c> toma
+    /// índices de mochila, y sacarlo del slot lo destruye. Así que equipar el
+    /// primer Oro que cae es renunciar a la mitad de una receta sin decirlo.</para>
+    ///
+    /// <para>La regla vieja era la presión de mochila —guardar mientras hubiera 3
+    /// lugares libres—, y se rompió cuando la tienda empezó a llenar la mochila:
+    /// con el bolso siempre apretado, todos los Oro se equipaban al instante y
+    /// <b>ninguna corrida fabricaba un solo Único</b>. Medido: 0 en 24 corridas.</para>
+    ///
+    /// <para>La regla nueva es la que usaría alguien que persigue una receta:
+    /// <b>guardar el Oro que es media receta conocida y cuya pareja todavía no
+    /// tiene; equipar el que no le sirve a ninguna</b>. Un Oro que no participa en
+    /// nada rinde más puesto en una clase que esperando en el bolso.</para>
+    ///
+    /// <para>Queda la válvula de siempre para que la mochila no se trabe del todo:
+    /// sin ningún lugar libre se equipa igual, porque una mochila trabada apaga la
+    /// tienda y no compra nada a cambio.</para>
     /// </remarks>
-    private static bool HayLugarDeSobra(Run partida)
-        => CargadorDatos.Actual.Curves.Defenders.BackpackSlots - partida.Backpack.Ocupados >= 3;
+    private static bool GuardarloParaFusionar(Run partida, int idPerk)
+    {
+        if (partida.Backpack.Ocupados >= CargadorDatos.Actual.Curves.Defenders.BackpackSlots)
+            return false;
+
+        foreach (var plano in CargadorDatos.Actual.Blueprints.All)
+        {
+            if (plano.GoldA == idPerk || plano.GoldB == idPerk)
+                return true;
+        }
+
+        return false;
+    }
 
     private static void EquiparLoQuePueda(Run partida, ActionLog log, Politica politica)
     {
@@ -1190,8 +1390,11 @@ public static class CorredorHeadless
                 // La válvula es la presión de mochila: con dos lugares o menos se
                 // equipan igual, porque una mochila trabada de Oro apaga la tienda
                 // y no compra nada a cambio.
-                if (politica == Politica.Techo && def.Tier == PerkTier.Gold && HayLugarDeSobra(partida))
+                if (politica == Politica.Techo && def.Tier == PerkTier.Gold
+                    && GuardarloParaFusionar(partida, def.Id))
+                {
                     continue;
+                }
 
                 var destino = DondeEquipar(partida, def, politica);
 
@@ -1449,23 +1652,193 @@ public static class CorredorHeadless
     /// eso se puede agregar a la política sin correr la secuencia y sin invalidar
     /// nada de lo que la revalidación reproduce.</para>
     /// </remarks>
-    private static bool ComprarLoQuePueda(Run partida, ActionLog log)
+    private static bool ComprarLoQuePueda(Run partida, ActionLog log, Politica politica)
     {
-        // ⚠ Con la mochila llena no se compra NADA, y no es una optimización: la
-        // compra rebota sin gastar oro, la oferta sigue en el stock y sigue
-        // siendo accesible, así que el bucle de preparación la volvería a
-        // encolar para siempre. La corrida se colgaría con el reloj congelado.
-        if (partida.Backpack.Ocupados >= CargadorDatos.Actual.Curves.Defenders.BackpackSlots)
-            return false;
-
         var stock = partida.Shop.Stock;
+        bool mochilaLlena = partida.Backpack.Ocupados >= CargadorDatos.Actual.Curves.Defenders.BackpackSlots;
+
+        // ⚠ EL TECHO COMPRA POR PRIORIDAD, NO POR ÍNDICE, y esa es una de las
+        // cosas que lo separan de `normal`.
+        //
+        // Comprar la primera oferta que entre en el bolsillo es lo que haría
+        // alguien que no mira: con la mochila llena la mitad del tiempo, el Oro
+        // —que sale una vez cada tres o cuatro tiendas— se pierde porque para
+        // cuando el bucle llega a esa ranura ya no queda lugar. Medido: el techo
+        // compraba 0 de 13 Oro ofrecidos, y fabricaba cero Únicos.
+        //
+        // Ordenar por lo que vale hace lo que haría un jugador que sí mira: el Oro
+        // primero, el plano después, y el Bronce recién cuando no hay nada mejor.
+        int mejor = -1;
+        int mejorPrioridad = int.MinValue;
 
         for (int i = 0; i < stock.Count; i++)
         {
             if (stock[i].Sold || stock[i].Price > partida.Gold)
                 continue;
 
-            log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.Buy, i, 0, 0));
+            // ⚠ Solo dos de las cuatro categorías necesitan lugar de mochila.
+            // Reclutar toca el roster y aprender un plano toca el conocimiento de
+            // la corrida, así que con la mochila llena esas dos SIGUEN siendo
+            // comprables — y a esa altura son justamente en lo que conviene gastar.
+            //
+            // Pero perks y armas rebotan sin gastar oro, y una acción que rebota no
+            // saca la oferta del stock: el bucle de preparación la volvería a
+            // encolar para siempre y la corrida se colgaría con el reloj congelado.
+            bool necesitaMochila = stock[i].Kind is ShopKind.Perk or ShopKind.Weapon;
+
+            if (necesitaMochila && mochilaLlena)
+                continue;
+
+            // ⚠ Las dos que rebotarían también se saltean acá, y no es paranoia:
+            // una acción que rebota NO marca la oferta como vendida, así que el
+            // bucle de preparación —con el reloj congelado— la volvería a encolar
+            // para siempre y la corrida no terminaría nunca.
+            //
+            // Un plano ya conocido: la tienda no lo ofrece, pero el techo arranca
+            // con los nueve aprendidos. Una clase ya reclutada: la tienda tampoco
+            // la ofrece, pero el chequeo queda igual — es la misma trampa que ya
+            // colgó una medición de 24 corridas, y la próxima política que se
+            // escriba no tiene por qué acordarse.
+            if (stock[i].Kind == ShopKind.Blueprint && partida.ConocePlano(stock[i].Id))
+                continue;
+
+            if (stock[i].Kind == ShopKind.Class && partida.Roster.Has((DefenderClass)stock[i].Id))
+                continue;
+
+            // ⚠ Un plano cuyas DOS piezas faltan es oro tirado, y encima distorsiona
+            // la medición: el bot compraba el 90% de los planos ofrecidos contra un
+            // objetivo de 10-30%, y ese 90% no medía el precio sino que el bot
+            // compraba lo primero que veía. Un plano se compra cuando ya se tiene
+            // una de sus mitades, que es cuando la apuesta tiene sentido.
+            if (stock[i].Kind == ShopKind.Blueprint && !MediaRecetaEnMano(partida, stock[i].Id))
+                continue;
+
+            int prioridad = politica == Politica.Techo ? Prioridad(stock[i]) : -i;
+
+            if (prioridad > mejorPrioridad)
+            {
+                mejorPrioridad = prioridad;
+                mejor = i;
+            }
+        }
+
+        if (mejor < 0)
+            return false;
+
+        log.Agregar(new PlayerAction(partida.TickDeAccion, ActionType.Buy, mejor, 0, 0));
+        return true;
+    }
+
+    /// <summary>
+    /// Cuánto vale una oferta para el techo. <b>Más alto se compra primero.</b>
+    /// </summary>
+    /// <remarks>
+    /// El orden sale de cuán escaso es lo que se compra, no de cuánto cuesta. El
+    /// Oro aparece una vez cada tres o cuatro tiendas y es la entrada a los Únicos;
+    /// el Bronce sale en casi todas y siempre va a haber otro.
+    /// </remarks>
+    private static int Prioridad(ShopOffer oferta) => oferta.Kind switch
+    {
+        ShopKind.Blueprint => 40,
+        ShopKind.Class => 20,
+        ShopKind.Weapon => 10,
+        _ => CargadorDatos.Actual.Perks.Get(oferta.Id).Tier switch
+        {
+            PerkTier.Bronze => 15,
+            PerkTier.Silver => 25,
+            _ => 50,
+        },
+    };
+
+    /// <summary>¿El jugador ya tiene una de las dos piezas de este plano?</summary>
+    private static bool MediaRecetaEnMano(Run partida, int indicePlano)
+    {
+        var todos = CargadorDatos.Actual.Blueprints.All;
+
+        if (indicePlano < 0 || indicePlano >= todos.Count)
+            return false;
+
+        var plano = todos[indicePlano];
+
+        return Tiene(partida, plano.GoldA) || Tiene(partida, plano.GoldB);
+    }
+
+    /// <summary>
+    /// Le pone a cada defensor recién puesto el targeting que le conviene.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Solo el techo</b>. El targeting es exactamente la clase de
+    /// decisión que separa jugar bien de jugar: si piso y normal también lo usaran,
+    /// las tres cotas medirían lo mismo y la mecánica no aparecería en la
+    /// medición.</para>
+    ///
+    /// <para>La heurística son los cuatro ejemplos del análisis, y son los que
+    /// haría cualquiera mirando la ficha: el que acumula golpes al mismo objetivo
+    /// quiere el que más aguanta, el que remata quiere al más herido, el que pega
+    /// más fuerte contra los que muerden la Torre quiere al que está más cerca de
+    /// ella, y el resto se queda con el más adelantado.</para>
+    ///
+    /// <para>Devuelve <c>true</c> si emitió una acción: como todo lo demás en la
+    /// preparación, va de a una por vuelta.</para>
+    /// </remarks>
+    private static bool AjustarTargeting(Run partida, ActionLog log)
+    {
+        foreach (var d in partida.Defenders)
+        {
+            var stats = partida.Roster.StatsOf(d.DefenderClass, partida.Backpack);
+
+            var quiere = stats.Behavior switch
+            {
+                PerkEffect.Focus or PerkEffect.Perforation => TargetingMode.Strongest,
+                PerkEffect.Opportunist or PerkEffect.Apocalypse => TargetingMode.Weakest,
+                PerkEffect.ThresholdGuard or PerkEffect.WrathOfGod => TargetingMode.NearestTower,
+                _ => TargetingMode.First,
+            };
+
+            if (d.Targeting == quiere)
+                continue;
+
+            log.Agregar(new PlayerAction(
+                partida.TickDeAccion, ActionType.SetTargeting, d.PlacementId, (int)quiere, 0));
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Elige el comportamiento activo cuando la clase tiene perk <b>y</b> arma.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Solo el techo</b>, por lo mismo que el targeting: es una decisión
+    /// que separa jugar bien de jugar.</para>
+    ///
+    /// <para>La regla es una sola y es la que se justifica sola: <b>un Único gana
+    /// siempre</b>. Costó dos jefes, un plano y una fusión; la habilidad del arma
+    /// vino en un drop y la corrida siguiente trae otra. Con un Oro la decisión ya
+    /// no es obvia, así que se deja ganar al arma —que es el comportamiento por
+    /// defecto— y no se toca.</para>
+    /// </remarks>
+    private static bool ElegirComportamiento(Run partida, ActionLog log)
+    {
+        foreach (var ficha in partida.Roster.Classes)
+        {
+            if (!partida.HayConflictoDeComportamiento(ficha.DefenderClass))
+                continue;
+
+            bool tieneUnico = false;
+
+            foreach (int id in ficha.Perks)
+                tieneUnico |= CargadorDatos.Actual.Perks.Get(id).Tier == PerkTier.Unique;
+
+            if (ficha.PreferPerkBehavior == tieneUnico)
+                continue;
+
+            log.Agregar(new PlayerAction(
+                partida.TickDeAccion, ActionType.SetBehavior,
+                (int)ficha.DefenderClass, tieneUnico ? 1 : 0, 0));
+
             return true;
         }
 

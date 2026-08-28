@@ -168,6 +168,17 @@ public partial class Principal : Node2D
         // elegir. La preparación se esconde sola en ese caso.
         capaModal.AddChild(new PantallaPreparacion(juego) { Name = "Preparacion" });
 
+        // La tienda va con la preparación: se abre en la misma fase, cada tres
+        // oleadas. No es modal —el jugador tiene que poder seguir poniendo
+        // defensores mientras decide si compra— y por eso puede convivir con el
+        // panel de preparación en vez de taparlo.
+        capaModal.AddChild(new PantallaTienda(juego) { Name = "Tienda" });
+
+        // El panel del defensor seleccionado: targeting y estados de soporte. No es
+        // modal y no depende de la fase — el targeting se puede cambiar con la
+        // oleada corriendo, que es cuando se nota que hace falta.
+        capaModal.AddChild(new PantallaDefensor(juego) { Name = "Defensor" });
+
         // La elección va ÚLTIMA para quedar arriba de todo: frena la corrida y no
         // se puede cerrar sin elegir, así que nada puede taparla.
         capaModal.AddChild(new PantallaEleccion(juego) { Name = "Eleccion" });

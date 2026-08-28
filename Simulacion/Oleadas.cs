@@ -8,15 +8,39 @@ public sealed class BuiltWave
     /// <summary>Los tipos, en orden de entrada. El jefe va último.</summary>
     public required List<NpcPurchase> Npcs { get; init; }
 
-    /// <summary>Ticks entre un spawn y el siguiente.</summary>
+    /// <summary>Ticks entre un spawn y el siguiente, en promedio.</summary>
+    /// <remarks>
+    /// «En promedio» porque la formación reparte esos ticks de otra manera. Ver
+    /// <see cref="Formation"/>.
+    /// </remarks>
     public required int SpawnIntervalTicks { get; init; }
+
+    /// <summary>
+    /// Con qué forma entra: pareja, de a dos, o en ráfagas de cinco.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Conserva el promedio del intervalo</b>, así que la oleada dura lo
+    /// mismo y esto no es una palanca de dificultad. Lo que cambia es el valor
+    /// <b>relativo</b> del catálogo: en ráfaga splash, cadena y quemadura valen el
+    /// doble; en uniforme toman valor Concentración y el targeting «más fuerte».
+    /// </remarks>
+    public required SpawnFormation Formation { get; init; }
 
     /// <summary>Oro que se lleva el jugador por limpiarla.</summary>
     public required int BonusOro { get; init; }
 }
 
-/// <summary>Un NPC comprado, con los perks que le tocaron.</summary>
-public readonly record struct NpcPurchase(int TypeId, int HealthPerk, int SpeedPerk, bool IsBoss);
+/// <summary>Un NPC comprado, con los perks y rasgos que le tocaron.</summary>
+/// <param name="Impulsive">
+/// Al bajar del umbral de vida acelera, una sola vez. Ver <see cref="EnemyTraits"/>.
+/// </param>
+/// <param name="Leader">
+/// Le da un aura de velocidad a los que van cerca por ruta, y el aura muere con
+/// él: es un objetivo prioritario sin una sola resistencia ni inmunidad.
+/// </param>
+public readonly record struct NpcPurchase(
+    int TypeId, int HealthPerk, int SpeedPerk, bool IsBoss,
+    bool Impulsive = false, bool Leader = false);
 
 /// <summary>
 /// La receta de una oleada: cuánto se puede gastar y en qué.
@@ -88,6 +112,12 @@ public static class WaveBuilder
         foreach (var (tipoId, _) in receta.Allowed)
             masBarato = System.Math.Min(masBarato, Cost(tipoId, datos));
 
+        // ⚠ Tope de líderes por oleada. El aura no apila, así que diez líderes no
+        // dan +100%, pero sí garantizan que TODA la oleada tenga el aura puesta
+        // todo el tiempo — y ahí deja de ser un objetivo prioritario para volverse
+        // un +10% de velocidad global disfrazado.
+        int lideres = 0;
+
         // Regla 1: se gasta hasta que no alcance para el más barato — ahora con
         // el tope de cantidad. Lo que sobre se convierte en perks más abajo.
         while (restante >= masBarato && npcs.Count < datos.Curves.Wave.MaxNpcs)
@@ -125,7 +155,32 @@ public static class WaveBuilder
                 }
             }
 
-            npcs.Add(new NpcPurchase(tipoId, perkVida, perkVelocidad, IsBoss: false));
+            // ⚠ LOS RASGOS SE TIRAN APARTE Y SE PAGAN IGUAL. Vida y velocidad
+            // suben una estadística; impulsivo y líder cambian una SITUACIÓN, así
+            // que no comparten la tirada de arriba —si la compartieran, un bicho
+            // que gana el perk numérico nunca podría ser líder— pero sí el
+            // presupuesto, que es lo que impide que agregarlos descontrole la
+            // dificultad: una oleada con rasgos trae MENOS bichos.
+            //
+            // Chance baja y costo alto a propósito: son la sal de la oleada. Un
+            // líder en cada oleada deja de ser un objetivo prioritario y se vuelve
+            // otro número de velocidad.
+            bool impulsivo = restante >= cfg.ImpulsiveCost && rng.Happens(cfg.ImpulsiveChance);
+
+            if (impulsivo)
+                restante -= cfg.ImpulsiveCost;
+
+            bool lider = lideres < cfg.MaxLeadersPerWave
+                         && restante >= cfg.LeaderCost
+                         && rng.Happens(cfg.LeaderChance);
+
+            if (lider)
+            {
+                restante -= cfg.LeaderCost;
+                lideres++;
+            }
+
+            npcs.Add(new NpcPurchase(tipoId, perkVida, perkVelocidad, IsBoss: false, impulsivo, lider));
         }
 
         // El presupuesto que no entró en NPCs se convierte en perks sobre los ya
@@ -145,13 +200,51 @@ public static class WaveBuilder
             npcs.Add(new NpcPurchase(receta.BossTypeId, vidaExtraJefe, 0, IsBoss: true));
         }
 
+        // ⚠ LA FORMACIÓN SE SORTEA ÚLTIMO, después del jefe. Es un punto fijo de
+        // la secuencia del RNG: moverlo antes correría todas las compras de la
+        // oleada y la revalidación fallaría.
+        //
+        // Va acá y no en la receta porque no depende del presupuesto: es cómo se
+        // reparten los ticks de entrada, no cuántos bichos entran.
         return new BuiltWave
         {
             Number = receta.Number,
             Npcs = npcs,
             SpawnIntervalTicks = receta.SpawnIntervalTicks,
             BonusOro = receta.BonusOro,
+            Formation = SortearFormacion(datos.Curves.Wave.Formations, rng),
         };
+    }
+
+    /// <summary>
+    /// Con qué forma entra la oleada.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No toca HP, ni oro, ni presupuesto.</b> Las tres formas conservan
+    /// el promedio del intervalo, así que la oleada dura aproximadamente lo mismo:
+    /// no es una palanca de dificultad encubierta. El cargador lo verifica al
+    /// leer <c>curvas.json</c> y tira si algún promedio no da 100.</para>
+    ///
+    /// <para>Lo que sí cambia es el valor <b>relativo</b> del catálogo. Es la
+    /// lección de Rogue Tower: que los enemigos lleguen juntos o separados altera
+    /// qué torres sirven sin tocar una sola estadística — y esa es exactamente la
+    /// clase de profundidad que hacía falta para que jugar mejor se note.</para>
+    /// </remarks>
+    private static SpawnFormation SortearFormacion(SpawnFormations cfg, Rng rng)
+    {
+        int total = cfg.UniformWeight + cfg.PairsWeight + cfg.BurstWeight;
+
+        if (total <= 0)
+            return SpawnFormation.Uniform;
+
+        int tirada = rng.Between(0, total);
+
+        if (tirada < cfg.UniformWeight)
+            return SpawnFormation.Uniform;
+
+        return tirada < cfg.UniformWeight + cfg.PairsWeight
+            ? SpawnFormation.Pairs
+            : SpawnFormation.Burst;
     }
 
     /// <summary>
@@ -289,4 +382,17 @@ public sealed class WavePreview
 
     /// <summary>Cuántos de esos vienen buffeados. Tiene que verse.</summary>
     public int ConPerk { get; set; }
+
+    /// <summary>
+    /// Cuántos traen un <b>rasgo</b>: impulsivo o líder.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Va aparte de <see cref="ConPerk"/> y no sumado, porque no es lo mismo:
+    /// vida y velocidad suben un número que el jugador ya sabe leer, y los rasgos
+    /// cambian una situación. Un líder que se ve igual que un lobo normal es una
+    /// mecánica invisible — y la regla del proyecto es que <b>los modificadores
+    /// tienen que verse en pantalla</b>, porque un jugador que pierde contra algo
+    /// que no sabía que estaba ahí no aprende nada.
+    /// </remarks>
+    public int ConRasgo { get; set; }
 }

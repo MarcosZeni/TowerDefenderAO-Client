@@ -45,6 +45,26 @@ public sealed class RosterClass
     public int Weapon { get; set; } = -1;
 
     /// <summary>
+    /// Con arma <b>y</b> perk de comportamiento puestos, cuál de los dos manda.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La ranura de comportamiento sigue siendo UNA.</b> Esto no
+    /// permite tener los dos: permite <b>elegir</b> cuál está activo. Dejar
+    /// convivir un Oro y una habilidad de arma multiplicaría la cantidad de
+    /// combinaciones a balancear por el catálogo entero de armas.</para>
+    ///
+    /// <para><b>Los stats del arma se conservan siempre</b>, gane quien gane el
+    /// comportamiento: el +20% de daño y el +15% de cadencia no dependen de esta
+    /// decisión. Sin eso, encontrar un arma excelente se sentía como un castigo
+    /// —obligaba a apagar un Único que costó dos jefes y un plano— y el jugador la
+    /// dejaba sin equipar, que es lo peor que puede pasarle a un drop.</para>
+    ///
+    /// <para>Arranca en <c>false</c>: el arma gana, que es lo que el juego hacía
+    /// antes de que la decisión existiera.</para>
+    /// </remarks>
+    public bool PreferPerkBehavior { get; set; }
+
+    /// <summary>
     /// Qué juego de armadura, casco y escudo se le dibuja, de 1 a 3.
     /// </summary>
     /// <remarks>
@@ -216,18 +236,25 @@ public sealed class Roster(BalanceData datos)
             extraAlcance += arma.Range;
         }
 
-        // ⚠ El comportamiento del ARMA le gana al del perk.
+        // ⚠ LA RANURA DE COMPORTAMIENTO ES UNA, Y AHORA EL JUGADOR ELIGE CUÁL.
         //
-        // Un perk de comportamiento se eligió y ocupa un slot; una habilidad de
-        // arma vino en el drop. Que gane el arma es lo que hace que encontrar una
-        // buena cambie cómo juega ese defensor — que es todo el punto de que las
-        // armas tengan habilidades.
+        // Las dos no se suman ni se pueden tener juntas: sumarlas haría que un
+        // defensor con perk Y arma tuviera dos efectos encima, que es exactamente
+        // lo que la regla "los comportamientos no se apilan" existe para evitar, y
+        // multiplicaría las combinaciones a balancear por el catálogo de armas.
         //
-        // Las dos no se suman: son la misma ranura de comportamiento, y sumarlas
-        // haría que un defensor con perk Y arma tuviera dos efectos encima, que
-        // es exactamente lo que la regla "los comportamientos no se apilan"
-        // existe para evitar.
-        if (arma is not null && arma.Ability != WeaponAbility.None)
+        // Lo que cambió es quién gana. Antes ganaba el arma siempre, y eso hacía
+        // que encontrar una excelente se sintiera como un CASTIGO: obligaba a
+        // apagar un Único que costó dos jefes y un plano, así que el jugador
+        // terminaba no equipándola — lo peor que le puede pasar a un drop.
+        //
+        // ⚠ LOS STATS DEL ARMA SE CONSERVAN EN LOS DOS CASOS. El +20% de daño y el
+        // +15% de cadencia ya se sumaron arriba y no dependen de esta decisión:
+        // solo cambia el comportamiento activo.
+        bool armaTieneHabilidad = arma is not null && arma.Ability != WeaponAbility.None;
+        bool usarElPerk = ficha.PreferPerkBehavior && comportamiento != PerkEffect.None;
+
+        if (armaTieneHabilidad && !usarElPerk)
         {
             comportamiento = PerkEffect.None;
             magnitudComportamiento = 0;
@@ -264,8 +291,11 @@ public sealed class Roster(BalanceData datos)
             BehaviorMagnitude: magnitudComportamiento,
             BehaviorMagnitudeB: magnitudComportamientoB,
 
-            Ability: arma?.Ability ?? WeaponAbility.None,
-            AbilityMagnitude: arma?.Magnitude ?? 0);
+            // ⚠ Si el jugador eligió el perk, la habilidad del arma queda MUDA:
+            // los dos campos nunca están activos a la vez, y el tick puede
+            // aplicarlos en cualquier orden sin que el resultado cambie.
+            Ability: usarElPerk ? WeaponAbility.None : arma?.Ability ?? WeaponAbility.None,
+            AbilityMagnitude: usarElPerk ? 0 : arma?.Magnitude ?? 0);
     }
 }
 

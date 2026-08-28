@@ -69,6 +69,34 @@ public enum ActionType
     /// siendo la única forma de CONTRATAR una clase nueva.
     /// </remarks>
     BuyLevel = 11,
+
+    /// <summary>
+    /// Cambiarle el modo de targeting a un defensor puesto.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es del defensor, no de la clase</b>, y es la única acción del
+    /// juego que lo es. Dos paladines de la misma ficha quieren targeting distinto
+    /// según dónde estén parados —el de la entrada abre la oleada, el de la Torre
+    /// contiene filtraciones—, y esa decisión de colocación es la mitad del valor
+    /// de la mecánica.</para>
+    ///
+    /// <para>Es la mecánica de más profundidad por menos complejidad del género:
+    /// cambia tácticamente el resultado sin tocar una sola estadística.</para>
+    /// </remarks>
+    SetTargeting = 12,
+
+    /// <summary>
+    /// Elegir cuál de los dos comportamientos de una clase está activo: el del
+    /// perk de Oro/Único equipado, o el de la habilidad del arma.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>La ranura sigue siendo una.</b> Esto no permite tener los dos: permite
+    /// elegir. Existe porque encontrar un arma excelente se sentía como un castigo
+    /// —obligaba a apagar un Único que costó dos jefes y un plano— y el jugador
+    /// terminaba no equipándola, que es lo peor que le puede pasar a un drop. Los
+    /// <b>stats</b> del arma se conservan en los dos casos.
+    /// </remarks>
+    SetBehavior = 13,
 }
 
 /// <summary>
