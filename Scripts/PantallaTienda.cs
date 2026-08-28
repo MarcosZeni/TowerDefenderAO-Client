@@ -36,6 +36,16 @@ public partial class PantallaTienda : Control
 
     private const int Ancho = 380;
     private const int Alto = 122;
+
+    /// <summary>
+    /// El lado del icono del perk en la oferta.
+    /// </summary>
+    /// <remarks>
+    /// 52 y no más: lo que corre a la derecha se lo saca a la lista de clases que
+    /// pueden equiparlo, que es el renglón que hace que comprar un Oro no sea a
+    /// ciegas.
+    /// </remarks>
+    private const int LadoIcono = 52;
     private const int Separacion = 10;
 
     /// <summary>Margen inferior: arriba del panel de preparación, que mide 210.</summary>
@@ -270,11 +280,18 @@ public partial class PantallaTienda : Control
     {
         var def = datos.Perks.Get(oferta.Id);
 
-        Text(Loc.Tier(def.Tier), x, y, 16, acento);
-        Text(Loc.Perk(def), x, y + 30, 26, new Color(0.95f, 0.95f, 0.92f));
+        // ⚠ El icono va a la IZQUIERDA y corre el texto, no arriba a la derecha.
+        // Ahí está el precio, y la lista de clases que sirven llega a nueve
+        // nombres: cualquier cosa apoyada sobre el borde derecho se le encima.
+        float texto = CargadorIconos.Dibujar(this, def.Key, x, y - 8, LadoIcono)
+            ? x + LadoIcono + 12
+            : x;
+
+        Text(Loc.Tier(def.Tier), texto, y, 16, acento);
+        Text(Loc.Perk(def), texto, y + 30, 26, new Color(0.95f, 0.95f, 0.92f));
 
         Text($"{Loc.Effect(def.Effect)} · {def.Magnitude}%",
-            x, y + 56, 16, new Color(0.68f, 0.70f, 0.74f));
+            texto, y + 56, 16, new Color(0.68f, 0.70f, 0.74f));
 
         var sirve = new System.Text.StringBuilder();
 
@@ -290,7 +307,7 @@ public partial class PantallaTienda : Control
         }
 
         Text(sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
-            x, y + 78, 15, new Color(0.58f, 0.62f, 0.68f));
+            texto, y + 78, 15, new Color(0.58f, 0.62f, 0.68f));
     }
 
     /// <summary>

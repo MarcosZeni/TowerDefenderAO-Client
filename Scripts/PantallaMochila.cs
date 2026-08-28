@@ -194,6 +194,20 @@ public partial class PantallaMochila : Control
     private const int LugarLado = 92;
     private const int LugaresPorFila = 5;
 
+    /// <summary>El lado del slot de perk equipado, en la columna de la derecha.</summary>
+    private const int SlotLado = 84;
+
+    /// <summary>
+    /// Cuánto ocupa el icono adentro de su celda.
+    /// </summary>
+    /// <remarks>
+    /// Deja aire abajo para el nombre y el tier: el dibujo dice <i>qué</i> es de un
+    /// vistazo, pero seis perks distintos comparten la misma espada de +daño y sin
+    /// el renglón de abajo no se distinguen.
+    /// </remarks>
+    private const int IconoLugar = 38;
+    private const int IconoSlot = 36;
+
     private static Rect2 RectLugar(int i)
     {
         int fila = i / LugaresPorFila;
@@ -209,7 +223,7 @@ public partial class PantallaMochila : Control
         => new(760, 300 + (i * 64), 380, 54);
 
     private static Rect2 RectSlot(int i)
-        => new(1200 + (i * 92), 300, 84, 84);
+        => new(1200 + (i * 92), 300, SlotLado, SlotLado);
 
     /// <summary>El botón de comprar el próximo nivel de la clase mirada.</summary>
     private static Rect2 RectSubirNivel()
@@ -291,8 +305,16 @@ public partial class PantallaMochila : Control
                 var def = CargadorDatos.Actual.Perks.Get(cosa.Id);
 
                 DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 6), ColorDe(def.Tier));
-                TextoAjustado(Loc.Perk(def), r.Position.X + 8, r.Position.Y + 34, 15, Blanco, LugarLado - 16);
-                Text(Loc.Tier(def.Tier), r.Position.X + 8, r.Position.Y + 76, 13, ColorDe(def.Tier));
+
+                // ⚠ El icono va ARRIBA y el nombre abajo, no al revés. Con quince
+                // lugares en pantalla el jugador busca por dibujo, no leyendo
+                // quince nombres de doce caracteres; el nombre queda para
+                // desempatar los seis que comparten la misma espada.
+                CargadorIconos.Dibujar(this, def.Key,
+                    r.Position.X + ((LugarLado - IconoLugar) / 2f), r.Position.Y + 10, IconoLugar);
+
+                TextoAjustado(Loc.Perk(def), r.Position.X + 8, r.Position.Y + 66, 12, Blanco, LugarLado - 16);
+                Text(Loc.Tier(def.Tier), r.Position.X + 8, r.Position.Y + 84, 11, ColorDe(def.Tier));
             }
             else
             {
@@ -419,7 +441,11 @@ public partial class PantallaMochila : Control
 
             var def = CargadorDatos.Actual.Perks.Get(ficha.Perks[s]);
             DrawRect(new Rect2(r.Position.X, r.Position.Y, r.Size.X, 5), ColorDe(def.Tier));
-            TextoAjustado(Loc.Perk(def), r.Position.X + 6, r.Position.Y + 34, 14, Blanco, 74);
+
+            CargadorIconos.Dibujar(this, def.Key,
+                r.Position.X + ((SlotLado - IconoSlot) / 2f), r.Position.Y + 9, IconoSlot);
+
+            TextoAjustado(Loc.Perk(def), r.Position.X + 6, r.Position.Y + 68, 12, Blanco, 74);
         }
 
         var stats = partida.Roster.StatsOf(clase, partida.Backpack);

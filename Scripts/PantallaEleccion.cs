@@ -25,6 +25,9 @@ public partial class PantallaEleccion : Control
     private const int AltoTarjeta = 340;
     private const int Separacion = 40;
 
+    /// <summary>El lado del icono del perk en la tarjeta del Oro del jefe.</summary>
+    private const int LadoIcono = 84;
+
     public PantallaEleccion(Juego juego)
     {
         _juego = juego;
@@ -186,7 +189,7 @@ public partial class PantallaEleccion : Control
 
         if (esPerk)
         {
-            DibujarTarjetaDePerk(opcion, x, y, acento);
+            DibujarTarjetaDePerk(opcion, r, x, y, acento);
             Text($"[{i + 1}]", r.Position.X + r.Size.X - 70, r.Position.Y + r.Size.Y - 28, 24,
                 new Color(0.5f, 0.5f, 0.5f));
 
@@ -248,14 +251,25 @@ public partial class PantallaEleccion : Control
     /// elegir entre tres nombres sin saber quién los puede equipar es elegir a
     /// ciegas — que es exactamente lo que la oferta de tres vino a arreglar.
     /// </remarks>
-    private void DibujarTarjetaDePerk(Choice opcion, float x, float y, Color acento)
+    private void DibujarTarjetaDePerk(Choice opcion, Rect2 r, float x, float y, Color acento)
     {
         var def = CargadorDatos.Actual.Perks.Get(opcion.PerkId);
 
-        Text(Loc.Tier(def.Tier), x, y, 22, acento);
+        // ⚠ A la izquierda corriendo el texto, no arriba a la derecha. La tarjeta
+        // tiene 460 de ancho y el nombre va en cuerpo 40: «Sobrepenetración»
+        // cruza la mitad de la tarjeta, y un icono apoyado en el borde derecho se
+        // le termina encima. Corriendo el texto no se pueden pisar nunca.
+        // Solo se corren las dos líneas que quedan a la altura del icono. De la
+        // tercera para abajo el texto arranca donde arrancaba, que es donde vive
+        // la lista de clases y es la línea más larga de la tarjeta.
+        float titulo = CargadorIconos.Dibujar(this, def.Key, x, r.Position.Y + 34, LadoIcono)
+            ? x + LadoIcono + 16
+            : x;
+
+        Text(Loc.Tier(def.Tier), titulo, y, 22, acento);
 
         y += 56;
-        Text(Loc.Perk(def), x, y, 40, new Color(0.95f, 0.95f, 0.92f));
+        Text(Loc.Perk(def), titulo, y, 34, new Color(0.95f, 0.95f, 0.92f));
 
         y += 50;
         Text($"{Loc.Effect(def.Effect)} · {def.Magnitude}%", x, y, 19, new Color(0.7f, 0.7f, 0.68f));
