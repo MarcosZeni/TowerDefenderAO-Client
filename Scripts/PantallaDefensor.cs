@@ -31,6 +31,20 @@ public partial class PantallaDefensor : Control
     private readonly Juego _juego;
     private int _bajoElCursor = -1;
 
+    /// <summary>
+    /// El botón de vender ya está armado y el próximo click vende.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Vender pasó a vivir acá porque antes lo hacía el BOTÓN DERECHO sobre
+    /// el mapa</b>, sin confirmar y sin poder deshacer: el gesto más fácil de
+    /// hacer sin querer borraba una unidad puesta. Acá hay que seleccionar la
+    /// ficha, apuntar a un botón que dice cuánto devuelve, y apretarlo dos veces.
+    ///
+    /// Dos clicks en el mismo botón y no un modal: un cartel a pantalla completa
+    /// para vender una ficha de 100 de oro es más ceremonia que la decisión.
+    /// </remarks>
+    private bool _ventaArmada;
+
     /// <summary>Alto de cada fila de modo de targeting.</summary>
     private const int AltoFila = 34;
 
@@ -84,9 +98,23 @@ public partial class PantallaDefensor : Control
         return null;
     }
 
+    /// <summary>A quién estaba armada la venta, para desarmarla al cambiar de ficha.</summary>
+    private int _armadaPara = -1;
+
     public override void _Process(double delta)
     {
-        Visible = Abierto() is not null;
+        var abierto = Abierto();
+
+        Visible = abierto is not null;
+
+        // Cambiar de ficha —o cerrar el panel— desarma la venta. Que quede armada
+        // de una ficha para la siguiente es la forma exacta de vender la que no
+        // era.
+        if (abierto?.PlacementId != _armadaPara)
+        {
+            _ventaArmada = false;
+            _armadaPara = abierto?.PlacementId ?? -1;
+        }
 
         if (Visible)
             QueueRedraw();
@@ -112,7 +140,30 @@ public partial class PantallaDefensor : Control
 
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
             {
-                int i = FilaEn(GetGlobalMousePosition());
+                var posicion = GetGlobalMousePosition();
+
+                if (RectVender().HasPoint(posicion))
+                {
+                    if (_ventaArmada)
+                    {
+                        _juego.Vender(defensor.PlacementId);
+                        _juego.DefensorSeleccionado = -1;
+                        _ventaArmada = false;
+                    }
+                    else
+                    {
+                        _ventaArmada = true;
+                    }
+
+                    GetViewport().SetInputAsHandled();
+                    break;
+                }
+
+                // Cualquier otro click desarma la venta. Un botón que se queda
+                // armado mientras el jugador hace otra cosa es una trampa.
+                _ventaArmada = false;
+
+                int i = FilaEn(posicion);
 
                 // Solo se marca atendido el click que cayó en una fila: el resto
                 // tiene que seguir llegando al mapa, incluido el que cierra este
@@ -134,24 +185,43 @@ public partial class PantallaDefensor : Control
     }
 
     /// <summary>
-    /// El panel, en la <b>columna de detalle</b> del diseño.
+    /// El panel, en la <b>columna derecha del marco</b>.
     /// </summary>
     /// <remarks>
-    /// Es la columna que el diseño reserva para «lo que está seleccionado», y un
-    /// defensor clickeado es exactamente eso. No usa el alto entero de la columna
-    /// porque el contenido es corto: un panel de 700 px con 300 de texto adentro
-    /// se lee como un error de layout.
+    /// <para>Es la pared que el diseño reserva para «lo que está seleccionado», y
+    /// un defensor clickeado es exactamente eso. <b>Ya no la comparte con
+    /// nadie</b>: la tienda se mudó a <see cref="PantallaMercado"/>, que es una
+    /// ventana propia, y esta columna quedó entera para el defensor.</para>
+    ///
+    /// <para>Usa la columna entera aunque el contenido sea corto. Un panel a
+    /// media altura dejaría un hueco de pared vacía en el medio del marco, que
+    /// se lee peor que un panel con aire abajo.</para>
     /// </remarks>
-    private static Rect2 Caja()
-        => new(UiLayout.DetailPanel.Position, new Vector2(UiLayout.DetailPanel.Size.X, 404f));
+    private static Rect2 Caja() => UiLayout.RunSidePanel;
+
+    /// <summary>Dónde arranca la lista de modos de targeting, adentro del panel.</summary>
+    private const float YTargeting = 384f;
 
     private static Rect2 FilaDe(int i)
     {
         var c = Caja();
 
         return new Rect2(
-            c.Position.X + 14f, c.Position.Y + 190f + (i * AltoFila),
+            c.Position.X + 14f, c.Position.Y + YTargeting + (i * AltoFila),
             c.Size.X - 28f, AltoFila - 5f);
+    }
+
+    /// <summary>El botón de vender, abajo del panel y lejos de los de targeting.</summary>
+    /// <remarks>
+    /// Lejos a propósito: los cuatro de arriba se aprietan seguido y este borra
+    /// una unidad. Pegados, la mano que viene de cambiar el targeting cae encima
+    /// del que vende.
+    /// </remarks>
+    private static Rect2 RectVender()
+    {
+        var c = Caja();
+
+        return new Rect2(c.Position.X + 14f, c.End.Y - 96f, c.Size.X - 28f, 44f);
     }
 
     private static int FilaEn(Vector2 posicion)
@@ -176,36 +246,84 @@ public partial class PantallaDefensor : Control
 
         this.Panel(caja);
 
-        var titulo = caja.Row(12f, 32f);
+        // El retrato arriba de todo: el jugador acaba de clickear una unidad del
+        // mapa y lo primero que tiene que confirmar es cuál agarró. Con seis de
+        // las nueve clases compartiendo muñeco en los tiers bajos, el nombre de
+        // abajo es lo que desempata.
+        var ficha = partida.Roster.Find(defensor.DefenderClass);
 
-        this.Label(titulo, Loc.Class(defensor.DefenderClass).ToUpperInvariant(), 24,
+        if (ficha is not null)
+        {
+            var retrato = new Rect2(
+                caja.Position.X + ((caja.Size.X - 120f) / 2f), caja.Position.Y + 14f, 120f, 120f);
+
+            this.Portrait(retrato, ficha);
+        }
+
+        this.Label(caja.Row(140f, 32f), Loc.Class(defensor.DefenderClass).ToUpperInvariant(), 24,
             Palette.TextPrimary, HorizontalAlignment.Center);
 
-        this.Label(caja.Row(42f, 22f), Loc.Role(defensor.DefenderClass), 14, Palette.TextMuted,
+        this.Label(caja.Row(172f, 22f), Loc.Role(defensor.DefenderClass), 14, Palette.TextMuted,
             HorizontalAlignment.Center);
 
-        this.Rule(caja, 68f);
+        this.Rule(caja, 200f);
 
         // ⚠ En la escala del JUGADOR, no en la interna. Adentro el daño va en
         // centésimas de punto y el alcance en milésimas de celda: mostrarlos crudos
         // diría «1040 de daño» cuando el defensor pega 10,4.
-        var stat = new Rect2(caja.Position.X + 16f, caja.Position.Y + 76f, caja.Size.X - 32f, 20f);
+        var stat = new Rect2(caja.Position.X + 16f, caja.Position.Y + 212f, caja.Size.X - 32f, 24f);
 
-        this.StatRow(stat, Loc.Get("ui.mochila.dano"), Loc.Damage(stats.Damage));
-        this.StatRow(stat.Row(20f, 20f), Loc.Get("ui.mochila.alcance"), Loc.Range(stats.RangeMilli));
-        this.StatRow(stat.Row(40f, 20f), Loc.Get("ui.mochila.cada"),
-            $"{stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}");
+        // Los tres con icono y en un renglón: en una columna de 313 px, «alcance»
+        // más el número ocupaban casi el ancho entero y el valor quedaba pegado
+        // al borde.
+        this.StatTrio(stat,
+            Loc.Damage(stats.Damage), Loc.Range(stats.RangeMilli), stats.CadenceTicks.ToString());
 
-        DibujarSoporte(defensor, stats, caja.Position.X + 16f, caja.Position.Y + 142f);
+        DibujarSoporte(defensor, stats, caja.Position.X + 16f, caja.Position.Y + 252f);
 
-        this.Label(new Rect2(caja.Position.X + 16f, caja.Position.Y + 166f, caja.Size.X - 32f, 22f),
+        this.Label(new Rect2(caja.Position.X + 16f, caja.Position.Y + YTargeting - 26f, caja.Size.X - 32f, 22f),
             Loc.Get("ui.defensor.apunta_a").ToUpperInvariant(), 13, Palette.TextMuted);
 
         for (int i = 0; i < _modos.Length; i++)
             DibujarModo(i, defensor.Targeting == _modos[i]);
 
+        DibujarVender(partida, defensor);
+
         this.Label(caja.Row(caja.Size.Y - 26f, 22f), Loc.Get("ui.defensor.cerrar"), 13,
             Palette.TextDisabled, HorizontalAlignment.Center);
+    }
+
+    /// <summary>
+    /// El botón de vender, con lo que devuelve, en dos pasos.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Dice cuánto devuelve antes de apretarlo.</b> La devolución es
+    /// del 60% del costo de colocación, y sin ese número vender es una apuesta:
+    /// el jugador no puede saber si le conviene mover la ficha o cambiarla.</para>
+    ///
+    /// <para>Ahora que arrastrar mueve gratis, vender es para <b>cambiar de
+    /// clase</b>, no para reubicar. El renglón de abajo lo dice, porque el jugador
+    /// que viene del botón derecho va a seguir buscando acá la forma de acomodar
+    /// el tablero.</para>
+    /// </remarks>
+    private void DibujarVender(Run partida, Defender defensor)
+    {
+        var r = RectVender();
+
+        int costo = CargadorDatos.Actual.StatsOf(defensor.DefenderClass).Cost;
+        int devuelve = Ints.MultiplyPercent(
+            costo, CargadorDatos.Actual.Curves.Defenders.DefenderSellPercent);
+
+        this.Button(r,
+            _ventaArmada ? Loc.Get("ui.defensor.confirmar_venta") : Loc.Get("ui.defensor.vender"),
+            Palette.Danger, relleno: _ventaArmada);
+
+        this.Price(new Rect2(r.Position.X, r.End.Y + 2f, r.Size.X, 20f), devuelve,
+            alcanza: true, HorizontalAlignment.Center);
+
+        this.Label(new Rect2(r.Position.X, r.Position.Y - 20f, r.Size.X, 18f),
+            Loc.Get("ui.defensor.arrastrar_para_mover"), 12, Palette.TextMuted,
+            HorizontalAlignment.Center);
     }
 
     private void DibujarModo(int i, bool activo)

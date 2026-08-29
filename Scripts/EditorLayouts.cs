@@ -91,18 +91,6 @@ public partial class EditorLayouts : Node2D
     /// <summary>Si se ve el panel. Se esconde con H para pintar las filas de abajo.</summary>
     private bool _panel = true;
 
-    /// <summary>
-    /// Si se marcan las zonas que el HUD va a tapar durante la partida.
-    /// </summary>
-    /// <remarks>
-    /// ⚠ <b>Arranca en <c>true</c> a propósito.</b> El HUD dejó de estar solo en
-    /// las esquinas: con la disposición del diseño (2026-08-28) el roster pasó a
-    /// ser la <b>columna izquierda entera</b>, y una celda de ruta o colocable
-    /// pintada ahí queda abajo de un panel en la partida. Los 12 layouts que hay
-    /// se dibujaron sin esa columna ocupada.
-    /// </remarks>
-    private bool _zonasHud = true;
-
     public override void _Ready()
     {
         UiStyle.Init();
@@ -206,16 +194,11 @@ public partial class EditorLayouts : Node2D
                 Validar();
                 break;
 
-            // El panel tapa las filas de abajo. Se esconde para pintar ahí, que
-            // es justo donde en el juego va a flotar el HUD.
+            // El panel tapa las filas de abajo mientras se dibuja. Se esconde
+            // para pintar ahí: en el juego esas filas se ven, porque el mundo
+            // tiene su propio agujero adentro del marco.
             case Key.H:
                 _panel = !_panel;
-                break;
-
-            // Las zonas de HUD se pueden apagar: son una guía encima del dibujo,
-            // y a veces hay que ver el color real de lo que está abajo.
-            case Key.Z:
-                _zonasHud = !_zonasHud;
                 break;
 
             case Key.S:
@@ -615,9 +598,6 @@ public partial class EditorLayouts : Node2D
             }
         }
 
-        if (_zonasHud)
-            DibujarZonasHud();
-
         if (_bajoMouse is { } c)
         {
             var caja = new Rect2(c.X * Cell, c.Y * Cell, Cell, Cell);
@@ -663,73 +643,6 @@ public partial class EditorLayouts : Node2D
     }
 
     /// <summary>
-    /// El panel de abajo: pinceles, teclas y —lo que importa— si el layout
-    /// valida.
-    /// </summary>
-    /// <remarks>
-    /// ⚠ <b>Va ENCIMA del campo, anclado al borde de abajo del lienzo.</b> La
-    /// primera versión lo puso en la franja sobrante debajo de la grilla, y con
-    /// 16 filas de 64 px eso son 56 px: la línea de estado caía en y=1130, fuera
-    /// de los 1080 del lienzo. Se guardaron diez layouts inválidos sin que nada
-    /// avisara, porque el aviso estaba abajo de la pantalla. Con 20×11 el
-    /// sobrante es de 24 px y habría sido peor.
-    /// </remarks>
-    /// <summary>
-    /// Las zonas que el HUD va a tapar durante la partida.
-    /// </summary>
-    /// <remarks>
-    /// <para>⚠ <b>Esto es lo que reemplaza a «las esquinas son zona de HUD».</b>
-    /// Con la disposición del diseño el HUD no está en las esquinas: es la
-    /// columna izquierda entera, la barra de arriba, la de abajo y el pie. Una
-    /// celda de ruta pintada ahí se juega abajo de un panel, y el jugador clickea
-    /// el panel en vez del mapa.</para>
-    ///
-    /// <para>Se dibuja con rayas y no con un relleno plano: un relleno taparía el
-    /// color de lo que está pintado abajo, que es justo lo que hay que ver para
-    /// decidir si esa celda hay que moverla.</para>
-    /// </remarks>
-    private void DibujarZonasHud()
-    {
-        Zona(UiLayout.TopBar);
-        Zona(UiLayout.HeroesPanel);
-        Zona(UiLayout.BuildPanel);
-        Zona(UiLayout.FooterBar);
-
-        // El cartel va en la columna, que es la zona nueva y la que sorprende.
-        var aviso = new Rect2(
-            UiLayout.HeroesPanel.Position.X,
-            UiLayout.HeroesPanel.Position.Y + (UiLayout.HeroesPanel.Size.Y / 2f) - 20f,
-            UiLayout.HeroesPanel.Size.X, 40f);
-
-        DrawRect(aviso, Palette.BackgroundMain.Alpha(0.85f));
-
-        this.Label(aviso, "zona de HUD", 18, Palette.Danger, HorizontalAlignment.Center);
-
-        void Zona(Rect2 r)
-        {
-            var color = Palette.Danger.Alpha(0.28f);
-
-            // Diagonales cada 24 px. Se recorren las dos dimensiones juntas
-            // —de −alto a ancho— para que la raya entre por el borde de arriba y
-            // salga por el de la izquierda sin salirse del rectángulo.
-            for (float d = -r.Size.Y; d < r.Size.X; d += 24f)
-            {
-                var a = new Vector2(r.Position.X + Mathf.Max(d, 0f),
-                    r.Position.Y + Mathf.Max(-d, 0f));
-
-                float largo = Mathf.Min(r.Size.X - Mathf.Max(d, 0f),
-                    r.Size.Y - Mathf.Max(-d, 0f));
-
-                if (largo <= 0f)
-                    continue;
-
-                DrawLine(a, a + new Vector2(largo, largo), color, 2f);
-            }
-
-            DrawRect(r, Palette.Danger.Alpha(0.55f), filled: false, width: 2f);
-        }
-    }
-
     /// <summary>Los cinco pinceles, en el orden en que se numeran y se dibujan.</summary>
     private static readonly (Pincel Pincel, string Nombre)[] _pinceles =
     [
@@ -788,6 +701,22 @@ public partial class EditorLayouts : Node2D
         return false;
     }
 
+    /// <summary>
+    /// El panel de abajo: pinceles, teclas y —lo que importa— si el layout valida.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Va ENCIMA del campo, anclado al borde de abajo del lienzo.</b>
+    /// La primera versión lo puso en la franja sobrante debajo de la grilla, y
+    /// con 16 filas de 64 px eso son 56 px: la línea de estado caía en y=1130,
+    /// fuera de los 1080 del lienzo. Se guardaron diez layouts inválidos sin que
+    /// nada avisara, porque el aviso estaba abajo de la pantalla.</para>
+    ///
+    /// <para>⚠ <b>Que el panel tape filas ya NO tiene consecuencia de diseño.</b>
+    /// Con el marco (2026-08-28) el juego dibuja el mundo adentro de su propio
+    /// agujero y ningún panel se le encima, así que una celda de ruta pintada en
+    /// la fila 10 se juega perfecto. Acá el panel la tapa solo mientras se
+    /// dibuja, y para eso está la <b>H</b>.</para>
+    /// </remarks>
     private void DibujarPanel()
     {
         // ⚠ El panel usa el MISMO rectángulo que la barra de abajo del juego
@@ -866,10 +795,7 @@ public partial class EditorLayouts : Node2D
         this.StatRow(teclas.Row(24f, 21f), "P", $"piso ({Pisos[_piso]})");
         this.StatRow(teclas.Row(45f, 21f), "H", "esconde el panel");
 
-        this.StatRow(teclas.Row(66f, 21f), "Z", _zonasHud ? "zonas de HUD: sí" : "zonas de HUD: no",
-            _zonasHud ? Palette.Danger : Palette.TextMuted);
-
-        this.StatRow(teclas.Row(87f, 21f), "C", "limpia");
-        this.StatRow(teclas.Row(108f, 21f), "S", "guarda", Palette.Success);
+        this.StatRow(teclas.Row(66f, 21f), "C", "limpia");
+        this.StatRow(teclas.Row(87f, 21f), "S", "guarda", Palette.Success);
     }
 }

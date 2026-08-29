@@ -57,7 +57,8 @@ public sealed record RunData(
     int AreaCount,
     int[] LastWavePerArea,
     int WavesBetweenChoices,
-    int PreparationSeconds);
+    int PreparationSeconds,
+    int FreeClasses);
 
 public sealed record DefenderData(
     int BackpackSlots,
@@ -244,6 +245,39 @@ public sealed record DropData(
     bool FinalBossDrops);
 
 /// <summary>
+/// Cuántos perks de un tier hacen uno del tier de arriba. Ver
+/// <c>curvas.json</c> §upgrades.
+/// </summary>
+/// <remarks>
+/// <para>⚠ <b><see cref="MaxCraftedGoldPerRun"/> es lo que sostiene la economía
+/// entera del Oro.</b> El resto del juego está construido sobre «el jefe es la
+/// fuente de Oro, ocho por corrida, y la tienda como mucho uno por visita»: los
+/// Únicos cuestan dos Oro justamente porque hay pocos. Sin tope, con
+/// <c>4 × 3 = 12</c> Bronce por Oro y del orden de 100 Bronce cayendo en una corrida, la
+/// mejora entregaría tanto Oro como los ocho jefes juntos y los Únicos dejarían de
+/// costar nada.</para>
+///
+/// <para>Bronce → Plata <b>no</b> lleva tope: Bronce y Plata son números, no
+/// comportamientos, y su abundancia no es lo que el balance protege.</para>
+///
+/// <para>Un contador en <c>0</c> apaga esa mitad de la mecánica sin tocar
+/// código; el cargador exige 2 o más para que exista.</para>
+/// </remarks>
+public sealed record UpgradeData(
+    int BronzeToSilver,
+    int SilverToGold,
+    int MaxCraftedGoldPerRun)
+{
+    /// <summary>Cuántos hacen falta para subir desde ese tier. 0 = no se puede.</summary>
+    public int CostOf(PerkTier tier) => tier switch
+    {
+        PerkTier.Bronze => BronzeToSilver,
+        PerkTier.Silver => SilverToGold,
+        _ => 0,
+    };
+}
+
+/// <summary>
 /// Cómo entra la oleada: la separación temporal entre NPCs, conservando el
 /// promedio.
 /// </summary>
@@ -348,7 +382,8 @@ public sealed record CurveData(
     DropData Drops,
     WaveData Wave,
     NpcPerkData PerksNpc,
-    BossData Boss);
+    BossData Boss,
+    UpgradeData Upgrades);
 
 // =============================================================================
 //  combate.json
@@ -1303,6 +1338,7 @@ public static class TableReader
         var oleada = Obj(raiz, "wave", archivo);
         var perksNpc = Obj(raiz, "npcPerks", archivo);
         var jefe = Obj(raiz, "boss", archivo);
+        var mejoras = Obj(raiz, "upgrades", archivo);
 
         int oleadas = Int(corrida, "wavesPerRun", archivo);
         int[] ultimaPorArea = IntArrayOf(corrida, "lastWavePerArea", archivo);
@@ -1349,7 +1385,8 @@ public static class TableReader
                 areas,
                 ultimaPorArea,
                 Int(corrida, "wavesBetweenChoices", archivo),
-                Int(corrida, "preparationSeconds", archivo)),
+                Int(corrida, "preparationSeconds", archivo),
+                Int(corrida, "freeClasses", archivo)),
 
             new DefenderData(
                 Int(defensores, "backpackSlots", archivo),
@@ -1452,7 +1489,12 @@ public static class TableReader
             new BossData(
                 Int(jefe, "extraHealthDivisor", archivo),
                 Int(jefe, "maxExtraHealth", archivo),
-                OptionalText(jefe, "finalBossName")));
+                OptionalText(jefe, "finalBossName")),
+
+            new UpgradeData(
+                Int(mejoras, "bronzeToSilver", archivo),
+                Int(mejoras, "silverToGold", archivo),
+                Int(mejoras, "maxCraftedGoldPerRun", archivo)));
 
         // ⚠ Sin tope de NPCs una oleada tardía compra miles de bichos: no es más
         // difícil, es más larga. Medido: corridas clavadas contra el techo de
@@ -1503,12 +1545,56 @@ public static class TableReader
                 $"números pero hay {areas} áreas");
         }
 
+        // ⚠ Con cero clases gratis, la pantalla inicial no puede regalar la
+        // primera y la corrida arranca sin nada en el tablero: no hay con qué
+        // matar al primer bicho y no hay oro para comprar una clase todavía.
+        if (curvas.RunCurve.FreeClasses < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «freeClasses» tiene que ser 1 o más");
+
         // ⚠ Un jefe que ofrece cero Oro rompe la única fuente de Oro del juego.
         if (curvas.Drops.BossGoldOptions < 1)
             throw new InvalidBalanceDataException($"{archivo}: «bossGoldOptions» tiene que ser 1 o más");
 
         if (curvas.Drops.GoldPoolSize < 1)
             throw new InvalidBalanceDataException($"{archivo}: «goldPoolSize» tiene que ser 1 o más");
+
+        // ⚠ La acción Upgrade guarda la selección del jugador como una máscara de
+        // bits en un `int`, así que el lugar 31 de la mochila no tendría bit. Con
+        // 32 lugares el bit 31 es el de signo y la máscara se leería negativa.
+        if (curvas.Defenders.BackpackSlots is < 1 or > 31)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «backpackSlots» tiene que estar entre 1 y 31 — la acción Upgrade " +
+                "guarda la selección como máscara de bits en un int (Acciones.cs)");
+        }
+
+        // Uno o cero no es una receta: sería un botón que cambia un perk por
+        // otro mejor sin costo. Dos es el mínimo que representa un intercambio.
+        if (curvas.Upgrades.BronzeToSilver < 2 || curvas.Upgrades.SilverToGold < 2)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «bronzeToSilver» y «silverToGold» tienen que ser 2 o más");
+        }
+
+        // ⚠ Sin tope, la mejora fabrica tanto Oro como los ocho jefes juntos y los
+        // Únicos dejan de costar algo. Cero apaga esa mitad de la mecánica.
+        if (curvas.Upgrades.MaxCraftedGoldPerRun < 0)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «maxCraftedGoldPerRun» no puede ser negativo");
+        }
+
+        // La mochila tiene que poder sostener una receta: si entran menos perks
+        // que los que la receta pide, la mejora es inalcanzable y no se ve por
+        // qué. Hace falta uno más, además, para que quepa el resultado.
+        int masCara = System.Math.Max(curvas.Upgrades.BronzeToSilver, curvas.Upgrades.SilverToGold);
+
+        if (masCara > curvas.Defenders.BackpackSlots)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: una receta de mejora pide {masCara} perks y la mochila tiene " +
+                $"{curvas.Defenders.BackpackSlots} lugares");
+        }
 
         // ⚠ Una tienda de 0 ranuras no es «tienda apagada»: es una pantalla vacía
         // que igual frena la corrida cada tres oleadas.

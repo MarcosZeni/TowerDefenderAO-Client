@@ -5,7 +5,7 @@ using TowerOfArgentum.Ui;
 namespace TowerOfArgentum;
 
 /// <summary>
-/// El HUD de la corrida, con la disposición del panel del diseñador.
+/// El HUD de la corrida: <b>las paredes del marco donde va encastrado el mundo.</b>
 /// </summary>
 /// <remarks>
 /// <para>Las medidas salen todas de <see cref="UiLayout"/>, que copia
@@ -13,29 +13,31 @@ namespace TowerOfArgentum;
 /// número de posición suelto, y esa es la regla: si algo hay que mover, se mueve
 /// en el layout y se mueve para todas las pantallas a la vez.</para>
 ///
-/// <para>De las siete zonas del diseño, el HUD dibuja las cuatro que conviven
-/// con el mundo:</para>
+/// <para>⚠ <b>El HUD ya no flota sobre el mundo: lo rodea.</b> Es un cambio de
+/// fondo respecto de lo que decía <c>INTERFAZ.md</c> §3, y la razón es concreta:
+/// con los paneles encima, la tienda y el panel del defensor tapaban celdas
+/// jugables, y el jugador terminaba clickeando un panel en vez del mapa. Ahora
+/// el mundo tiene su propio agujero y <b>nada se dibuja adentro salvo el
+/// juego</b>.</para>
+///
+/// <para>Las cuatro paredes que dibuja esta clase:</para>
 ///
 /// <list type="bullet">
-/// <item><b>La barra de arriba</b> — oleada, vida de la Torre, oro y los tres
-/// botones.</item>
-/// <item><b>La columna de la izquierda</b> — el roster, de donde se arrastran
-/// las clases al mapa.</item>
-/// <item><b>La barra de abajo</b> — la build de la clase elegida de un
-/// vistazo.</item>
+/// <item><b>Arriba</b> — oleada, vida de la Torre, oro y los tres botones.</item>
+/// <item><b>Izquierda</b> — el roster, de donde se arrastran las clases.</item>
+/// <item><b>Abajo</b> — la build de la clase elegida de un vistazo.</item>
 /// <item><b>El pie</b> — el consejo y la leyenda de rarezas.</item>
 /// </list>
 ///
-/// <para>Las tres del medio —inventario, detalle y tienda— son overlays y viven
-/// en <see cref="PantallaMochila"/> y <see cref="PantallaTienda"/>, en esas
-/// mismas coordenadas.</para>
+/// <para>La <b>quinta</b>, la columna de la derecha, no la dibuja el HUD: la
+/// la ocupan <see cref="PantallaDefensor"/> y el mercado, que
+/// aparecen y desaparecen. El HUD deja el hueco y ellas lo llenan.</para>
 ///
-/// <para>⚠ <b>El roster se mudó de la derecha a la izquierda.</b> Estaba a la
-/// derecha desde antes del diseño; el panel del diseñador lo pone a la
-/// izquierda y la disposición se copia entera o no se copia. Consecuencia para
-/// los layouts: la zona de HUD ahora es la <b>columna izquierda</b> más las dos
-/// barras horizontales, así que ningún mapa puede poner ruta ni celda colocable
-/// ahí (<c>INTERFAZ.md</c> §3).</para>
+/// <para>Y el HUD dibuja el <b>bisel</b>: el borde de metal entre las paredes y
+/// el mundo, más el sobrante que deja centrar el 20×11 adentro del hueco. Va acá
+/// y no en <see cref="Juego"/> porque tiene que quedar <b>encima</b> del mundo,
+/// para tapar lo que se salga —las partículas del portal, un sprite alto de la
+/// primera fila—.</para>
 /// </remarks>
 public partial class Hud : Control
 {
@@ -68,6 +70,10 @@ public partial class Hud : Control
 
         if (p is null)
             return;
+
+        // El bisel primero: tapa lo que se haya salido del mundo, y las paredes
+        // se dibujan después encima de sus bordes.
+        this.Bezel(UiLayout.WorldFrame, UiLayout.WorldOnScreen);
 
         BarraDeArriba(p);
         ColumnaDeClases(p);
@@ -102,7 +108,7 @@ public partial class Hud : Control
     /// </remarks>
     private void BarraDeArriba(Run p)
     {
-        this.Panel(UiLayout.TopBar);
+        this.Panel(UiLayout.RunTopBar);
 
         // --- Oleada. El «/ 100» va escrito a propósito: la corrida TERMINA en
         //     la 100, y eso hay que comunicarlo desde la oleada 1, no
@@ -173,9 +179,25 @@ public partial class Hud : Control
     /// <summary>Cuánto lugar deja el icono a la izquierda de un chip de la barra.</summary>
     private const float EmblemaAncho = 44f;
 
-    /// <summary>La almena de la oleada. Tres dientes y un cuerpo.</summary>
+    /// <summary>
+    /// La almena de la oleada.
+    /// </summary>
+    /// <remarks>
+    /// La torre de RPG Awesome desde que la fuente entró; la almena a mano queda
+    /// de reserva. Es <b>la Torre</b> y no una calavera a propósito: el número que
+    /// está al lado es «vas por la oleada 18 de 100», o sea cuánto lleva
+    /// aguantando lo que se defiende.
+    /// </remarks>
     private void Emblema(Rect2 r, Color color)
     {
+        var caja = new Rect2(r.Position.X + 6f, r.Position.Y + (r.Size.Y / 2f) - 14f, 28f, 28f);
+
+        if (UiStyle.Icons is not null)
+        {
+            this.Icon(caja, UiStyle.Icono.Tower, color);
+            return;
+        }
+
         float lado = 22f;
         var c = new Vector2(r.Position.X + 20f, r.Position.Y + (r.Size.Y / 2f));
 
@@ -189,9 +211,25 @@ public partial class Hud : Control
         }
     }
 
-    /// <summary>El corazón de la vida. Dos círculos y un triángulo.</summary>
+    /// <summary>
+    /// El corazón de la vida de la Torre.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Sale de <b>RPG Awesome</b> desde que la fuente entró al proyecto. Antes
+    /// eran dos círculos y un triángulo dibujados a mano — se leía, pero al lado
+    /// de los iconos de la fuente cantaba que era otra cosa. La reserva a mano
+    /// queda para cuando el <c>.ttf</c> todavía no se importó.
+    /// </remarks>
     private void Corazon(Rect2 r, Color color)
     {
+        var caja = new Rect2(r.Position.X + 6f, r.Position.Y + (r.Size.Y / 2f) - 14f, 28f, 28f);
+
+        if (UiStyle.Icons is not null)
+        {
+            this.Icon(caja, UiStyle.Icono.Health, color);
+            return;
+        }
+
         float radio = 7f;
         var c = new Vector2(r.Position.X + 20f, r.Position.Y + (r.Size.Y / 2f) - 3f);
 
@@ -260,7 +298,7 @@ public partial class Hud : Control
     /// </remarks>
     private void ColumnaDeClases(Run p)
     {
-        this.Panel(UiLayout.HeroesPanel);
+        this.Panel(UiLayout.RunRoster);
         this.SectionTitle(UiLayout.HeroesTitle, Loc.Get("ui.hud.heroes"));
 
         var clases = p.Roster.Classes;
@@ -329,23 +367,23 @@ public partial class Hud : Control
     /// </remarks>
     private void BarraDeBuild(Run p)
     {
-        this.Panel(UiLayout.BuildPanel);
+        this.Panel(UiLayout.RunBottomBar);
 
         var ficha = p.Roster.Find(_juego.ClaseElegida);
 
-        Bloque(UiLayout.EquippedPerks, Loc.Get("ui.hud.perks_equipados"));
-        Bloque(UiLayout.EquippedWeapon, Loc.Get("ui.hud.arma_equipada"));
-        Bloque(UiLayout.ActiveBlueprints, Loc.Get("ui.hud.planos_activos"));
-        Bloque(UiLayout.Consumables, Loc.Get("ui.hud.mochila"));
+        Bloque(UiLayout.RunBottomBlock(0), Loc.Get("ui.hud.perks_equipados"));
+        Bloque(UiLayout.RunBottomBlock(1), Loc.Get("ui.hud.arma_equipada"));
+        Bloque(UiLayout.RunBottomBlock(2), Loc.Get("ui.hud.planos_activos"));
+        Bloque(UiLayout.RunBottomBlock(3), Loc.Get("ui.hud.mochila"));
 
         if (ficha is not null)
         {
-            PerksEquipados(UiLayout.EquippedPerks, ficha);
-            ArmaEquipada(UiLayout.EquippedWeapon, p, ficha);
+            PerksEquipados(UiLayout.RunBottomBlock(0), ficha);
+            ArmaEquipada(UiLayout.RunBottomBlock(1), p, ficha);
         }
 
-        PlanosActivos(UiLayout.ActiveBlueprints, p);
-        Mochila(UiLayout.Consumables, p);
+        PlanosActivos(UiLayout.RunBottomBlock(2), p);
+        Mochila(UiLayout.RunBottomBlock(3), p);
     }
 
     /// <summary>El título y la separación de un bloque de la barra de build.</summary>
@@ -544,19 +582,19 @@ public partial class Hud : Control
     /// </remarks>
     private void Pie()
     {
-        this.Panel(UiLayout.FooterBar, opacidad: 0.85f);
+        this.Panel(UiLayout.RunFooter);
 
-        var aviso = new Rect2(UiLayout.FooterTip.Position.X - 22f,
-            UiLayout.FooterTip.Position.Y, 18f, UiLayout.FooterTip.Size.Y);
+        var aviso = new Rect2(UiLayout.RunFooterTip.Position.X - 22f,
+            UiLayout.RunFooterTip.Position.Y, 18f, UiLayout.RunFooterTip.Size.Y);
 
         DrawCircle(aviso.Position + (aviso.Size / 2f), 8f, Palette.Info);
 
         this.Label(aviso, "i", 13, Palette.BackgroundMain, HorizontalAlignment.Center);
 
-        this.Label(UiLayout.FooterTip,
+        this.Label(UiLayout.RunFooterTip,
             $"{Loc.Get("ui.hud.consejo")}  {Loc.Get("ui.hud.ayuda")}", 14, Palette.TextMuted);
 
-        this.RarityLegend(UiLayout.FooterLegend);
+        this.RarityLegend(UiLayout.RunFooterLegend);
     }
 
     /// <summary>El cartel de ganaste o perdiste, en el centro.</summary>
@@ -723,23 +761,32 @@ public partial class Hud : Control
 
         var mouse = GetLocalMousePosition();
 
-        // Mismo 0,5 con el que el mundo dibuja las hojas x4: el fantasma mide lo
-        // que va a medir el defensor puesto.
-        const float s = 0.5f;
+        // ⚠ El fantasma lo dibuja el HUD, que está en coordenadas de PANTALLA, y
+        // el defensor va a vivir en el mundo, que está corrido y a escala adentro
+        // del marco. Así que el 0,5 con el que el mundo dibuja las hojas x4 se
+        // multiplica por la escala del marco: sin eso el fantasma se ve al doble
+        // de lo que va a medir la ficha puesta, y el jugador calcula mal el lugar.
+        float s = 0.5f * UiLayout.WorldScale;
 
         var tinte = Colors.White.Alpha(0.72f);
-        var pie = mouse + new Vector2(0, Escala.LadoCelda / 2f);
+        var pie = mouse + new Vector2(0, UiLayout.CellOnScreen / 2f);
 
+        // Mientras el cursor sigue sobre la columna todavía no hay celda que
+        // mostrar, y el muñeco flota en el cursor sin imantarse.
         if (FichaEn(mouse) < 0)
         {
-            var celda = new Cell(
-                (int)(mouse.X / Escala.LadoCelda),
-                (int)(mouse.Y / Escala.LadoCelda));
+            var mundo = UiLayout.ToWorld(mouse);
 
-            if (p.PuedePoner(_juego.ClaseElegida, celda))
+            var celda = new Cell(
+                (int)(mundo.X / Escala.LadoCelda),
+                (int)(mundo.Y / Escala.LadoCelda));
+
+            if (UiLayout.InWorld(mouse) && p.PuedePoner(_juego.ClaseElegida, celda))
             {
                 var (cx, cy) = Escala.CentroDe(celda.X, celda.Y);
-                pie = new Vector2(cx, cy + (Escala.LadoCelda / 2f));
+
+                pie = UiLayout.ToScreen(new Vector2(cx, cy))
+                    + new Vector2(0, UiLayout.CellOnScreen / 2f);
             }
             else
             {

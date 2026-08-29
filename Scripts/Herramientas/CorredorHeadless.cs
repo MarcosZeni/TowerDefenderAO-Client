@@ -573,6 +573,8 @@ public static class CorredorHeadless
         total.GoldPerksObtained += una.GoldPerksObtained;
         total.UniquesCrafted += una.UniquesCrafted;
         total.WaveOfFirstUnique += una.WaveOfFirstUnique;
+        total.PerksUpgraded += una.PerksUpgraded;
+        total.GoldFromUpgrades += una.GoldFromUpgrades;
 
         total.SecondaryDamage += una.SecondaryDamage;
         total.OverkillDamage += una.OverkillDamage;
@@ -668,6 +670,12 @@ public static class CorredorHeadless
                  $"{m.UniquesCrafted} Únicos en {corridas} corridas · " +
                  $"primer Único ~oleada {conUnico}");
 
+        // ⚠ Si el Oro fabricado se acerca al total, la mejora dejó de ser la
+        // salida de las sobras y se volvió el camino principal al Oro — que es
+        // lo que «maxCraftedGoldPerRun» existe para evitar.
+        GD.Print($"   mejoras           {m.PerksUpgraded / corridas} por corrida · " +
+                 $"{m.GoldFromUpgrades / corridas} de los Oro salieron de mejorar");
+
         // Si el secundario se acerca al directo, los comportamientos dejaron de ser
         // condimento y pasaron a ser la fuente de daño: es el síntoma de un tope
         // mal puesto, y es exactamente lo que le pasaba a Cadena.
@@ -712,8 +720,14 @@ public static class CorredorHeadless
 
         while (partida.State == RunState.InProgress && partida.Tick < TechoTicks)
         {
+            // ⚠ La elección corta la vuelta: desde el mercado, la preparación se
+            // arma antes de abrirla y las dos banderas están prendidas a la vez.
             if (partida.WaitingForChoice)
+            {
                 log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, Politica.Normal)));
+                partida.Advance();
+                continue;
+            }
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -884,8 +898,27 @@ public static class CorredorHeadless
             // Medido: `techo` y `normal` daban resultados idénticos byte a byte,
             // con el peso de sinergia disparando 53 veces en seis corridas. Los
             // Oro que ofrecía el jefe no cambiaban nada porque ninguno entraba.
-            if (partida.WaitingForChoice && !HacerLugarParaElOro(partida, log))
-                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, politica)));
+            //
+            // ⚠ Y ahora la elección CORTA la vuelta.
+            //
+            // Desde que el mercado junta las dos pantallas, la preparación se arma
+            // ANTES de abrir la elección, así que `WaitingForChoice` y
+            // `WaitingForWaveStart` son verdaderas al mismo tiempo. Sin este
+            // `continue`, la vuelta seguía de largo hasta el `CallNextWave` de
+            // abajo y lanzaba la oleada con la elección sin resolver — que en el
+            // tick en que `HacerLugarParaElOro` tira algo en vez de elegir, es
+            // perder los ocho Oro de la corrida otra vez.
+            if (partida.WaitingForChoice)
+            {
+                if (!HacerLugarParaElOro(partida, log))
+                {
+                    log.Agregar(PlayerAction.Choose(
+                        partida.TickDeAccion, MejorOpcion(partida, politica)));
+                }
+
+                partida.Advance();
+                continue;
+            }
 
             // ⚠ La preparación se USA, no se saltea.
             //
@@ -920,11 +953,19 @@ public static class CorredorHeadless
                 bool fusiono = !puso && politica == Politica.Techo
                                && FusionarSiPuede(partida, log);
 
-                bool compro = !puso && !fusiono && avanzado && ComprarLoQuePueda(partida, log, politica);
+                // Mejorar va antes que comprar y antes que tirar: cuatro Bronce
+                // que nadie va a equipar se convierten en una Plata y liberan tres
+                // lugares. Tirarlos libera lo mismo y no devuelve nada, así que
+                // toda vez que se pueda mejorar, tirar es la peor opción.
+                bool mejoro = !puso && !fusiono && avanzado
+                              && MejorarSiPuede(partida, log, politica);
+
+                bool compro = !puso && !fusiono && !mejoro && avanzado
+                              && ComprarLoQuePueda(partida, log, politica);
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
-                bool libero = !puso && !fusiono && !compro && avanzado
+                bool libero = !puso && !fusiono && !mejoro && !compro && avanzado
                               && LiberarMochila(partida, log);
 
                 // ⚠ Las dos decisiones que no cuestan oro van ANTES del sumidero,
@@ -934,20 +975,20 @@ public static class CorredorHeadless
                 // mecánicas no aparecerían en la medición.
                 //
                 // Gratis, así que no compiten con nada: van antes de gastar.
-                bool apunto = !puso && !fusiono && !compro && !libero
+                bool apunto = !puso && !fusiono && !mejoro && !compro && !libero
                               && politica == Politica.Techo
                               && AjustarTargeting(partida, log);
 
-                bool eligio = !puso && !fusiono && !compro && !libero && !apunto
+                bool eligio = !puso && !fusiono && !mejoro && !compro && !libero && !apunto
                               && politica == Politica.Techo
                               && ElegirComportamiento(partida, log);
 
                 // Último: el sumidero del sobrante. Poner un defensor más siempre
                 // vale más que un nivel comprado.
-                bool subio = !puso && !fusiono && !compro && !libero && !apunto && !eligio
-                             && avanzado && SubirNivelSiSobra(partida, log);
+                bool subio = !puso && !fusiono && !mejoro && !compro && !libero && !apunto
+                             && !eligio && avanzado && SubirNivelSiSobra(partida, log);
 
-                if (!puso && !fusiono && !compro && !libero && !apunto && !eligio && !subio)
+                if (!puso && !fusiono && !mejoro && !compro && !libero && !apunto && !eligio && !subio)
                 {
                     log.Agregar(new PlayerAction(
                         partida.TickDeAccion, ActionType.CallNextWave, 0, 0, 0));
@@ -960,7 +1001,7 @@ public static class CorredorHeadless
                 // saca dos ítems y un descarte saca uno, así que el índice del
                 // equipar que va detrás apunta a otra cosa. Comprar sí es seguro
                 // —el ítem entra al final y no corre a los de antes—.
-                if (!fusiono && !libero)
+                if (!fusiono && !mejoro && !libero)
                     EquiparLoQuePueda(partida, log, politica);
 
                 partida.Advance();
@@ -1253,6 +1294,112 @@ public static class CorredorHeadless
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Convierte sobras en un perk del tier de arriba, si la mochila aprieta.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Solo cuando la mochila va por dos tercios.</b> Mejorar en cuanto
+    /// hay cuatro Bronce quemaría perks que todavía tenían dónde entrar; el
+    /// sentido de la mecánica es darle destino a lo que ya sobra, y medirla de
+    /// otra forma mediría un jugador que no existe.</para>
+    ///
+    /// <para><b>Plata → Oro solo en el techo.</b> Fabricar Oro es componer, que
+    /// es exactamente lo que separa esa política de las otras dos; Bronce → Plata
+    /// es higiene de mochila y la hace también el normal. Si las tres hicieran lo
+    /// mismo, las tres cotas medirían lo mismo.</para>
+    ///
+    /// <para>Elige primero los que <b>ninguna clase del roster puede equipar</b>:
+    /// son basura garantizada, y gastarlos primero es lo que un jugador haría.</para>
+    /// </remarks>
+    private static bool MejorarSiPuede(Run partida, ActionLog log, Politica politica)
+    {
+        int cap = CargadorDatos.Actual.Curves.Defenders.BackpackSlots;
+
+        if (partida.Roster.Classes.Count == 0 || partida.Backpack.Ocupados * 3 < cap * 2)
+            return false;
+
+        // ⚠ `GoldPoolReady` no es una optimización: sin él, mejorar a Oro antes
+        // del primer jefe rebota en la simulación —no hay pool de dónde sacarlo—
+        // y el corredor vuelve a intentar la misma acción con el reloj congelado,
+        // o sea que se cuelga sin avanzar un tick.
+        //
+        // Plata primero: rinde más por lugar liberado, y el tope de Oro fabricado
+        // hace que la ventana sea corta.
+        if (politica == Politica.Techo && partida.GoldPoolReady
+            && partida.CraftedGold < partida.MaxCraftedGold
+            && Intentar(PerkTier.Silver))
+        {
+            return true;
+        }
+
+        return Intentar(PerkTier.Bronze);
+
+        bool Intentar(PerkTier tier)
+        {
+            int cuantos = partida.UpgradeCost(tier);
+
+            if (cuantos < 2)
+                return false;
+
+            var cosas = partida.Backpack.Items;
+            var inutiles = new List<int>();
+            var resto = new List<int>();
+
+            for (int i = 0; i < cosas.Count; i++)
+            {
+                if (cosas[i].Kind != ItemType.Perk)
+                    continue;
+
+                var def = CargadorDatos.Actual.Perks.Get(cosas[i].Id);
+
+                if (def.Tier != tier)
+                    continue;
+
+                bool leSirveAAlguna = false;
+
+                foreach (var ficha in partida.Roster.Classes)
+                {
+                    if (def.WorksFor(ficha.DefenderClass))
+                    {
+                        leSirveAAlguna = true;
+                        break;
+                    }
+                }
+
+                (leSirveAAlguna ? resto : inutiles).Add(i);
+            }
+
+            if (inutiles.Count + resto.Count < cuantos)
+                return false;
+
+            int mascara = 0;
+            int puestos = 0;
+
+            foreach (int i in inutiles)
+            {
+                if (puestos == cuantos)
+                    break;
+
+                mascara |= 1 << i;
+                puestos++;
+            }
+
+            foreach (int i in resto)
+            {
+                if (puestos == cuantos)
+                    break;
+
+                mascara |= 1 << i;
+                puestos++;
+            }
+
+            log.Agregar(new PlayerAction(
+                partida.TickDeAccion, ActionType.Upgrade, mascara, (int)tier, 0));
+
+            return true;
+        }
     }
 
     /// <summary>
@@ -1768,7 +1915,12 @@ public static class CorredorHeadless
     private static int Prioridad(ShopOffer oferta) => oferta.Kind switch
     {
         ShopKind.Blueprint => 40,
-        ShopKind.Class => 20,
+
+        // ⚠ Subió de 20 a 30 —arriba de la Plata— cuando reclutar dejó de ser
+        // gratis pasadas las `freeClasses`. Desde entonces la tienda es la ÚNICA
+        // puerta para una clase nueva, y dejarla debajo de un perk de Plata
+        // medía un jugador que se queda con dos clases toda la corrida.
+        ShopKind.Class => 30,
         ShopKind.Weapon => 10,
         _ => CargadorDatos.Actual.Perks.Get(oferta.Id).Tier switch
         {

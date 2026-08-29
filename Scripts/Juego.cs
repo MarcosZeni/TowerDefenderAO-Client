@@ -101,6 +101,17 @@ public partial class Juego : Node2D
         if (Seed == 0)
             Seed = 20260825;
 
+        // ⚠ EL MUNDO VIVE ADENTRO DEL MARCO. Todo lo que dibuja esta clase —y
+        // todos sus hijos: el portal y el cristal— se sigue escribiendo en
+        // coordenadas de mundo, en celdas de 96 px, y esta transformación lo
+        // corre y lo achica para que entre en el hueco (INTERFAZ.md §3).
+        //
+        // Va acá, en el nodo, y no repartida por cada DrawRect: si la escala
+        // estuviera en el dibujo habría que acordarse de aplicarla en veinte
+        // lugares, y el que se olvide dibuja en otra parte de la pantalla.
+        Position = UiLayout.WorldOrigin;
+        Scale = new Vector2(UiLayout.WorldScale, UiLayout.WorldScale);
+
         // La corrida anterior horneó su piso; el de esta se hornea al primer frame.
         PisoHorneado.Olvidar();
 
@@ -256,6 +267,16 @@ public partial class Juego : Node2D
     /// <summary>El overlay de mochila, para poder abrirlo con Tab.</summary>
     public PantallaMochila? Backpack { get; set; }
 
+    /// <summary>
+    /// El mercado —elección y tienda juntas—, para poder reabrirlo.
+    /// </summary>
+    /// <remarks>
+    /// Se cierra con Esc una vez resuelta la elección, así que hace falta una
+    /// puerta de vuelta: el botón MERCADO de la barra de preparación. Sin ella,
+    /// cerrar la ventana perdería la tienda de esa oleada.
+    /// </remarks>
+    public PantallaMercado? Mercado { get; set; }
+
     /// <summary>Equipa lo que está en ese lugar de la mochila.</summary>
     public void EquiparDeMochila(int indice, DefenderClass clase)
     {
@@ -274,6 +295,19 @@ public partial class Juego : Node2D
     /// </summary>
     public void RemovePerk(DefenderClass clase, int slot)
         => _log.Agregar(new PlayerAction(Run.TickDeAccion, ActionType.RemovePerk, (int)clase, slot, 0));
+
+    /// <summary>
+    /// Mejora los perks marcados en uno del tier de arriba.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Lo que va al log es la <b>máscara de bits</b> de la selección, no el
+    /// perk que sale: el resultado lo sortea el RNG sembrado y el servidor lo
+    /// regenera. Guardar el resultado dejaría que un cliente modificado reclamara
+    /// haber fabricado el Oro que quisiera.
+    /// </remarks>
+    public void Mejorar(int mascara, PerkTier tier)
+        => _log.Agregar(new PlayerAction(
+            Run.TickDeAccion, ActionType.Upgrade, mascara, (int)tier, 0));
 
     /// <summary>
     /// Compra un nivel de una clase del roster con el oro de la corrida.
@@ -452,13 +486,82 @@ public partial class Juego : Node2D
         return true;
     }
 
+    /// <summary>
+    /// Vende una ficha puesta. Devuelve el <c>defenderSellPercent</c> del costo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Lo dispara el botón del panel del defensor, en <b>dos clicks</b>. Antes
+    /// lo hacía el botón derecho sobre el mapa, sin confirmación: el gesto más
+    /// fácil de hacer sin querer borraba una unidad puesta y su oro.
+    /// </remarks>
+    public void Vender(int idColocacion)
+        => Encolar(t => PlayerAction.Sell(t, idColocacion));
+
+    /// <summary>
+    /// Mueve una ficha ya puesta a otra celda. Ocupada, las dos se intercambian.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Va por <see cref="Defender.PlacementId"/>, igual que vender y que el
+    /// targeting: la celda de origen ya no sirve como identidad en el momento en
+    /// que la ficha se está moviendo.
+    /// </remarks>
+    public void MoverDefensor(int idColocacion, Cell destino)
+        => Encolar(t => new PlayerAction(
+            t, ActionType.MoveDefender, idColocacion, destino.X, destino.Y));
+
+    // =====================================================================
+    // Arrastrar una ficha por el tablero
+    // =====================================================================
+
+    /// <summary>La ficha que se está arrastrando, o -1.</summary>
+    private int _arrastreId = -1;
+
+    /// <summary>Dónde se apretó el botón, para distinguir un click de un arrastre.</summary>
+    private Vector2 _arrastreDesde;
+
+    /// <summary>
+    /// Ya se movió lo suficiente como para que esto sea un arrastre y no un click.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El umbral existe porque <b>un click y un arrastre empiezan igual</b>. Sin
+    /// él, seleccionar una ficha con la mano temblando la movería una celda, y
+    /// mover sería tan fácil de hacer sin querer como lo era vender con el botón
+    /// derecho — el problema que esto vino a arreglar.
+    /// </remarks>
+    private bool _arrastrando;
+
+    private const float UmbralArrastre = 8f;
+
+    /// <summary>La ficha que se arrastra ahora, o <c>null</c>. La mira el dibujo.</summary>
+    public Defender? Arrastrada
+        => _arrastrando && _arrastreId >= 0 ? Run.DefensorPorId(_arrastreId) : null;
+
     public override void _UnhandledInput(InputEvent evento)
     {
         switch (evento)
         {
             case InputEventMouseMotion movimiento:
                 _celdaMouse = ACelda(movimiento.Position);
+
+                // El arrastre arranca recién al pasar el umbral: hasta ahí sigue
+                // siendo un click que todavía no se soltó.
+                //
+                // ⚠ Y solo en preparación: con la oleada corriendo el gesto sigue
+                // siendo un click que selecciona, porque mover en combate es otra
+                // mecánica (Acciones.cs, MoveDefender). Un arrastre que se dibuja
+                // y después no hace nada se lee como un bug.
+                if (_arrastreId >= 0 && !_arrastrando && Run.WaitingForWaveStart &&
+                    movimiento.Position.DistanceTo(_arrastreDesde) > UmbralArrastre)
+                {
+                    _arrastrando = true;
+                }
+
                 QueueRedraw();
+                return;
+
+            case InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } suelta
+                when _arrastreId >= 0:
+                SoltarArrastre(suelta.Position);
                 return;
 
             case InputEventMouseButton boton when boton.Pressed:
@@ -492,21 +595,19 @@ public partial class Juego : Node2D
 
         if (boton.ButtonIndex == MouseButton.Left)
         {
-            // ⚠ Click en una celda OCUPADA selecciona; en una vacía, pone.
+            // ⚠ Click en una celda OCUPADA agarra la ficha; en una vacía, pone.
             //
             // No hay conflicto porque las dos cosas son excluyentes por
-            // construcción: `PuedePoner` ya rechazaba la celda ocupada, así que
-            // ese click no hacía absolutamente nada. Ahora abre el panel de
-            // targeting, que es lo único que se decide por defensor y no por clase.
+            // construcción: `PuedePoner` ya rechazaba la celda ocupada. Agarrar y
+            // soltar en el mismo lugar es un click, y el click selecciona: abre el
+            // panel de targeting, que es lo único que se decide por defensor.
             var ocupada = Run.DefensorEn(celda.Value);
 
             if (ocupada is not null)
             {
-                // Volver a clickear el mismo lo deselecciona: el panel se cierra
-                // desde donde se abrió, sin buscar una cruz.
-                DefensorSeleccionado = DefensorSeleccionado == ocupada.PlacementId
-                    ? -1
-                    : ocupada.PlacementId;
+                _arrastreId = ocupada.PlacementId;
+                _arrastreDesde = boton.Position;
+                _arrastrando = false;
 
                 return;
             }
@@ -516,15 +617,53 @@ public partial class Juego : Node2D
         }
         else if (boton.ButtonIndex == MouseButton.Right)
         {
-            var defensor = Run.DefensorEn(celda.Value);
-            if (defensor is not null)
-            {
-                if (DefensorSeleccionado == defensor.PlacementId)
-                    DefensorSeleccionado = -1;
-
-                Encolar(t => PlayerAction.Sell(t, defensor.PlacementId));
-            }
+            // ⚠ EL BOTÓN DERECHO YA NO VENDE.
+            //
+            // Vendía la ficha de abajo del cursor, sin confirmar y sin poder
+            // deshacer: un click derecho al costado —el gesto más fácil de hacer
+            // sin querer que hay— borraba una unidad puesta y su oro. Vender vive
+            // ahora en el panel del defensor, donde hay que apuntar a un botón que
+            // dice cuánto devuelve.
+            //
+            // Acá cancela: suelta el arrastre y cierra el panel.
+            _arrastreId = -1;
+            _arrastrando = false;
+            DefensorSeleccionado = -1;
         }
+    }
+
+    /// <summary>
+    /// Suelta la ficha que se estaba arrastrando.
+    /// </summary>
+    /// <remarks>
+    /// <para>Sin haber pasado el umbral fue un <b>click</b>, y el click
+    /// selecciona: volver a clickear la misma la deselecciona, así el panel se
+    /// cierra desde donde se abrió.</para>
+    ///
+    /// <para>Con arrastre de verdad, manda la celda destino. La simulación
+    /// revalida todo —que sea preparación, que la celda sea colocable, que la
+    /// ficha exista— porque el log se re-simula por ese mismo camino.</para>
+    /// </remarks>
+    private void SoltarArrastre(Vector2 posicion)
+    {
+        int id = _arrastreId;
+        bool arrastro = _arrastrando;
+
+        _arrastreId = -1;
+        _arrastrando = false;
+
+        if (!arrastro)
+        {
+            DefensorSeleccionado = DefensorSeleccionado == id ? -1 : id;
+            return;
+        }
+
+        var destino = ACelda(posicion);
+
+        if (destino is null || !PuedeActuar)
+            return;
+
+        MoverDefensor(id, destino.Value);
     }
 
     /// <summary>
@@ -595,12 +734,31 @@ public partial class Juego : Node2D
         }
     }
 
-    /// <summary>Convierte una posición de pantalla en celda de la grilla.</summary>
+    /// <summary>
+    /// Convierte una posición de <b>pantalla</b> en celda de la grilla.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Pasa por <see cref="UiLayout.ToWorld"/> primero.</b> El mundo ya
+    /// no ocupa la pantalla entera: vive adentro del marco, corrido y a escala
+    /// (<c>INTERFAZ.md</c> §3). Dividir la posición cruda por
+    /// <see cref="Escala.LadoCelda"/> —que es lo que hacía antes— devuelve una
+    /// celda que no es la que el jugador está mirando.</para>
+    ///
+    /// <para>Un click fuera del marco no es de ninguna celda, y por eso se
+    /// chequea <see cref="UiLayout.InWorld"/> antes: sin eso, un click sobre la
+    /// columna del roster cae en coordenadas de mundo negativas, que
+    /// <c>(int)</c> trunca <b>hacia cero</b> y convierte en la celda 0.</para>
+    /// </remarks>
     private Cell? ACelda(Vector2 posicion)
     {
-        int x = (int)(posicion.X / Escala.LadoCelda);
-        int y = (int)(posicion.Y / Escala.LadoCelda);
-        var celda = new Cell(x, y);
+        if (!UiLayout.InWorld(posicion))
+            return null;
+
+        var mundo = UiLayout.ToWorld(posicion);
+
+        var celda = new Cell(
+            (int)(mundo.X / Escala.LadoCelda),
+            (int)(mundo.Y / Escala.LadoCelda));
 
         return Run.Map.InGrid(celda) ? celda : null;
     }
@@ -665,12 +823,22 @@ public partial class Juego : Node2D
         // animado. Ver CristalTorre.
 
         // Los defensores.
+        var llevada = Arrastrada;
+
         foreach (var d in Run.Defenders)
         {
-            if (!DibujarDefensor(d, celda))
+            // ⚠ La que se arrastra se dibuja en la celda de ABAJO DEL CURSOR, no
+            // en la suya. Es lo que hace que arrastrar se sienta como llevar la
+            // ficha: si se quedara en el origen, el jugador estaría moviendo un
+            // recuadro y adivinando qué se mueve con él.
+            var donde = ReferenceEquals(d, llevada) && _celdaMouse is { } bajoCursor
+                ? bajoCursor
+                : d.Cell;
+
+            if (!DibujarDefensor(d, celda, donde))
             {
                 DrawRect(
-                    new Rect2(d.Cell.X * celda + 8, d.Cell.Y * celda + 8, celda - 16, celda - 16),
+                    new Rect2(donde.X * celda + 8, donde.Y * celda + 8, celda - 16, celda - 16),
                     Palette.Success);
             }
         }
@@ -728,7 +896,7 @@ public partial class Juego : Node2D
     /// el mapa.</para>
     /// </remarks>
     /// <returns><c>false</c> si falta el arte y hay que dibujar la primitiva.</returns>
-    private bool DibujarDefensor(Defender d, int celda)
+    private bool DibujarDefensor(Defender d, int celda, Cell donde)
     {
         var enRoster = Run.Roster.Find(d.DefenderClass);
 
@@ -740,11 +908,13 @@ public partial class Juego : Node2D
         if (apariencia is null || apariencia.Body.Length == 0)
             return false;
 
-        string direccion = Direcciones[MirandoHacia(d)];
+        // La orientación sale de DONDE SE VA A PARAR, no de dónde está: mientras
+        // se arrastra, el muñeco ya mira el camino de su destino.
+        string direccion = Direcciones[MirandoHacia(donde)];
 
         var centro = new Vector2(
-            (d.Cell.X + 0.5f) * celda,
-            (d.Cell.Y + 0.5f) * celda);
+            (donde.X + 0.5f) * celda,
+            (donde.Y + 0.5f) * celda);
 
         // El cuerpo es la pieza que ancla: la cabeza y el arma van a su mismo
         // punto de apoyo. Si no está, no se dibuja nada, porque una cabeza sola
@@ -772,50 +942,135 @@ public partial class Juego : Node2D
     }
 
     /// <summary>
-    /// Hacia dónde mira un defensor: al enemigo más cercano, o al sur si no hay.
+    /// Las cuatro vecinas, en el orden en que ganan un empate.
     /// </summary>
     /// <remarks>
-    /// <para>⚠ <b>No es el objetivo que eligió la simulación</b>, y no tiene por
-    /// qué serlo. La simulación le pega al <i>más adelantado en la ruta</i>; acá
-    /// se busca el más cercano, que es una cuenta de render y no vuelve al tick.
-    /// Repetir la regla de <c>ElegirObjetivo</c> en el dibujo sería tener dos
-    /// copias de la parte más delicada del combate para ganar que el muñeco mire
-    /// al bicho correcto una vez cada tanto.</para>
+    /// ⚠ <b>El sur va primero a propósito.</b> Con camino arriba y abajo, las dos
+    /// direcciones son igual de correctas y hay que elegir una: gana la que
+    /// muestra la cara del muñeco. Es la misma que la de reserva, así que un
+    /// defensor nunca cambia de postura por un detalle del layout que el jugador
+    /// no ve.
     /// </remarks>
-    private int MirandoHacia(Defender d)
+    private static readonly (int Dx, int Dy, int Direccion)[] Vecinas =
+    [
+        (0, 1, 3),    // sur
+        (1, 0, 1),    // este
+        (-1, 0, 2),   // oeste
+        (0, -1, 0),   // norte
+    ];
+
+    /// <summary>
+    /// La orientación cacheada por celda, y el mapa del que salió.
+    /// </summary>
+    /// <remarks>
+    /// La ruta no cambia durante una corrida, así que la orientación de una celda
+    /// tampoco: se calcula una vez y se guarda. El mapa se guarda al lado para
+    /// tirar el caché cuando arranca otra corrida — sin eso, la segunda corrida
+    /// orientaría a sus defensores con el camino de la primera.
+    /// </remarks>
+    private readonly System.Collections.Generic.Dictionary<Cell, int> _miradas = [];
+
+    private Map? _mapaDeLasMiradas;
+
+    /// <summary>
+    /// Hacia dónde mira un defensor: <b>al camino</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Mira al camino, no al enemigo.</b> Antes seguía al bicho vivo
+    /// más cercano, y eso hacía que una fila de defensores girara en bloque
+    /// mientras pasaba la oleada; peor, entre oleadas —sin enemigos— todos caían
+    /// al sur de golpe. Orientar al camino da una postura que <b>no cambia
+    /// nunca</b>, que es lo que hace que el tablero se lea como una defensa
+    /// plantada.</para>
+    ///
+    /// <para>Las tres reglas, en orden:</para>
+    ///
+    /// <list type="number">
+    /// <item>Una vecina con camino: mira ahí. Empate, gana el sur.</item>
+    /// <item>Sin camino pegado: mira hacia la celda de ruta más cercana, por el
+    /// eje que más se recorre.</item>
+    /// <item>Nada: <b>sur</b> —el heading 3 de AO—.</item>
+    /// </list>
+    ///
+    /// <para>El caso «rodeado por camino» —las cuatro vecinas son ruta— cae
+    /// también en el sur: no queda ningún lado libre al que mirar, así que la
+    /// regla del lado sin camino no tiene con qué cumplirse.</para>
+    ///
+    /// <para>Es render puro: la simulación no consulta esto y el tick no cambia.</para>
+    /// </remarks>
+    private int MirandoHacia(Cell celda)
     {
-        float mejor = float.MaxValue;
-        int direccion = 3;
-
-        var ruta = Run.Route;
-
-        foreach (var e in Run.Enemies)
+        if (!ReferenceEquals(_mapaDeLasMiradas, Run.Map))
         {
-            if (!e.Alive)
-                continue;
-
-            var (fx, fy) = ruta.PosicionFina(e.DistanceTravelled);
-
-            float ex = (float)fx / Ints.ThousandthsPerCell;
-            float ey = (float)fy / Ints.ThousandthsPerCell;
-
-            float dx = ex - d.Cell.X;
-            float dy = ey - d.Cell.Y;
-            float distancia = (dx * dx) + (dy * dy);
-
-            if (distancia >= mejor)
-                continue;
-
-            mejor = distancia;
-
-            // Gana el eje que más se recorre; empatados, el vertical, que es el
-            // que más se distingue en un top-down.
-            direccion = Mathf.Abs(dx) > Mathf.Abs(dy)
-                ? (dx > 0 ? 1 : 2)
-                : (dy > 0 ? 3 : 0);
+            _miradas.Clear();
+            _mapaDeLasMiradas = Run.Map;
         }
 
+        if (_miradas.TryGetValue(celda, out int guardada))
+            return guardada;
+
+        int direccion = CalcularMirada(celda);
+        _miradas[celda] = direccion;
+
         return direccion;
+    }
+
+    private int CalcularMirada(Cell celda)
+    {
+        var mapa = Run.Map;
+        int conCamino = 0;
+        int pegada = -1;
+
+        foreach (var (dx, dy, dir) in Vecinas)
+        {
+            if (!mapa.EsRuta(new Cell(celda.X + dx, celda.Y + dy)))
+                continue;
+
+            conCamino++;
+
+            if (pegada < 0)
+                pegada = dir;
+        }
+
+        // Rodeado: no hay lado sin camino al que mirar, así que sur.
+        if (conCamino == 4)
+            return 3;
+
+        if (pegada >= 0)
+            return pegada;
+
+        // Sin camino pegado —una colocable que quedó a dos celdas del borde de la
+        // ruta— igual tiene que mirar al camino: gana la celda de ruta más
+        // cercana. Sin esto, un defensor con el camino justo arriba miraría al sur
+        // solo porque no lo tiene tocando.
+        long mejor = long.MaxValue;
+        int elegida = 3;
+
+        for (int y = 0; y < mapa.Height; y++)
+        {
+            for (int x = 0; x < mapa.Width; x++)
+            {
+                if (!mapa.EsRuta(new Cell(x, y)))
+                    continue;
+
+                long dx = x - celda.X;
+                long dy = y - celda.Y;
+                long distancia = (dx * dx) + (dy * dy);
+
+                if (distancia >= mejor)
+                    continue;
+
+                mejor = distancia;
+
+                // Gana el eje que más se recorre; empatados, el vertical, que es
+                // el que más se distingue en un top-down.
+                elegida = System.Math.Abs(dx) > System.Math.Abs(dy)
+                    ? (dx > 0 ? 1 : 2)
+                    : (dy > 0 ? 3 : 0);
+            }
+        }
+
+        return elegida;
     }
 
     /// <summary>
@@ -939,6 +1194,12 @@ public partial class Juego : Node2D
         if (_celdaMouse is not { } c)
             return;
 
+        if (Arrastrada is { } llevada)
+        {
+            DibujarArrastre(llevada, c, celda);
+            return;
+        }
+
         bool puede = Run.PuedePoner(_claseElegida, c);
         var ocupada = Run.DefensorEn(c);
 
@@ -966,7 +1227,86 @@ public partial class Juego : Node2D
             puede ? Palette.Success.Alpha(0.85f) :
                     Palette.Danger.Alpha(0.65f);
 
-        DrawRect(new Rect2(c.X * celda, c.Y * celda, celda, celda),
+        var marco = new Rect2(c.X * celda, c.Y * celda, celda, celda);
+
+        DrawRect(marco, color, filled: false, width: 3f);
+
+        // ⚠ El nombre de la clase que se va a poner, pegado a la celda.
+        //
+        // El click en una celda libre pone la clase elegida, y hasta acá lo único
+        // que decía cuál era la tarjeta iluminada de la columna, al otro lado de
+        // la pantalla. Mientras el ojo está en el tablero eligiendo dónde, la
+        // pregunta «¿qué estoy por poner?» tiene que contestarse sin mover la
+        // vista.
+        if (ocupada is not null || !puede)
+            return;
+
+        // El mundo va a escala adentro del marco (INTERFAZ.md §3), así que el
+        // tamaño se saca de la celda: un tamaño fijo en unidades de mundo se
+        // vería más chico en pantalla de lo que dice el número.
+        int tamano = (int)(celda * 0.22f);
+        string nombre = Loc.Class(_claseElegida).ToUpperInvariant();
+
+        float ancho = UiStyle.Width(nombre, tamano) + (celda * 0.18f);
+
+        var chapa = new Rect2(
+            marco.Position.X + ((celda - ancho) / 2f),
+            marco.Position.Y - (celda * 0.34f),
+            ancho, celda * 0.30f);
+
+        DrawRect(chapa, Palette.BackgroundMain.Alpha(0.88f));
+        DrawRect(chapa, color, filled: false, width: 2f);
+
+        this.Label(chapa, nombre, tamano, Palette.TextPrimary, HorizontalAlignment.Center);
+    }
+
+    /// <summary>
+    /// Lo que se ve mientras se arrastra una ficha: de dónde sale y qué va a pasar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Los tres resultados posibles tienen tres colores, y son los mismos
+    /// que el resto del juego ya usa: <b>verde</b> se mueve a un lugar libre,
+    /// <b>azul</b> —el que marca «esta clase»— las dos fichas se intercambian, y
+    /// <b>rojo</b> ahí no se puede.</para>
+    ///
+    /// <para>El origen queda marcado en gris. Sin eso, al arrastrar tres celdas
+    /// el jugador pierde de dónde salió la ficha y no sabe qué está deshaciendo
+    /// si suelta el botón fuera del tablero.</para>
+    /// </remarks>
+    private void DibujarArrastre(Defender llevada, Cell destino, int celda)
+    {
+        var origen = new Rect2(llevada.Cell.X * celda, llevada.Cell.Y * celda, celda, celda);
+
+        DrawRect(origen, Palette.BorderSoft.Alpha(0.30f));
+        DrawRect(origen, Palette.BorderLight.Alpha(0.7f), filled: false, width: 2f);
+
+        var otro = Run.DefensorEn(destino);
+
+        var color =
+            destino == llevada.Cell ? Palette.BorderLight.Alpha(0.8f)
+            : otro is not null ? Palette.Info.Alpha(0.9f)
+            : Run.Map.EsColocable(destino) ? Palette.Success.Alpha(0.9f)
+            : Palette.Danger.Alpha(0.7f);
+
+        // El anillo de alcance en el destino: mover una ficha es exactamente
+        // decidir a qué llega, así que la pregunta se contesta antes de soltar.
+        int alcanceMili = Run.Roster.StatsOf(llevada.DefenderClass, Run.Backpack).RangeMilli;
+
+        var centro = new Vector2((destino.X + 0.5f) * celda, (destino.Y + 0.5f) * celda);
+        float radio = alcanceMili * celda / (float)Ints.ThousandthsPerCell;
+
+        DrawCircle(centro, radio, Palette.Info.Alpha(0.10f));
+        DrawArc(centro, radio, 0, Mathf.Tau, 64, Palette.Info.Alpha(0.5f), 2f);
+
+        // La otra ficha del intercambio se marca también: son DOS las que se
+        // mueven, y marcar una sola esconde la mitad de lo que va a pasar.
+        if (otro is not null)
+        {
+            DrawRect(new Rect2(destino.X * celda, destino.Y * celda, celda, celda),
+                Palette.Info.Alpha(0.18f));
+        }
+
+        DrawRect(new Rect2(destino.X * celda, destino.Y * celda, celda, celda),
             color, filled: false, width: 3f);
     }
 }

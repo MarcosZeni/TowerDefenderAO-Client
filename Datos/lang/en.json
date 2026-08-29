@@ -213,6 +213,10 @@
     "ui.login.nombre_invalido": "The name has to be 3 to 20 characters, no spaces.",
     "ui.login.pass_corta": "The password has to be at least 8 characters.",
     "ui.login.error_entrar": "Could not log in.",
+
+    "ui.login.recordarme": "Keep me signed in on this computer",
+    "ui.login.reanudando": "signing in as",
+    "ui.login.sesion_vencida": "The saved session is no longer valid. Type your password again.",
     "ui.pausa.titulo": "PAUSED",
     "ui.pausa.aviso": "the clock is stopped · the run saves itself at the end of every wave",
     "ui.pausa.seguir": "KEEP PLAYING",
@@ -276,9 +280,20 @@
     "ui.preparacion.con_rasgo": "with a trait (impulsive or leader)",
     "ui.preparacion.ahi_vienen": "HERE THEY COME...",
     "ui.preparacion.comenzar_oleada": "START WAVE",
+    "ui.preparacion.mercado": "open market",
     "ui.preparacion.espacio_sin_apuro": "space · no rush, the clock is stopped",
 
     // --- La tienda rotativa de la corrida ------------------------------------
+
+    // --- The MARKET: the choice and the shop in one window -------------------
+    "ui.mercado.titulo": "MARKET",
+    "ui.mercado.zona0": "CHARACTERS",
+    "ui.mercado.zona1": "PERKS & BLUEPRINTS",
+    "ui.mercado.zona2": "WEAPONS",
+    "ui.mercado.gratis": "free",
+    "ui.mercado.cerrar": "close",
+    "ui.mercado.esc_para_cerrar": "Esc to go back to the board · the market stays open until you launch the wave",
+    "ui.mercado.ya_reclutada": "already yours",
     "ui.tienda.titulo": "SHOP",
     "ui.tienda.no_se_repone": "no restock: whatever you buy leaves an empty slot",
     "ui.tienda.vendido": "sold",
@@ -305,6 +320,10 @@
     "ui.defensor.cadencia": "cadence",
     "ui.defensor.manda_el_perk": "perk wins · the weapon ability is muted",
     "ui.defensor.manda_el_arma": "weapon wins · the behavior perk is muted",
+
+    "ui.defensor.vender": "sell",
+    "ui.defensor.confirmar_venta": "sure? click again",
+    "ui.defensor.arrastrar_para_mover": "to reposition it, drag it across the board",
 
     "ui.targeting.First": "first",
     "ui.targeting.Strongest": "strongest",
@@ -369,7 +388,14 @@
     "ui.mochila.subir_nivel": "level up to",
     "ui.mochila.nivel_maximo": "max level",
     "ui.mochila.sin_oro": "not enough gold",
-    "ui.mochila.sacar_destruye": "click an equipped perk to remove it (this destroys it)",
+    "ui.mochila.sacar_destruye": "double-click an equipped perk to remove it (this destroys it)",
+    "ui.mochila.equipado": "equipped",
+    "ui.mochila.sacar_doble_click": "double-click the slot above to remove it. It is destroyed.",
+
+    "ui.mochila.mejorar": "upgrade",
+    "ui.mochila.marcar_para_mejorar": "mark several of the same tier to upgrade them",
+    "ui.mochila.tope_oro": "crafted Gold cap:",
+
     "ui.mochila.confirmar_titulo": "REMOVING A PERK DESTROYS IT",
     "ui.mochila.confirmar_detalle": "It does not go back to the backpack. This cannot be undone.",
     "ui.mochila.destruir": "destroy",

@@ -105,9 +105,77 @@ public static class ApiCliente
     /// <summary>El token de la sesión abierta. Va en el header de cada pedido.</summary>
     public static string? Token { get; private set; }
 
+    /// <summary>El nick de la sesión abierta, para poder mostrarlo y recordarlo.</summary>
+    public static string? Nick { get; private set; }
+
+    /// <summary>
+    /// Cuándo caduca el token, en segundos Unix UTC. 0 = no se sabe.
+    /// </summary>
+    /// <remarks>
+    /// El servidor manda <c>expiraEnSegundos</c>, o sea un plazo; acá se guarda el
+    /// <b>instante</b>. Guardar el plazo no serviría: el archivo de sesión
+    /// sobrevive al cierre del juego, y un «faltan 30 días» escrito en disco sigue
+    /// diciendo lo mismo dentro de un año.
+    /// </remarks>
+    public static long ExpiraUnix { get; private set; }
+
     public static bool Logueado => !string.IsNullOrEmpty(Token);
 
-    public static void CerrarSesionLocal() => Token = null;
+    /// <summary>
+    /// Se dispara cada vez que la sesión se abre, se cierra o se pierde.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Existe para que <see cref="Sesion"/> pueda persistirla <b>sin</b> que
+    /// este archivo toque el disco. Es la línea que separa las dos cosas: acá
+    /// vive HTTP y JSON, y nada más. También es lo que hace que el 401 enterrado
+    /// en el transporte borre el archivo, que es el camino por el que un token
+    /// muerto se quedaba pegado.
+    /// </remarks>
+    public static event Action? SesionCambio;
+
+    /// <summary>
+    /// Vuelve a poner una sesión guardada en disco, sin ir al servidor.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Esto no valida nada.</b> El token puede estar muerto del otro lado
+    /// —la cuenta cerró sesión en otra máquina, el servidor lo revocó— y acá no
+    /// hay forma de saberlo. Quien decide es el servidor: la pantalla de login
+    /// pega un <c>/perfil/me</c> antes de dar la sesión por abierta.
+    ///
+    /// No dispara <see cref="SesionCambio"/> a propósito: viene del disco, así
+    /// que volver a escribirlo sería morderse la cola.
+    /// </remarks>
+    public static void Restaurar(string token, string nick, long expiraUnix)
+    {
+        Token = token;
+        Nick = nick;
+        ExpiraUnix = expiraUnix;
+    }
+
+    public static void CerrarSesionLocal() => Olvidar();
+
+    private static void Recordar(Session sesion)
+    {
+        Token = sesion.Token;
+        Nick = sesion.Nick;
+
+        ExpiraUnix = sesion.ExpiresInSeconds > 0
+            ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() + sesion.ExpiresInSeconds
+            : 0;
+
+        SesionCambio?.Invoke();
+    }
+
+    private static void Olvidar()
+    {
+        Token = null;
+        ExpiraUnix = 0;
+
+        // ⚠ El nick NO se borra: no es un secreto, y es lo que deja el campo
+        // escrito la próxima vez. Borrarlo convertiría cada logout en un login
+        // desde cero.
+        SesionCambio?.Invoke();
+    }
 
     public static async Task<(Session? Session, string? Error)> RegistrarAsync(
         string nick, string password, string? email)
@@ -116,7 +184,7 @@ public static class ApiCliente
             "/auth/registro", new { nick, password, email });
 
         if (ok && sesion is not null)
-            Token = sesion.Token;
+            Recordar(sesion);
 
         return (sesion, error);
     }
@@ -126,7 +194,7 @@ public static class ApiCliente
         var (ok, sesion, error) = await PostAsync<Session>("/auth/login", new { nick, password });
 
         if (ok && sesion is not null)
-            Token = sesion.Token;
+            Recordar(sesion);
 
         return (sesion, error);
     }
@@ -134,7 +202,7 @@ public static class ApiCliente
     public static async Task LogoutAsync()
     {
         await PostAsync<object>("/auth/logout", new { });
-        Token = null;
+        Olvidar();
     }
 
     /// <summary>
@@ -242,8 +310,8 @@ public static class ApiCliente
         // El 401 vacía el token local. Sin esto, el juego seguiría mandando un
         // token muerto en cada pedido y el jugador vería fallar todo sin entender
         // que lo que tiene que hacer es volver a entrar.
-        if (respuesta.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            Token = null;
+        if (respuesta.StatusCode == System.Net.HttpStatusCode.Unauthorized && Token is not null)
+            Olvidar();
 
         return (false, default, MensajeDeError(texto, respuesta.StatusCode));
     }

@@ -29,6 +29,17 @@ public partial class PantallaLogin : Control
     private Label _mensaje = null!;
     private Button _entrar = null!;
     private Button _registrar = null!;
+    private CheckBox _recordar = null!;
+
+    /// <summary>
+    /// El formulario, escondido mientras se prueba la sesión guardada.
+    /// </summary>
+    /// <remarks>
+    /// Se esconde entero en vez de solo apagar los botones: mostrar campos de
+    /// texto vacíos mientras el juego dice «entrando como Nacho» invita a
+    /// escribir encima de algo que está por desaparecer.
+    /// </remarks>
+    private VBoxContainer _formulario = null!;
 
     /// <summary>Se dispara cuando la sesión quedó abierta.</summary>
     public event System.Action? Entro;
@@ -65,12 +76,19 @@ public partial class PantallaLogin : Control
         caja.AddThemeConstantOverride("separation", 14);
         AddChild(caja);
 
+        _formulario = caja;
+
         caja.AddChild(Etiqueta(Loc.Get("ui.login.nombre")));
 
         _nick = new LineEdit
         {
             CustomMinimumSize = new Vector2(440, 46),
             MaxLength = 20,
+
+            // El nick de la última sesión queda escrito, aunque el token haya
+            // caducado o el jugador haya salido de la cuenta. No es un secreto, y
+            // volver a tipearlo es la mitad de la molestia de entrar.
+            Text = Sesion.NickRecordado,
         };
 
         caja.AddChild(_nick);
@@ -92,7 +110,29 @@ public partial class PantallaLogin : Control
 
         caja.AddChild(_password);
 
-        caja.AddChild(new Control { CustomMinimumSize = new Vector2(0, 20) });
+        // ⚠ Prendido de fábrica. Escribir la contraseña en cada arranque es la
+        // molestia más grande del juego y la que menos aporta; el tilde existe
+        // apagable porque el archivo de sesión NO se puede cifrar de verdad —la
+        // clave viviría al lado— y en una computadora compartida esta es la
+        // respuesta real. Lo que se guarda es el token, nunca la contraseña.
+        _recordar = new CheckBox
+        {
+            Text = Loc.Get("ui.login.recordarme"),
+            ButtonPressed = Configuracion.RecordarSesion,
+        };
+
+        _recordar.Toggled += marcado =>
+        {
+            Configuracion.RecordarSesion = marcado;
+            Configuracion.Store();
+
+            if (!marcado)
+                Sesion.Borrar();
+        };
+
+        caja.AddChild(_recordar);
+
+        caja.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
 
         var botones = new HBoxContainer();
         botones.AddThemeConstantOverride("separation", 12);
@@ -106,11 +146,72 @@ public partial class PantallaLogin : Control
         _registrar.Pressed += () => _ = RegistrarAsync();
         botones.AddChild(_registrar);
 
-        _mensaje = new Label { Text = "" };
-        _mensaje.AddThemeColorOverride("font_color", Palette.Danger);
-        caja.AddChild(_mensaje);
+        // ⚠ El mensaje va colgado del marco y NO del formulario: mientras se
+        // prueba la sesión guardada el formulario se esconde, y adentro se
+        // escondería justo el renglón que dice qué está pasando.
+        _mensaje = new Label
+        {
+            Text = "",
+            Position = new Vector2(marco.Position.X + 40f, marco.End.Y - 62f),
+            Size = new Vector2(520, 24),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
 
-        _nick.GrabFocus();
+        _mensaje.AddThemeColorOverride("font_color", Palette.Danger);
+        AddChild(_mensaje);
+
+        // Con el nick ya escrito, el cursor va a la contraseña: es el único campo
+        // que falta.
+        if (_nick.Text.Length > 0)
+            _password.GrabFocus();
+        else
+            _nick.GrabFocus();
+    }
+
+    /// <summary>
+    /// Prueba la sesión guardada en disco y entra sola si sirve.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No se espera desde el arranque.</b> Congelar la pantalla hasta
+    /// que el servidor conteste —o hasta los 30 segundos de timeout si está
+    /// apagado— convertiría una comodidad en el peor arranque posible. El juego
+    /// muestra el login enseguida y esto lo reemplaza si la sesión resultó
+    /// buena.</para>
+    ///
+    /// <para>⚠ <b>Quien valida es el SERVIDOR.</b> Que el token esté en disco y
+    /// sin caducar no dice nada: pudo haberse cerrado la sesión desde otra
+    /// máquina, o el servidor pudo revocarlo. Por eso pega un <c>/perfil/me</c> —
+    /// el pedido más barato que exige token— y solo con esa respuesta da la
+    /// sesión por abierta. Un 401 vacía el token y borra el archivo solo, por el
+    /// enganche de <see cref="Sesion"/>.</para>
+    /// </remarks>
+    public async Task ReanudarSesionAsync()
+    {
+        // El disco ya se leyó en `Principal._Ready`: si hay token, está puesto.
+        if (!Red.ApiCliente.Logueado)
+            return;
+
+        _formulario.Visible = false;
+        Ocupado(true, $"{Loc.Get("ui.login.reanudando")} {Sesion.NickRecordado}…");
+
+        var (ok, _, _) = await Red.ApiCliente.PerfilAsync();
+
+        if (ok)
+        {
+            _mensaje.Text = "";
+            Entro?.Invoke();
+            return;
+        }
+
+        // No sirvió: el formulario vuelve, con el nick escrito. No se muestra el
+        // error del servidor —«token inválido» no le dice nada a nadie— sino qué
+        // tiene que hacer.
+        _formulario.Visible = true;
+        _entrar.Disabled = false;
+        _registrar.Disabled = false;
+
+        Mensaje(Loc.Get("ui.login.sesion_vencida"));
+        _password.GrabFocus();
     }
 
     /// <summary>El fondo y el marco. Los campos son nodos y se dibujan encima.</summary>

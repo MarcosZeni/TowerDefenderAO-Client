@@ -422,7 +422,7 @@ public static class CargadorDatos
 
             Curves = new CurveData(
                 new TowerData(1, 1, 30),
-                new RunData(1, 1, [1], 1, 30),
+                new RunData(1, 1, [1], 1, 30, 1),
                 new DefenderData(1, 1, 50, 100),
                 new EconomyData(1, 0, 0, 1, [100]),
                 new BudgetData(0, 0, 1, 1),
@@ -442,7 +442,8 @@ public static class CargadorDatos
                 new WaveData(1, 1, 1, 1, 1, 1, 1, 1, 30,
                     new SpawnFormations(1, 0, 0, 50, 150, 5, 60, 260)),
                 new NpcPerkData(1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0),
-                new BossData(1, 0, "")),
+                new BossData(1, 0, ""),
+                new UpgradeData(2, 2, 0)),
 
             // ⚠ Todos estos números son MÍNIMOS QUE NO ROMPEN, no valores de
             // balance: la tabla vacía existe para que el juego arranque y muestre

@@ -37,6 +37,16 @@ public partial class Principal : Node2D
         Resolucion.AplicarGuardada();
         Configuracion.Cargar();
         Loc.Cargar(Configuracion.Idioma);
+
+        // ⚠ Antes de armar el login, y en este orden: engancha el guardado de la
+        // sesión a los cambios del cliente de red, y recién después lee el disco.
+        //
+        // Leer acá y no adentro de la pantalla no es un detalle: `_Ready` del
+        // login corre al agregarlo al árbol, y ahí ya tiene que estar el nick
+        // recordado para dejarlo escrito en el campo.
+        Sesion.Enganchar();
+        Sesion.Cargar();
+
         Diagnostico();
 
         _capaMenu = new CanvasLayer { Name = "CapaMenu", Layer = 5 };
@@ -50,6 +60,15 @@ public partial class Principal : Node2D
         _menu.EmpezarCorrida += AlEmpezarCorrida;
         _menu.ContinuarCorrida += AlContinuarCorrida;
         _capaMenu.AddChild(_menu);
+
+        // ⚠ Va DESPUÉS de agregar las dos pantallas y NO se espera.
+        //
+        // Si hay sesión guardada, esto pega un /perfil/me y salta al menú solo.
+        // Esperarlo acá congelaría el arranque hasta que el servidor conteste —o
+        // hasta los 30 segundos de timeout si está apagado—, así que el juego
+        // arranca mostrando el login y la pantalla se reemplaza sola si la sesión
+        // resultó buena.
+        _ = _login.ReanudarSesionAsync();
     }
 
     /// <summary>
@@ -146,10 +165,15 @@ public partial class Principal : Node2D
 
         raiz.AddChild(juego);
 
-        // El HUD va en un CanvasLayer para quedar SIEMPRE encima del mundo y no
-        // verse afectado por ninguna transformación de cámara. Flota sobre el
-        // arte, sin marco: es la diferencia con Austral AO, donde la interfaz
-        // rodea una ventanita de juego (INTERFAZ.md §3).
+        // El HUD va en un CanvasLayer para quedar SIEMPRE encima del mundo y
+        // —esto es lo que importa— para NO heredar la transformación de `juego`,
+        // que está corrido y a escala adentro del marco (INTERFAZ.md §3). Colgado
+        // de `raiz` como hermano tendría el mismo problema el día que alguien le
+        // ponga una cámara al mundo.
+        //
+        // Encima y no flotando: el HUD son las cuatro paredes del marco, y el
+        // mundo vive en el agujero del medio. Es la misma idea que Austral AO,
+        // que dibuja su ventanita de juego adentro de un marco de madera.
         var capaHud = new CanvasLayer { Name = "CapaHud", Layer = 10 };
         raiz.AddChild(capaHud);
         capaHud.AddChild(new Hud(juego) { Name = "Hud" });
@@ -168,22 +192,24 @@ public partial class Principal : Node2D
         // elegir. La preparación se esconde sola en ese caso.
         capaModal.AddChild(new PantallaPreparacion(juego) { Name = "Preparacion" });
 
-        // La tienda va con la preparación: se abre en la misma fase, cada tres
-        // oleadas. No es modal —el jugador tiene que poder seguir poniendo
-        // defensores mientras decide si compra— y por eso puede convivir con el
-        // panel de preparación en vez de taparlo.
-        capaModal.AddChild(new PantallaTienda(juego) { Name = "Tienda" });
-
-        // El panel del defensor seleccionado: targeting y estados de soporte. No es
-        // modal y no depende de la fase — el targeting se puede cambiar con la
-        // oleada corriendo, que es cuando se nota que hace falta.
+        // ⚠ El MERCADO reemplazó a la elección y a la tienda, que eran dos
+        // pantallas. Iban en momentos distintos —primero elegir, después
+        // comprar— y por eso la decisión que regala poder y la que lo cobra
+        // nunca se veían juntas. Ver PantallaMercado.
+        //
+        // El panel del defensor seleccionado: targeting, venta y estados de
+        // soporte. No es modal y no depende de la fase — el targeting se puede
+        // cambiar con la oleada corriendo, que es cuando se nota que hace falta.
         capaModal.AddChild(new PantallaDefensor(juego) { Name = "Defensor" });
 
-        // La elección va ÚLTIMA para quedar arriba de todo: frena la corrida y no
-        // se puede cerrar sin elegir, así que nada puede taparla.
-        capaModal.AddChild(new PantallaEleccion(juego) { Name = "Eleccion" });
+        // Va DESPUÉS del panel del defensor: el orden de los hijos es el orden de
+        // dibujo, y una ventana grande tapada a medias por el panel de la columna
+        // derecha se vería como un bug.
+        var mercado = new PantallaMercado(juego) { Name = "Mercado" };
+        capaModal.AddChild(mercado);
+        juego.Mercado = mercado;
 
-        // El menú de ESC, arriba de todo menos de la elección en la práctica: su
+        // El menú de ESC, arriba de todo menos del mercado en la práctica: su
         // _Input cede el ESC cuando la elección o la mochila están abiertas.
         //
         // Opciones se agrega DESPUÉS para quedar encima del menú, y su _Input

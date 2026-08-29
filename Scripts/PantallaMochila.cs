@@ -29,9 +29,14 @@ namespace TowerOfArgentum;
 /// el HUD.</description></item>
 /// </list>
 ///
-/// <para>Las dos acciones que <b>destruyen</b> avisan antes: sacar un perk
-/// equipado y fusionar. La primera no vuelve a la mochila, la segunda consume los
-/// dos Oro.</para>
+/// <para>Las tres acciones que <b>destruyen</b> avisan antes: sacar un perk
+/// equipado —que además pide doble click—, fusionar y mejorar. La primera no
+/// vuelve a la mochila; las otras dos consumen lo que entra.</para>
+///
+/// <para>⚠ <b>Un click en un perk equipado MUESTRA lo que da; el doble click lo
+/// saca.</b> Antes un solo click abría la confirmación de destruir, y eso dejaba
+/// la pregunta más común de la pantalla sin ningún gesto mientras ponía la acción
+/// irreversible a un click del cursor.</para>
 /// </remarks>
 public partial class PantallaMochila : Control
 {
@@ -40,6 +45,32 @@ public partial class PantallaMochila : Control
     private bool _abierta;
     private int _cosaElegida = -1;
     private DefenderClass? _claseElegida;
+
+    /// <summary>
+    /// Los lugares de mochila marcados para mejorar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Guarda <b>índices de mochila</b>, no posiciones de pantalla: la
+    /// grilla se reordena por rareza y una marca atada a la posición cambiaría de
+    /// perk al cambiar el orden.</para>
+    ///
+    /// <para>Se limpia después de <b>toda</b> acción que toque la mochila. Sacar
+    /// algo corre los índices de abajo, así que una marca vieja apuntaría a otro
+    /// perk; la simulación revalida el tier de cada uno y rebotaría, pero
+    /// rebotaría <b>en silencio</b>, que es peor.</para>
+    /// </remarks>
+    private readonly HashSet<int> _marcados = [];
+
+    /// <summary>
+    /// Qué slot de la clase mirada se está inspeccionando. -1 = ninguno.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Un click MUESTRA, el doble click SACA.</b> Antes un solo click abría
+    /// la confirmación de destruir, y eso dejaba sin ningún gesto la pregunta más
+    /// común de la pantalla —«¿qué me está dando este perk?»— mientras ponía la
+    /// acción irreversible a un click de distancia.
+    /// </remarks>
+    private int _slotMirado = -1;
 
     /// <summary>Lo que hay que confirmar antes de hacerlo, porque destruye.</summary>
     private (DefenderClass DefenderClass, int Slot)? _confirmarSacar;
@@ -54,8 +85,22 @@ public partial class PantallaMochila : Control
     public void Alternar()
     {
         _abierta = !_abierta;
-        _cosaElegida = -1;
+        Olvidar();
         _confirmarSacar = null;
+    }
+
+    /// <summary>
+    /// Borra toda la selección. Se llama después de cada acción sobre la mochila.
+    /// </summary>
+    /// <remarks>
+    /// Equipar, mejorar o sacar corren los índices, y una marca vieja apuntaría a
+    /// un perk que el jugador no eligió.
+    /// </remarks>
+    private void Olvidar()
+    {
+        _cosaElegida = -1;
+        _slotMirado = -1;
+        _marcados.Clear();
     }
 
     public override void _Ready()
@@ -163,7 +208,7 @@ public partial class PantallaMochila : Control
 
     /// <summary>
     /// ⚠ <c>_Input</c> y no <c>_GuiInput</c>, por la misma cicatriz que
-    /// <see cref="PantallaEleccion"/>: con <c>_GuiInput</c> la pantalla quedaba
+    /// <see cref="PantallaMercado"/>: con <c>_GuiInput</c> la pantalla quedaba
     /// sorda a clicks y a teclas. La posición sale de
     /// <see cref="CanvasItem.GetGlobalMousePosition"/>, no del evento, para que
     /// funcione con la ventana a cualquier tamaño.
@@ -201,6 +246,10 @@ public partial class PantallaMochila : Control
             {
                 _juego.RemovePerk(pendiente.DefenderClass, pendiente.Slot);
                 _confirmarSacar = null;
+
+                // Sacar corre los slots de arriba: el que se estaba mirando ya
+                // no es el mismo perk.
+                Olvidar();
             }
             else if (RectCancelar().HasPoint(posicion))
             {
@@ -219,7 +268,11 @@ public partial class PantallaMochila : Control
         if (Clases(partida, posicion))
             return;
 
-        ColumnaDeClase(partida, posicion);
+        // ⚠ El doble click de Godot llega como un evento aparte con
+        // `DoubleClick` prendido, DESPUÉS del click normal. O sea que el primero
+        // ya seleccionó y este es el segundo: es exactamente el gesto que hace
+        // falta para que mirar sea barato y destruir cueste dos.
+        ColumnaDeClase(partida, posicion, boton.DoubleClick);
     }
 
     /// <summary>Las tres pestañas de la columna del medio.</summary>
@@ -276,7 +329,7 @@ public partial class PantallaMochila : Control
         return false;
     }
 
-    /// <summary>Un hueco de la grilla, o el botón de equipar del detalle.</summary>
+    /// <summary>Un hueco de la grilla, el botón de equipar o el de mejorar.</summary>
     private bool Grilla(Run partida, Vector2 posicion)
     {
         if (_pestana != Pestana.Planos)
@@ -288,7 +341,7 @@ public partial class PantallaMochila : Control
                 if (!UiLayout.GridCell(i).HasPoint(posicion))
                     continue;
 
-                _cosaElegida = _cosaElegida == visibles[i] ? -1 : visibles[i];
+                Marcar(partida, visibles[i]);
                 return true;
             }
         }
@@ -302,13 +355,110 @@ public partial class PantallaMochila : Control
             if (ficha is not null && Acepta(partida, ficha, _cosaElegida))
             {
                 _juego.EquiparDeMochila(_cosaElegida, clase);
-                _cosaElegida = -1;
+                Olvidar();
             }
 
             return true;
         }
 
+        if (UiLayout.DetailEquip.HasPoint(posicion) && PuedeMejorar(partida))
+        {
+            int mascara = 0;
+
+            foreach (int i in _marcados)
+                mascara |= 1 << i;
+
+            _juego.Mejorar(mascara, TierMarcado(partida)!.Value);
+            Olvidar();
+
+            return true;
+        }
+
         return false;
+    }
+
+    /// <summary>
+    /// Marca o desmarca un lugar de la mochila, y lo pone en el detalle.
+    /// </summary>
+    /// <remarks>
+    /// <para>Con una sola marca se comporta igual que antes —click elige, click
+    /// de vuelta suelta— y esa es la condición para que equipar siga siendo un
+    /// click. La segunda marca es lo que abre la mejora.</para>
+    ///
+    /// <para>Marcar algo de otro tier <b>arranca de cero</b>: una selección
+    /// mezclada no es mejorable, así que acumularla solo obligaría a
+    /// desmarcar de a uno.</para>
+    /// </remarks>
+    private void Marcar(Run partida, int indice)
+    {
+        if (_marcados.Remove(indice))
+        {
+            if (_cosaElegida == indice)
+                _cosaElegida = -1;
+
+            return;
+        }
+
+        if (_marcados.Count > 0 && TierDe(partida, indice) != TierMarcado(partida))
+            _marcados.Clear();
+
+        _marcados.Add(indice);
+        _cosaElegida = indice;
+        _slotMirado = -1;
+    }
+
+    /// <summary>El tier de lo que hay en ese lugar, o <c>null</c> si es un arma.</summary>
+    private static PerkTier? TierDe(Run partida, int indice)
+    {
+        if (indice < 0 || indice >= partida.Backpack.Items.Count)
+            return null;
+
+        var cosa = partida.Backpack.Items[indice];
+
+        return cosa.Kind == ItemType.Perk
+            ? CargadorDatos.Actual.Perks.Get(cosa.Id).Tier
+            : null;
+    }
+
+    /// <summary>El tier común de lo marcado, o <c>null</c> si está mezclado.</summary>
+    private PerkTier? TierMarcado(Run partida)
+    {
+        PerkTier? comun = null;
+
+        foreach (int i in _marcados)
+        {
+            var t = TierDe(partida, i);
+
+            if (t is null || (comun is not null && t != comun))
+                return null;
+
+            comun = t;
+        }
+
+        return comun;
+    }
+
+    /// <summary>
+    /// Si lo marcado alcanza para mejorar ahora mismo.
+    /// </summary>
+    /// <remarks>
+    /// Repite los chequeos de la simulación a propósito: la UI los usa para
+    /// <b>dibujar</b> —el botón apagado con «2/4» enseña la receta— y la
+    /// simulación los vuelve a hacer porque el log lo revalida el servidor.
+    /// </remarks>
+    private bool PuedeMejorar(Run partida)
+    {
+        if (TierMarcado(partida) is not { } tier)
+            return false;
+
+        int cuantos = partida.UpgradeCost(tier);
+
+        if (cuantos < 2 || _marcados.Count != cuantos)
+            return false;
+
+        // El tope de Oro fabricado por corrida: lo que impide que la mejora
+        // reemplace al jefe como fuente de Oro.
+        return tier != PerkTier.Silver || partida.CraftedGold < partida.MaxCraftedGold;
     }
 
     /// <summary>Una tarjeta de clase: la mira, o equipa lo elegido ahí.</summary>
@@ -325,11 +475,12 @@ public partial class PantallaMochila : Control
             if (_cosaElegida >= 0)
             {
                 _juego.EquiparDeMochila(_cosaElegida, clases[i].DefenderClass);
-                _cosaElegida = -1;
+                Olvidar();
             }
             else
             {
                 _claseElegida = clases[i].DefenderClass;
+                _slotMirado = -1;
             }
 
             return true;
@@ -339,7 +490,7 @@ public partial class PantallaMochila : Control
     }
 
     /// <summary>El nivel, el comportamiento y los slots de la clase mirada.</summary>
-    private void ColumnaDeClase(Run partida, Vector2 posicion)
+    private void ColumnaDeClase(Run partida, Vector2 posicion, bool doble)
     {
         if (_claseElegida is not { } clase)
             return;
@@ -379,14 +530,29 @@ public partial class PantallaMochila : Control
         if (ficha is null)
             return;
 
-        // Un slot de perk equipado: sacarlo pide confirmación, porque destruye.
+        // ⚠ Un click MUESTRA lo que da el perk, el doble click lo SACA.
+        //
+        // Antes un solo click abría la confirmación de destruir. Eso dejaba la
+        // pregunta más común de la pantalla —«¿qué me está dando este perk?»— sin
+        // ningún gesto, mientras ponía la acción irreversible a un click de
+        // distancia del cursor. La confirmación sigue estando: el doble click es
+        // deliberado, pero destruir un Oro que costó dos jefes merece las dos.
         for (int s = 0; s < ficha.Perks.Count; s++)
         {
-            if (RectSlot(s).HasPoint(posicion))
+            if (!RectSlot(s).HasPoint(posicion))
+                continue;
+
+            if (doble)
             {
                 _confirmarSacar = (clase, s);
                 return;
             }
+
+            _slotMirado = _slotMirado == s ? -1 : s;
+            _cosaElegida = -1;
+            _marcados.Clear();
+
+            return;
         }
     }
 
@@ -587,15 +753,18 @@ public partial class PantallaMochila : Control
 
             int indice = visibles[i];
             var cosa = partida.Backpack.Items[indice];
-            bool elegido = indice == _cosaElegida;
+            bool marcado = _marcados.Contains(indice);
 
             if (cosa.Kind == ItemType.Perk)
-            {
-                this.PerkSlot(celda, CargadorDatos.Actual.Perks.Get(cosa.Id), 0, elegido);
-                continue;
-            }
+                this.PerkSlot(celda, CargadorDatos.Actual.Perks.Get(cosa.Id), 0, marcado);
+            else
+                DibujarArma(celda, partida.Backpack.WeaponById(cosa.Id), marcado);
 
-            DibujarArma(celda, partida.Backpack.WeaponById(cosa.Id), elegido);
+            // ⚠ El tilde y el aro interno los pone `UiStyle.Slot` cuando el hueco
+            // va elegido, y valen para las dos pantallas que marcan algo. Antes
+            // el tilde se dibujaba acá a mano y la diferencia entre elegido y no
+            // elegido era, en todo lo demás, un borde un poco más grueso: en una
+            // grilla de veinte huecos de colores fuertes, invisible.
         }
 
         if (visibles.Count == 0)
@@ -728,6 +897,23 @@ public partial class PantallaMochila : Control
     {
         this.Panel(UiLayout.DetailPanel, opacidad: 1f);
 
+        // Un perk EQUIPADO que se está mirando: mismo detalle, sin botón de
+        // equipar —ya está puesto— y con el recordatorio de cómo se saca.
+        if (_slotMirado >= 0 && _claseElegida is { } mirada &&
+            partida.Roster.Find(mirada) is { } fichaMirada &&
+            _slotMirado < fichaMirada.Perks.Count)
+        {
+            DetalleDePerk(partida, CargadorDatos.Actual.Perks.Get(fichaMirada.Perks[_slotMirado]));
+
+            this.Label(UiLayout.DetailBuy, Loc.Get("ui.mochila.equipado").ToUpperInvariant(), 15,
+                Palette.Success, HorizontalAlignment.Center);
+
+            this.Paragraph(UiLayout.DetailEquip, Loc.Get("ui.mochila.sacar_doble_click"), 12,
+                Palette.Danger);
+
+            return;
+        }
+
         if (_cosaElegida < 0 || _cosaElegida >= partida.Backpack.Items.Count)
         {
             this.Label(UiLayout.DetailPanel, Loc.Get("ui.mochila.elegi_algo"), 15,
@@ -837,10 +1023,8 @@ public partial class PantallaMochila : Control
         // ⚠ Los tres vienen en escala interna —centésimas de punto y milésimas de
         // celda—, así que pasan por Loc. Crudos dirían «1040 de daño» cuando el
         // defensor pega 10,4.
-        this.StatRow(stats.Row(0f, alto), Loc.Get("ui.mochila.dano"), Loc.Damage(arma.Damage));
-        this.StatRow(stats.Row(alto, alto), Loc.Get("ui.mochila.alcance"), Loc.Range(arma.Range));
-        this.StatRow(stats.Row(alto * 2f, alto), Loc.Get("ui.mochila.cada"),
-            $"{arma.Cadence} {Loc.Get("ui.mochila.ticks")}");
+        this.StatTrio(stats.Row(0f, alto + 4f),
+            Loc.Damage(arma.Damage), Loc.Range(arma.Range), arma.Cadence.ToString());
 
         this.Price(UiLayout.DetailPrice, arma.Value);
     }
@@ -849,10 +1033,16 @@ public partial class PantallaMochila : Control
     private void BotonEquipar(Run partida)
     {
         var ficha = _claseElegida is { } clase ? partida.Roster.Find(clase) : null;
-        bool puede = ficha is not null && Acepta(partida, ficha, _cosaElegida);
+        bool puede = ficha is not null && Acepta(partida, ficha, _cosaElegida) && _marcados.Count <= 1;
 
         this.Button(UiLayout.DetailBuy, Loc.Get("ui.mochila.equipar"),
             puede ? Palette.Success : Palette.TextDisabled, habilitado: puede);
+
+        // La segunda ranura la disputan dos cosas, y manda la mejora: si lo
+        // marcado es de un tier mejorable, ahí va el contador de la receta.
+        // Enterarse de que existe la mecánica no puede depender de leer el pie.
+        if (BotonMejorar(partida))
+            return;
 
         if (ficha is null)
         {
@@ -867,6 +1057,51 @@ public partial class PantallaMochila : Control
             this.Label(UiLayout.DetailEquip, Loc.Get("ui.mochila.no_entra"), 13,
                 Palette.Danger, HorizontalAlignment.Center);
         }
+    }
+
+    /// <summary>
+    /// El botón de mejorar, con el contador de la receta. <c>false</c> si no
+    /// corresponde dibujarlo.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Se dibuja desde la primera marca, apagado y diciendo «1/4».</b>
+    /// Un botón que aparece recién cuando la receta está completa no enseña la
+    /// receta: el jugador tendría que adivinar que juntar cuatro sirve para algo,
+    /// y nunca junta cuatro.</para>
+    ///
+    /// <para>El tope de Oro fabricado por corrida se dice acá y no en el pie: es
+    /// donde el jugador se entera de que ya no puede, en el momento en que lo
+    /// intenta.</para>
+    /// </remarks>
+    private bool BotonMejorar(Run partida)
+    {
+        if (_marcados.Count == 0 || TierMarcado(partida) is not { } tier)
+            return false;
+
+        int cuantos = partida.UpgradeCost(tier);
+
+        if (cuantos < 2)
+            return false;
+
+        bool tope = tier == PerkTier.Silver && partida.CraftedGold >= partida.MaxCraftedGold;
+        bool listo = !tope && _marcados.Count == cuantos;
+
+        var color = tope ? Palette.Danger : Palette.Rarity(tier + 1);
+
+        this.Button(UiLayout.DetailEquip,
+            $"{Loc.Get("ui.mochila.mejorar")} {_marcados.Count}/{cuantos}",
+            listo ? color : Palette.TextDisabled, habilitado: listo);
+
+        if (tope)
+        {
+            this.Label(
+                new Rect2(UiLayout.DetailEquip.Position.X, UiLayout.DetailEquip.End.Y + 2f,
+                    UiLayout.DetailEquip.Size.X, 18f),
+                $"{Loc.Get("ui.mochila.tope_oro")} {partida.CraftedGold}/{partida.MaxCraftedGold}",
+                12, Palette.Danger, HorizontalAlignment.Center);
+        }
+
+        return true;
     }
 
     /// <summary>La columna derecha: los seis slots de la clase mirada y su nivel.</summary>
@@ -915,7 +1150,8 @@ public partial class PantallaMochila : Control
                 continue;
             }
 
-            this.PerkSlot(r, CargadorDatos.Actual.Perks.Get(ficha.Perks[s]));
+            this.PerkSlot(r, CargadorDatos.Actual.Perks.Get(ficha.Perks[s]),
+                elegido: s == _slotMirado);
         }
 
         StatsDeClase(partida, clase);
@@ -936,14 +1172,8 @@ public partial class PantallaMochila : Control
         // ⚠ Los dos vienen en escala interna. Es la pantalla donde se ve si un
         // perk de alcance sirvió: con el redondeo a celdas enteras de antes,
         // equipar Halcón no movía este número ni un poco.
-        this.StatRow(new Rect2(x, y, ancho, alto),
-            Loc.Get("ui.mochila.dano"), Loc.Damage(stats.Damage));
-
-        this.StatRow(new Rect2(x, y + alto, ancho, alto),
-            Loc.Get("ui.mochila.alcance"), Loc.Range(stats.RangeMilli));
-
-        this.StatRow(new Rect2(x, y + (alto * 2f), ancho, alto),
-            Loc.Get("ui.mochila.cada"), $"{stats.CadenceTicks} {Loc.Get("ui.mochila.ticks")}");
+        this.StatTrio(new Rect2(x, y, ancho, alto + 4f),
+            Loc.Damage(stats.Damage), Loc.Range(stats.RangeMilli), stats.CadenceTicks.ToString());
 
         string habilidad =
             stats.Behavior != PerkEffect.None ? Loc.Effect(stats.Behavior)
@@ -952,7 +1182,7 @@ public partial class PantallaMochila : Control
 
         if (habilidad.Length > 0)
         {
-            this.StatRow(new Rect2(x, y + (alto * 3f), ancho, alto),
+            this.StatRow(new Rect2(x, y + alto + 8f, ancho, alto),
                 Loc.Get("ui.mochila.habilidad"), habilidad, Palette.Legendary);
         }
     }
@@ -1041,7 +1271,8 @@ public partial class PantallaMochila : Control
         this.Panel(UiLayout.FooterBar, opacidad: 1f);
 
         this.Label(UiLayout.FooterTip,
-            $"{Loc.Get("ui.mochila.esc_cerrar")}  ·  {Loc.Get("ui.mochila.sacar_destruye")}",
+            $"{Loc.Get("ui.mochila.esc_cerrar")}  ·  {Loc.Get("ui.mochila.sacar_destruye")}" +
+            $"  ·  {Loc.Get("ui.mochila.marcar_para_mejorar")}",
             14, Palette.TextMuted);
 
         this.RarityLegend(UiLayout.FooterLegend);

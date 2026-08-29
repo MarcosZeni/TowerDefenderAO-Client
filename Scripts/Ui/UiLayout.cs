@@ -250,4 +250,173 @@ public static class UiLayout
 
     public static readonly Rect2 FooterTip = R(555, 888, 558, 26);
     public static readonly Rect2 FooterLegend = R(1115, 888, 500, 26);
+
+    // =====================================================================
+    // 8. EL MARCO DE LA PARTIDA
+    // =====================================================================
+    //
+    // Todo lo de arriba es la disposición del diseño convertida, y la usan los
+    // MODALES A PANTALLA COMPLETA —mochila, menú principal—, que tapan el mundo
+    // a propósito.
+    //
+    // Lo de acá abajo es otra cosa: son las CUATRO PAREDES del marco, y dejan un
+    // agujero real en el medio para el mundo.
+
+    /// <summary>
+    /// El grosor del bisel: el borde de metal entre la pared y el mundo.
+    /// </summary>
+    private const float Bisel = 8f;
+
+    /// <summary>La barra de arriba. Misma del diseño: oleada, vida, oro, botones.</summary>
+    public static readonly Rect2 RunTopBar = TopBar;
+
+    /// <summary>La columna del roster. Misma del diseño, a la izquierda.</summary>
+    public static readonly Rect2 RunRoster = HeroesPanel;
+
+    /// <summary>
+    /// La columna de la derecha: la tienda, o el panel del defensor elegido.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es más angosta que la del diseño</b> —313 px contra 520— y esa
+    /// es la concesión que paga el marco. Con los 520 originales el agujero del
+    /// medio queda en 1039×723 y el mundo tiene que dibujarse a escala 0,54: los
+    /// bichos pasan de 96×138 px a 69×99 y seis de las nueve clases, que ya
+    /// comparten muñeco, dejan de distinguirse.</para>
+    ///
+    /// <para>313 es el ancho de la columna izquierda. Que las dos midan lo mismo
+    /// no es casualidad ni ahorro: un marco con los dos lados distintos se lee
+    /// como un error de alineación.</para>
+    ///
+    /// <para>⚠ <b>La tienda y el panel del defensor comparten esta columna y no
+    /// se dibujan juntos.</b> Manda el defensor cuando hay uno elegido, porque el
+    /// jugador lo acaba de clickear; volver a clickearlo lo deselecciona y la
+    /// tienda vuelve. Apilarlos partiría la columna en dos mitades donde no entra
+    /// ni una tarjeta de oferta.</para>
+    /// </remarks>
+    public static readonly Rect2 RunSidePanel = new(
+        RunTopBar.End.X - RunRoster.Size.X,
+        RunTopBar.End.Y + 10f,
+        RunRoster.Size.X,
+        788f);
+
+    /// <summary>
+    /// La barra de abajo: la build en combate, la preparación entre oleadas.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Más baja que la del diseño</b> —124 px contra 187—, por el mismo
+    /// motivo que la columna: cada píxel que se lleva la pared se lo saca al
+    /// mundo. Los cuatro bloques de adentro conservan las proporciones exactas
+    /// del diseño, así que la distribución no cambia: cambia la altura.
+    /// </remarks>
+    public static readonly Rect2 RunBottomBar = new(
+        BuildPanel.Position.X, 900f, BuildPanel.Size.X, 124f);
+
+    /// <summary>El pie: el consejo y la leyenda de rarezas.</summary>
+    public static readonly Rect2 RunFooter = new(
+        BuildPanel.Position.X, 1030f, BuildPanel.Size.X, 44f);
+
+    public static readonly Rect2 RunFooterTip = new(
+        RunFooter.Position.X + 20f, RunFooter.Position.Y, 700f, RunFooter.Size.Y);
+
+    public static readonly Rect2 RunFooterLegend = new(
+        RunFooter.End.X - 820f, RunFooter.Position.Y, 800f, RunFooter.Size.Y);
+
+    /// <summary>
+    /// Uno de los cuatro bloques de la barra de abajo, en el orden del diseño.
+    /// </summary>
+    /// <remarks>
+    /// Las fracciones salen de <c>build_panel</c> y sus cuatro hijos en el JSON:
+    /// el bloque 0 arranca en el 1,1 % del ancho y mide el 36,9 %, y así. Se
+    /// guardan como fracción y no como píxeles justamente para que achicar la
+    /// barra no descoloque los bloques.
+    /// </remarks>
+    public static Rect2 RunBottomBlock(int i)
+    {
+        (float X, float W)[] fracciones =
+        [
+            (0.0109f, 0.3692f),
+            (0.3920f, 0.1696f),
+            (0.5725f, 0.2006f),
+            (0.7857f, 0.2033f),
+        ];
+
+        var (fx, fw) = fracciones[i];
+
+        return new Rect2(
+            RunBottomBar.Position.X + (fx * RunBottomBar.Size.X),
+            RunBottomBar.Position.Y + (0.08f * RunBottomBar.Size.Y),
+            fw * RunBottomBar.Size.X,
+            0.82f * RunBottomBar.Size.Y);
+    }
+
+    // ---------------------------------------------------------------------
+    // El agujero del medio
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// El hueco entre las cuatro paredes, bisel incluido.
+    /// </summary>
+    /// <remarks>
+    /// Se calcula <b>a partir de las paredes</b> y no a mano: mover una pared
+    /// mueve el mundo, y no hay forma de que los dos números se desincronicen.
+    /// </remarks>
+    public static readonly Rect2 WorldFrame = new(
+        RunRoster.End.X,
+        RunTopBar.End.Y,
+        RunSidePanel.Position.X - RunRoster.End.X,
+        RunBottomBar.Position.Y - RunTopBar.End.Y);
+
+    /// <summary>Lo que queda del hueco después del bisel: donde entra el mundo.</summary>
+    public static readonly Rect2 WorldViewport = WorldFrame.Inset(Bisel);
+
+    /// <summary>
+    /// Cuánto se achica el mundo para entrar en el hueco.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La simulación NO se entera de esto.</b> El mundo se sigue
+    /// simulando y guardando en 20×11 celdas de 96 px —1920×1056—; los layouts,
+    /// el hash y el balance quedan intactos. Esto es una transformación de
+    /// dibujo y nada más.</para>
+    ///
+    /// <para>Es el menor de los dos cocientes para que la celda siga siendo
+    /// cuadrada. Estirar a llenar el hueco daría celdas rectangulares y muñecos
+    /// deformados.</para>
+    /// </remarks>
+    public static readonly float WorldScale = Mathf.Min(
+        WorldViewport.Size.X / (Escala.CeldasAncho * (float)Escala.LadoCelda),
+        WorldViewport.Size.Y / (Escala.CeldasAlto * (float)Escala.LadoCelda));
+
+    /// <summary>La esquina de la celda (0,0) en pantalla. El mundo va centrado en el hueco.</summary>
+    public static readonly Vector2 WorldOrigin = new(
+        WorldViewport.Position.X
+            + ((WorldViewport.Size.X - (Escala.CeldasAncho * Escala.LadoCelda * WorldScale)) / 2f),
+        WorldViewport.Position.Y
+            + ((WorldViewport.Size.Y - (Escala.CeldasAlto * Escala.LadoCelda * WorldScale)) / 2f));
+
+    /// <summary>El mundo dibujado, ya escalado y centrado. Es lo que tapa el bisel.</summary>
+    public static readonly Rect2 WorldOnScreen = new(
+        WorldOrigin,
+        new Vector2(
+            Escala.CeldasAncho * Escala.LadoCelda * WorldScale,
+            Escala.CeldasAlto * Escala.LadoCelda * WorldScale));
+
+    /// <summary>Cuánto mide una celda en pantalla. Solo para dibujar; la celda sigue siendo 96.</summary>
+    public static float CellOnScreen => Escala.LadoCelda * WorldScale;
+
+    /// <summary>De coordenadas del mundo a píxeles de pantalla.</summary>
+    public static Vector2 ToScreen(Vector2 mundo) => WorldOrigin + (mundo * WorldScale);
+
+    /// <summary>
+    /// De píxeles de pantalla a coordenadas del mundo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Todo click que termine en una celda pasa por acá.</b> Es el único
+    /// lugar donde se invierte la transformación, y por eso no puede haber un
+    /// segundo: un click convertido con la escala vieja pone el defensor en otra
+    /// celda que la que el jugador vio.
+    /// </remarks>
+    public static Vector2 ToWorld(Vector2 pantalla) => (pantalla - WorldOrigin) / WorldScale;
+
+    /// <summary>Si esa posición de pantalla cae adentro del mundo dibujado.</summary>
+    public static bool InWorld(Vector2 pantalla) => WorldOnScreen.HasPoint(pantalla);
 }

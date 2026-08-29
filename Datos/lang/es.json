@@ -224,6 +224,13 @@
     "ui.login.nombre_invalido": "El nombre tiene que tener entre 3 y 20 caracteres, sin espacios.",
     "ui.login.pass_corta": "La contraseña tiene que tener al menos 8 caracteres.",
     "ui.login.error_entrar": "No se pudo entrar.",
+
+    // ⚠ Se guarda el TOKEN, nunca la contraseña. El tilde existe apagable porque
+    // el archivo de sesión no se puede cifrar de verdad —la clave viviría al
+    // lado— y en una computadora compartida esa es la respuesta real.
+    "ui.login.recordarme": "Mantener la sesión abierta en esta computadora",
+    "ui.login.reanudando": "entrando como",
+    "ui.login.sesion_vencida": "La sesión guardada ya no sirve. Escribí la contraseña de nuevo.",
     "ui.pausa.titulo": "PAUSA",
     "ui.pausa.aviso": "el reloj está detenido · la corrida se guarda sola al final de cada oleada",
     "ui.pausa.seguir": "SEGUIR JUGANDO",
@@ -291,6 +298,7 @@
     "ui.preparacion.con_rasgo": "con rasgo (impulsivo o líder)",
     "ui.preparacion.ahi_vienen": "AHÍ VIENEN...",
     "ui.preparacion.comenzar_oleada": "COMENZAR OLEADA",
+    "ui.preparacion.mercado": "abrir mercado",
     "ui.preparacion.espacio_sin_apuro": "espacio · sin apuro, el reloj está detenido",
 
     // --- La tienda rotativa de la corrida ------------------------------------
@@ -299,6 +307,24 @@
     // REPONEN: comprar deja el hueco vacío hasta la próxima. «No se repone» va en
     // pantalla porque es la regla que hace que la decisión sea una decisión, y no
     // se puede deducir mirando.
+
+    // --- El MERCADO: la elección y la tienda en una sola ventana -------------
+    //
+    // ⚠ Eran dos pantallas. La elección abría, el jugador elegía, y recién
+    // DESPUÉS aparecía la tienda: la decisión que regala poder y la que lo cobra
+    // nunca se veían juntas, así que "¿me conviene el Oro de 1.900 o desbloquear
+    // el druida?" era una pregunta que el juego hacía imposible responder.
+    "ui.mercado.titulo": "MERCADO",
+    "ui.mercado.zona0": "PERSONAJES",
+    "ui.mercado.zona1": "PERKS Y PLANOS",
+    "ui.mercado.zona2": "ARMAS",
+
+    // Donde las tarjetas de la tienda llevan el precio, las de la elección
+    // llevan esto. Es la comparación entera de la pantalla, en una palabra.
+    "ui.mercado.gratis": "gratis",
+    "ui.mercado.cerrar": "cerrar",
+    "ui.mercado.esc_para_cerrar": "Esc para volver al tablero · el mercado sigue abierto hasta que lances la oleada",
+    "ui.mercado.ya_reclutada": "ya la tenés",
     "ui.tienda.titulo": "TIENDA",
     "ui.tienda.no_se_repone": "no se repone: lo que compres deja el lugar vacío",
     "ui.tienda.vendido": "vendido",
@@ -334,6 +360,12 @@
     "ui.defensor.cadencia": "cadencia",
     "ui.defensor.manda_el_perk": "manda el perk · la habilidad del arma está muda",
     "ui.defensor.manda_el_arma": "manda el arma · el perk de comportamiento está mudo",
+
+    // ⚠ Vender vive acá porque antes lo hacía el BOTÓN DERECHO sobre el mapa,
+    // sin confirmar: el gesto más fácil de hacer sin querer borraba una unidad.
+    "ui.defensor.vender": "vender",
+    "ui.defensor.confirmar_venta": "¿seguro? click de nuevo",
+    "ui.defensor.arrastrar_para_mover": "para acomodarla, arrastrala por el tablero",
 
     // ⚠ Los cuatro modos. «Primero» y «más cerca de la Torre» NO son lo mismo:
     // el primero mide avance sobre la ruta, el segundo distancia a la Torre en el
@@ -412,7 +444,21 @@
     "ui.mochila.subir_nivel": "subir a nivel",
     "ui.mochila.nivel_maximo": "nivel máximo",
     "ui.mochila.sin_oro": "no alcanza el oro",
-    "ui.mochila.sacar_destruye": "click en un perk equipado para sacarlo (lo destruye)",
+    // ⚠ Un click MUESTRA, el doble click SACA. El texto lo dice así porque el
+    // gesto barato tiene que ser el reversible: antes un click abría la
+    // confirmación de destruir y no había forma de mirar qué daba un perk.
+    "ui.mochila.sacar_destruye": "doble click en un perk equipado para sacarlo (lo destruye)",
+    "ui.mochila.equipado": "equipado",
+    "ui.mochila.sacar_doble_click": "doble click acá arriba, en el slot, para sacarlo. Lo destruye.",
+
+    // --- Mejorar: varios perks de un tier hacen uno del tier de arriba --------
+    //
+    // El contador «2/4» va en el botón y no en el pie: enterarse de que la
+    // mecánica existe no puede depender de leer una línea de ayuda.
+    "ui.mochila.mejorar": "mejorar",
+    "ui.mochila.marcar_para_mejorar": "marcá varios del mismo tier para mejorarlos",
+    "ui.mochila.tope_oro": "tope de Oro fabricado:",
+
     "ui.mochila.confirmar_titulo": "SACAR UN PERK LO DESTRUYE",
     "ui.mochila.confirmar_detalle": "No vuelve a la mochila. Esto no se puede deshacer.",
     "ui.mochila.destruir": "destruir",

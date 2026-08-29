@@ -97,6 +97,49 @@ public enum ActionType
     /// <b>stats</b> del arma se conservan en los dos casos.
     /// </remarks>
     SetBehavior = 13,
+
+    /// <summary>
+    /// Mejorar varios perks de un tier en uno solo del tier de arriba.
+    /// </summary>
+    /// <remarks>
+    /// <para>Existe porque el tope de la mochila lo marcaba la <b>basura</b>: con
+    /// 4% de drop por bicho común y hasta 60 bichos por oleada, los 15 lugares
+    /// se llenan de Bronce y Plata que nadie va a equipar, y a partir de ahí todo
+    /// drop cae al vacío en silencio. La mejora le da salida a lo que sobra sin
+    /// agrandar la mochila —agrandarla convertiría «qué me sirve» en una
+    /// planilla, que es justamente lo que el tope evita—.</para>
+    ///
+    /// <para>⚠ <b><c>A</c> es una MÁSCARA DE BITS</b>, un bit por lugar de
+    /// mochila, y <c>B</c> el tier de entrada. No entran cuatro índices en tres
+    /// campos, y guardar «los primeros cuatro de ese tier» en vez de la selección
+    /// haría que el servidor consumiera perks distintos de los que el jugador
+    /// eligió: dos Bronce del mismo tier no son intercambiables si uno es de daño
+    /// y el otro de alcance.</para>
+    ///
+    /// <para>Por eso <c>backpackSlots</c> no puede pasar de 31, y el cargador de
+    /// datos lo verifica.</para>
+    /// </remarks>
+    Upgrade = 14,
+
+    /// <summary>
+    /// Mover una ficha ya puesta a otra celda. <b>Gratis, y solo en preparación.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><c>A</c> = <c>PlacementId</c>, <c>B</c> y <c>C</c> = la celda
+    /// destino. Si la celda tiene otra ficha, las dos <b>se intercambian</b>: las
+    /// dos celdas ya eran válidas para las dos, así que el cambio nunca puede
+    /// dejar a nadie en un lugar prohibido.</para>
+    ///
+    /// <para>⚠ <b>Solo con el reloj congelado.</b> Mover con la oleada corriendo
+    /// es reposicionar en combate —perseguir al bicho, esquivar al jefe— que es
+    /// otra mecánica y no está balanceada. Con el reloj detenido no cuesta ticks
+    /// y por lo tanto no toca el ranking.</para>
+    ///
+    /// <para>Gratis y no al 60% como vender: cobrar por acomodar hacía que
+    /// convenga dejar una ficha mal puesta, que es exactamente lo que la
+    /// devolución del 60% ya venía a evitar.</para>
+    /// </remarks>
+    MoveDefender = 15,
 }
 
 /// <summary>

@@ -667,6 +667,7 @@ public static class ExportadorBalance
                 "GoldSpentDefenders", "GoldSpentLevels", "GoldSpentPerks",
                 "GoldSpentBlueprints", "GoldSpentClasses", "GoldSpentWeapons",
                 "GoldPerksObtained", "UniquesCrafted", "WaveOfFirstUnique",
+                "PerksUpgraded", "GoldFromUpgrades",
                 "SecondaryDamage", "OverkillDamage", "TowerDamageTaken",
             ],
         ];
@@ -698,6 +699,7 @@ public static class ExportadorBalance
                     m.GoldSpentBronze + m.GoldSpentSilver + m.GoldSpentGoldPerks,
                     m.GoldSpentBlueprints, m.GoldSpentClasses, m.GoldSpentWeapons,
                     m.GoldPerksObtained, m.UniquesCrafted, m.WaveOfFirstUnique,
+                    m.PerksUpgraded, m.GoldFromUpgrades,
                     m.SecondaryDamage, m.OverkillDamage, m.TowerDamageTaken,
                 ]);
 

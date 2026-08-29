@@ -372,7 +372,17 @@ public sealed class Defender
 
     public required DefenderClass DefenderClass { get; init; }
 
-    public required Cell Cell { get; init; }
+    /// <summary>
+    /// Dónde está parado. <b>Se puede mover</b> con el reloj congelado.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Era <c>init</c>. Dejó de serlo para que el jugador pueda <b>arrastrar la
+    /// ficha por el tablero</b> durante la preparación: antes acomodar una
+    /// colocación mal puesta era vender y volver a comprar, y a 60% de devolución
+    /// convenía dejarla mal. La clase, en cambio, sigue siendo <c>init</c>: mover
+    /// una ficha no la convierte en otra cosa.
+    /// </remarks>
+    public required Cell Cell { get; set; }
 
     /// <summary>Ticks que faltan para poder disparar de nuevo.</summary>
     public int RemainingCooldown { get; set; }

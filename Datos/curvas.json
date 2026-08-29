@@ -52,7 +52,28 @@
     "areaCount": 8,
     "lastWavePerArea": [12, 24, 37, 50, 62, 75, 87, 100],
     "wavesBetweenChoices": 3,
-    "preparationSeconds": 30
+    "preparationSeconds": 30,
+
+    // ⚠ CUÁNTAS CLASES SE DESBLOQUEAN GRATIS. De ahí en más, RECLUTAR SE COMPRA.
+    //
+    // La elección de cada tres oleadas ofrece contratar solo hasta llegar a este
+    // número; pasado eso, ofrece únicamente subir de nivel, y la única puerta
+    // para una clase nueva es la tienda del mercado.
+    //
+    // El motivo es que "ancho" era gratis y "profundo" también, así que la
+    // elección no tenía costo de oportunidad real: contratar siempre agregaba
+    // algo que antes no estaba. Con el ancho pago, el oro pasa a competir contra
+    // el tablero y contra los niveles, que es donde el juego quiere la tensión.
+    //
+    // ⚠ El 2 no es un número suelto: es el arranque garantizado. La primera
+    // clase la regala la pantalla inicial —con al menos una ofensiva entre las
+    // tres— y la segunda llega en la primera elección. Con una sola, una corrida
+    // que arranca con clérigo o bardo no tiene con qué defenderse y se pierde
+    // sin que el jugador haya hecho nada mal.
+    //
+    // Subirlo afloja la economía; bajarlo a 1 vuelve al arranque frágil. En 9 se
+    // vuelve al comportamiento viejo, con todo el roster gratis.
+    "freeClasses": 2
   },
 
   // --- Defensores ------------------------------------------------------------
@@ -358,6 +379,39 @@
     "goldPoolSize": 13,
     "goldPoolPerNewClass": 2,
     "finalBossDrops": false
+  },
+
+  // --- Mejorar perks: varios de un tier hacen uno del tier de arriba ---------
+  //
+  // ⚠ EXISTE PORQUE LA MOCHILA SE LLENA DE BASURA, no porque falte poder. Con
+  // "commonChance" 4 y hasta 60 bichos por oleada caen del orden de 100 Bronce
+  // y 40 Plata, y los lugares son 15: pasada la oleada 20 el jugador tiene la
+  // mochila llena de números que no va a equipar nunca y TODO drop posterior cae
+  // al vacío en silencio. Agrandar la mochila no era la salida —convierte "qué
+  // me sirve" en una planilla, que es justo lo que el tope de 15 evita—; darle
+  // salida a lo que sobra, sí.
+  //
+  // "bronzeToSilver" NO lleva tope y no lo necesita: Bronce y Plata son números,
+  // se apilan, y su abundancia no es lo que el balance protege.
+  //
+  // ⚠ "maxCraftedGoldPerRun" ES LO QUE SOSTIENE LA ECONOMÍA DEL ORO. Todo el
+  // resto del juego está construido sobre "el jefe es la fuente de Oro, ocho por
+  // corrida, y la tienda como mucho uno por visita": los Únicos cuestan DOS Oro
+  // justamente porque hay pocos. Sin tope, a 4 × 3 = 12 Bronce por Oro y ~100
+  // Bronce por corrida, la mejora entrega casi tanto Oro como los ocho jefes
+  // juntos y fusionar deja de costar algo.
+  //
+  // El 2 es deliberadamente menos de lo que un jefe da: la mejora es la salida
+  // del que junta sobras, nunca el camino principal al Oro. En 0 se apaga esa
+  // mitad de la mecánica sin tocar código, y Bronce → Plata sigue andando.
+  //
+  // El Oro que sale de una mejora se sortea del POOL DE LA CORRIDA y SIN el peso
+  // de sinergia: perseguir una receta concreta sigue siendo privilegio del jefe,
+  // que es el que la ofrece de a dos para elegir.
+  "upgrades": {
+    "bronzeToSilver": 4,
+    "silverToGold": 3,
+    "maxCraftedGoldPerRun": 2
   },
 
   // --- Cómo se arma la oleada con ese presupuesto ---------------------------

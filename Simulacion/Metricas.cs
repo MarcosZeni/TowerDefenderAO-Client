@@ -131,7 +131,8 @@ public sealed class RunMetrics
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Perks de Oro conseguidos por cualquier vía: elección de jefe o tienda.
+    /// Perks de Oro conseguidos por cualquier vía: elección de jefe, tienda o
+    /// mejora.
     /// </summary>
     /// <remarks>
     /// Contra <see cref="UniquesCrafted"/> dice si los Oro se están convirtiendo
@@ -141,6 +142,28 @@ public sealed class RunMetrics
     public int GoldPerksObtained { get; set; }
 
     public int UniquesCrafted { get; set; }
+
+    /// <summary>
+    /// Cuántas mejoras se hicieron: Bronce → Plata y Plata → Oro juntas.
+    /// </summary>
+    /// <remarks>
+    /// Es la métrica que dice si la mochila dejó de ser un basurero. En cero
+    /// quiere decir que el jugador sigue tirando drops o que la receta pide
+    /// demasiado; muy alta, que el Bronce cae de más.
+    /// </remarks>
+    public int PerksUpgraded { get; set; }
+
+    /// <summary>
+    /// Cuántos de los Oro de la corrida salieron de mejorar, no de un jefe.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Contra <see cref="GoldPerksObtained"/> dice si el tope
+    /// —<c>maxCraftedGoldPerRun</c>— sigue haciendo su trabajo. Si esta pasa a
+    /// ser la mitad de la otra, la mejora dejó de ser la salida de las sobras y
+    /// se volvió el camino principal al Oro, que es exactamente lo que el tope
+    /// existe para evitar.
+    /// </remarks>
+    public int GoldFromUpgrades { get; set; }
 
     /// <summary>
     /// En qué oleada se fabricó el primer Único, o 0 si nunca.

@@ -92,6 +92,16 @@ public sealed class Run
     private readonly List<int> _poolOro = [];
 
     /// <summary>
+    /// Cuántos Oro se fabricaron mejorando Plata en esta corrida.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El tope que lo acompaña —<c>maxCraftedGoldPerRun</c>— es lo que impide
+    /// que la mejora reemplace al jefe como fuente de Oro. Ver
+    /// <see cref="UpgradeData"/>.
+    /// </remarks>
+    private int _oroFabricado;
+
+    /// <summary>
     /// Oro extra que ya pagaron las marcas de botín en esta oleada. Tiene tope.
     /// </summary>
     /// <remarks>
@@ -418,6 +428,22 @@ public sealed class Run
     }
 
     /// <summary>
+    /// La ficha con ese <see cref="Defender.PlacementId"/>, o <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Por id y no por celda: mientras se arrastra una ficha, su celda es
+    /// justamente el dato que está cambiando.
+    /// </remarks>
+    public Defender? DefensorPorId(int idColocacion)
+    {
+        foreach (var d in _defensores)
+            if (d.PlacementId == idColocacion)
+                return d;
+
+        return null;
+    }
+
+    /// <summary>
     /// Avanza exactamente un tick.
     /// </summary>
     /// <remarks>
@@ -538,6 +564,14 @@ public sealed class Run
                 Fuse(accion.A, accion.B, (DefenderClass)accion.C);
                 break;
 
+            case ActionType.Upgrade:
+                Upgrade(accion.A, (PerkTier)accion.B);
+                break;
+
+            case ActionType.MoveDefender:
+                MoveDefender(accion.A, new Cell(accion.B, accion.C));
+                break;
+
             case ActionType.SetTargeting:
                 SetTargeting(accion.A, (TargetingMode)accion.B);
                 break;
@@ -577,6 +611,61 @@ public sealed class Run
     }
 
     /// <summary>
+    /// Mueve una ficha ya puesta. Si el destino está ocupado, <b>intercambia</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Solo con el reloj congelado.</b> Mover con la oleada corriendo
+    /// es reposicionar en combate —perseguir al bicho, esquivar al jefe— y eso es
+    /// otra mecánica, con otro balance. Congelado no cuesta ticks, así que no
+    /// toca el ranking.</para>
+    ///
+    /// <para><b>Gratis.</b> Antes acomodar una colocación mal puesta era vender y
+    /// volver a comprar, y al 60% de devolución convenía dejarla mal — que es
+    /// justo lo que subir la devolución de 50 a 60 venía a evitar.</para>
+    ///
+    /// <para>El intercambio no necesita revalidar nada: las dos celdas ya tenían
+    /// una ficha parada, así que las dos son colocables por construcción. El
+    /// destino vacío sí, porque puede ser ruta o zona bloqueada.</para>
+    ///
+    /// <para>Se conserva todo el estado por unidad —cooldown, targeting,
+    /// concentración, contador de golpes—. Es la misma ficha corrida de lugar, no
+    /// una nueva: reiniciarlo convertiría mover en una forma barata de resetear
+    /// los contadores.</para>
+    /// </remarks>
+    private void MoveDefender(int idColocacion, Cell destino)
+    {
+        if (!WaitingForWaveStart || !Map.InGrid(destino))
+            return;
+
+        Defender? quien = null;
+
+        foreach (var d in _defensores)
+        {
+            if (d.PlacementId == idColocacion)
+            {
+                quien = d;
+                break;
+            }
+        }
+
+        if (quien is null || quien.Cell == destino)
+            return;
+
+        var otro = DefensorEn(destino);
+
+        if (otro is not null)
+        {
+            (quien.Cell, otro.Cell) = (destino, quien.Cell);
+            return;
+        }
+
+        if (!Map.EsColocable(destino))
+            return;
+
+        quien.Cell = destino;
+    }
+
+    /// <summary>
     /// Llama la próxima oleada antes de tiempo.
     /// </summary>
     /// <remarks>
@@ -608,6 +697,16 @@ public sealed class Run
     /// </remarks>
     private void Adelantar()
     {
+        // ⚠ Con la elección sin resolver no se lanza nada.
+        //
+        // Desde que el mercado junta la elección y la tienda en una ventana, la
+        // preparación se arma ANTES de abrir la elección, así que las dos banderas
+        // están prendidas a la vez. Sin esta guarda, un log —o un bot— que mande
+        // «comenzar oleada» en ese tick se saltea la elección entera y con ella el
+        // Oro del jefe o la clase nueva.
+        if (WaitingForChoice)
+            return;
+
         if (WaitingForWaveStart)
         {
             WaitingForWaveStart = false;
@@ -662,6 +761,12 @@ public sealed class Run
         if (opcion.Kind == ChoiceType.Hire)
         {
             Roster.Hire(opcion.DefenderClass);
+
+            // ⚠ La tienda se arma ANTES de la elección para que las dos se vean
+            // juntas, así que puede estar ofreciendo la misma clase que esto acaba
+            // de regalar. Se retira: pagar por algo que ya se tiene es tirar oro,
+            // y dejarla comprable cuelga al bot que reintenta.
+            Shop.RetirarClase(opcion.DefenderClass);
 
             // Contratar una clase nueva ABRE Oro nuevo (Drops_v2): sin esto, un
             // roster que crece no cambia lo que el jefe puede ofrecer y contratar
@@ -898,6 +1003,133 @@ public sealed class Run
             Backpack.StorePerk(plano.ResultingUnique);
     }
 
+    /// <summary>Cuántos Oro se fabricaron mejorando en esta corrida.</summary>
+    public int CraftedGold => _oroFabricado;
+
+    /// <summary>El tope de Oro fabricable por corrida. 0 = la mejora a Oro está apagada.</summary>
+    public int MaxCraftedGold => _datos.Curves.Upgrades.MaxCraftedGoldPerRun;
+
+    /// <summary>
+    /// Si el pool de Oro de la corrida ya existe.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Se consulta, no se construye.</b> El pool se arma en el primer jefe y
+    /// armarlo consume RNG: una propiedad de lectura que lo creara movería el
+    /// punto de consumo según quién mire, y la revalidación del servidor fallaría
+    /// sin que nadie haya hecho trampa. Antes del primer jefe esto es
+    /// <c>false</c> y mejorar Plata → Oro rebota.
+    /// </remarks>
+    public bool GoldPoolReady => _poolOro.Count > 0;
+
+    /// <summary>Cuántos perks de ese tier hacen uno del tier de arriba. 0 = no se puede.</summary>
+    public int UpgradeCost(PerkTier tier) => _datos.Curves.Upgrades.CostOf(tier);
+
+    /// <summary>
+    /// Mejora varios perks de un tier en uno solo del tier de arriba.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es una salida para la basura, no una fuente de poder.</b> Con
+    /// del orden de 100 Bronce y 40 Plata cayendo por corrida contra 15 lugares
+    /// pasada la oleada 20 todo drop cae al vacío en silencio; esto le da
+    /// destino a lo que sobra sin agrandar la mochila, que es lo que convertiría
+    /// «qué me sirve» en una planilla.</para>
+    ///
+    /// <para>⚠ <b>El Oro fabricado tiene tope por corrida</b>, y ese tope es lo
+    /// que sostiene toda la economía del Oro: el juego está construido sobre ocho
+    /// Oro de jefe más lo poco que venda la tienda, y los Únicos cuestan dos
+    /// justamente porque hay pocos. Sin tope, doce Bronce por Oro entregaría más
+    /// que los ocho jefes juntos.</para>
+    ///
+    /// <para>El Oro sale del <b>pool de la corrida</b> y <b>sin</b> el peso de
+    /// sinergia: perseguir una receta concreta sigue siendo privilegio del jefe,
+    /// que es el que ofrece de a dos para elegir. La Plata sale del catálogo
+    /// filtrado por las clases del roster, igual que un drop.</para>
+    ///
+    /// <para>⚠ <paramref name="mascara"/> es la selección del jugador, un bit por
+    /// lugar de mochila. Todos los chequeos —bits fuera de rango, algo que no sea
+    /// un perk, un tier que no coincide, la cantidad exacta— van <b>antes</b> de
+    /// tocar el RNG: un rebote que hubiera consumido un número al azar
+    /// desincronizaría la revalidación del servidor.</para>
+    /// </remarks>
+    private void Upgrade(int mascara, PerkTier tier)
+    {
+        int cuantos = _datos.Curves.Upgrades.CostOf(tier);
+
+        if (cuantos < 2 || mascara <= 0)
+            return;
+
+        // El tope se mira antes que nada: si ya no hay cupo, no se consume nada.
+        if (tier == PerkTier.Silver && _oroFabricado >= _datos.Curves.Upgrades.MaxCraftedGoldPerRun)
+            return;
+
+        // Un bit encendido más allá de lo que hay en la mochila es un log
+        // manipulado, no una selección: rebota entero en vez de ignorarlo.
+        int validos = Backpack.Items.Count >= 31 ? int.MaxValue : (1 << Backpack.Items.Count) - 1;
+
+        if ((mascara & ~validos) != 0)
+            return;
+
+        var indices = new List<int>(cuantos);
+
+        for (int i = 0; i < Backpack.Items.Count; i++)
+        {
+            if ((mascara & (1 << i)) == 0)
+                continue;
+
+            var cosa = Backpack.Items[i];
+
+            if (cosa.Kind != ItemType.Perk || _datos.Perks.Get(cosa.Id).Tier != tier)
+                return;
+
+            indices.Add(i);
+        }
+
+        if (indices.Count != cuantos)
+            return;
+
+        var clases = Roster.Available();
+
+        if (clases.Count == 0)
+            return;
+
+        // ⚠ El pool se resuelve ANTES de consumir. Resolverlo después dejaría el
+        // camino en que no hay ningún Oro que le sirva al roster: tres Plata
+        // destruidas y nada a cambio.
+        List<int>? candidatos = null;
+
+        if (tier == PerkTier.Silver)
+        {
+            candidatos = PoolDeOro(clases);
+
+            if (candidatos.Count == 0)
+                return;
+        }
+
+        // De mayor a menor: sacar por el otro lado corre los índices de abajo y
+        // se terminaría destruyendo un perk que el jugador no eligió.
+        for (int i = indices.Count - 1; i >= 0; i--)
+            Backpack.RemoveAt(indices[i]);
+
+        Metrics.PerksUpgraded++;
+
+        if (candidatos is null)
+        {
+            var plata = _datos.Perks.Roll(PerkTier.Silver, clases, _rng);
+
+            if (plata is not null)
+                Backpack.StorePerk(plata.Id);
+
+            return;
+        }
+
+        int elegido = candidatos[_rng.Index(candidatos.Count)];
+
+        _oroFabricado++;
+        Metrics.GoldPerksObtained++;
+        Metrics.GoldFromUpgrades++;
+        Backpack.StorePerk(elegido);
+    }
+
     /// <summary>
     /// Le cambia el modo de targeting a un defensor puesto.
     /// </summary>
@@ -1052,10 +1284,15 @@ public sealed class Run
             {
                 var clase = (DefenderClass)oferta.Id;
 
-                // Una clase ya reclutada rebota: el generador de la tienda no la
-                // ofrece, pero un log manipulado sí puede pedirla.
+                // ⚠ Una clase ya reclutada RETIRA la oferta en vez de rebotar en
+                // silencio. Rebotar dejaba la oferta viva y comprable, y un bot
+                // que reintenta con el reloj congelado no termina nunca: medido,
+                // `--balance 24` sin terminar en 30 minutos. No se cobra nada.
                 if (Roster.Has(clase))
+                {
+                    Shop.RetirarClase(clase);
                     return;
+                }
 
                 Roster.Hire(clase);
 
@@ -3281,28 +3518,33 @@ public sealed class Run
         if (WaitingForChoice)
             return;
 
+        // ⚠ LA PREPARACIÓN SE ARMA ANTES DE ABRIR LA ELECCIÓN, y eso cambió.
+        //
+        // Antes la elección abría, el jugador elegía, y recién al tick siguiente
+        // se armaba la oleada y se renovaba la tienda. O sea que las dos
+        // decisiones —la que REGALA poder y la que lo COBRA— nunca se veían
+        // juntas, y comparar «¿me conviene el perk de 900 o desbloquear el
+        // druida?» era imposible: para cuando aparecía la tienda, la elección ya
+        // estaba tomada.
+        //
+        // Armar primero las pone en la misma pantalla (INTERFAZ.md §4bis). Acá NO
+        // se lanza la oleada: se abre la fase de preparación y se espera.
+        //
+        // ⚠ Cambia el ORDEN DE CONSUMO DEL RNG —antes elección, después oleada y
+        // tienda; ahora al revés— así que las corridas guardadas con el orden
+        // viejo no se re-simulan igual. Es temporada nueva.
+        ArmarProximaOleada();
+
         if (Wave - _oleadaUltimaEleccion >= _datos.Curves.RunCurve.WavesBetweenChoices)
         {
             var opciones = ChoiceBuilder.Next(Roster, _rng, _datos);
             _oleadaUltimaEleccion = Wave;
 
-            if (opciones.Length > 0)
-            {
-                OpenChoices = opciones;
-                return;
-            }
-
             // Sin opciones —roster completo y todo en nivel 6— se sigue de largo.
             // Es un final de progresión legítimo, no un error.
+            if (opciones.Length > 0)
+                OpenChoices = opciones;
         }
-
-        // ⚠ Acá NO se lanza sola. Se abre la fase de preparación y se espera.
-        //
-        // Antes bajaba un contador de 15 segundos y la oleada entraba sola. Con la
-        // preparación en pausa, quien la arranca es el jugador: la acción
-        // `AdelantarOleada` es el botón «comenzar oleada», y la interfaz la manda
-        // igual cuando se acaban los 30 segundos de reloj de pared.
-        ArmarProximaOleada();
     }
 
     // =========================================================================

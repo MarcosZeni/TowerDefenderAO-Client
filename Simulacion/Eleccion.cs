@@ -122,6 +122,19 @@ public static class ChoiceBuilder
     /// <para>Una clase que ya llegó al nivel 6 no vuelve a ofrecerse para
     /// levelear: del 7 en adelante ya no abre slots, así que sería una opción
     /// visiblemente peor que las otras dos y elegir dejaría de tener sentido.</para>
+    ///
+    /// <para>⚠ <b>Contratar solo se ofrece hasta <c>freeClasses</c>.</b> Pasado
+    /// ese número la elección ofrece <b>únicamente subir de nivel</b>, y la única
+    /// puerta para una clase nueva es la tienda del mercado. El motivo es que
+    /// «ancho» era gratis y «profundo» también, así que la elección no tenía
+    /// costo de oportunidad real: contratar siempre agregaba algo que antes no
+    /// estaba. Con el ancho pago, el oro compite contra el tablero y contra los
+    /// niveles.</para>
+    ///
+    /// <para>El <c>2</c> de fábrica es el arranque garantizado: la primera clase
+    /// la regala la pantalla inicial y la segunda llega en la primera elección.
+    /// Con una sola, una corrida que arranca con clérigo o bardo no tiene con qué
+    /// defenderse y se pierde sin que el jugador haya hecho nada mal.</para>
     /// </remarks>
     public static Choice[] Next(Roster roster, Rng rng, BalanceData datos)
     {
@@ -133,10 +146,13 @@ public static class ChoiceBuilder
                 candidatas.Add(new Choice(ChoiceType.LevelUp, c.DefenderClass, c.Level + 1));
         }
 
-        foreach (var clase in All)
+        if (roster.Classes.Count < datos.Curves.RunCurve.FreeClasses)
         {
-            if (!roster.Has(clase))
-                candidatas.Add(new Choice(ChoiceType.Hire, clase, 1));
+            foreach (var clase in All)
+            {
+                if (!roster.Has(clase))
+                    candidatas.Add(new Choice(ChoiceType.Hire, clase, 1));
+            }
         }
 
         // Con el roster completo y todo en nivel 6 no queda nada que ofrecer. Es

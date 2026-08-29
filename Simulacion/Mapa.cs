@@ -27,6 +27,20 @@ public sealed class Map
 
     private readonly bool[] _colocable;
 
+    /// <summary>
+    /// Qué celdas pisa la ruta.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se llena en el mismo recorrido que apaga las colocables, porque es
+    /// exactamente la misma pregunta contestada al revés. Recorrer la ruta de
+    /// nuevo para armarla sería duplicar el paso más delicado —el que define qué
+    /// es camino— y las dos copias podrían discrepar.</para>
+    ///
+    /// <para>Es una <b>consulta</b>: no cambia nada de la simulación. La usa el
+    /// render para orientar a los defensores hacia el camino.</para>
+    /// </remarks>
+    private readonly bool[] _esRuta;
+
     public Map(int ancho, int alto, Route ruta, IEnumerable<Cell> zonasColocacion)
     {
         Width = ancho;
@@ -34,6 +48,7 @@ public sealed class Map
         Route = ruta;
 
         _colocable = new bool[ancho * alto];
+        _esRuta = new bool[ancho * alto];
 
         // La Torre pegada a un borde deja el anillo de defensa cortado, y un
         // enemigo que llegue ahí puede volverse imposible de alcanzar. Se avisa en
@@ -88,8 +103,12 @@ public sealed class Map
         for (long d = 0; d <= ruta.Length; d += Ints.ThousandthsPerCell / 2)
         {
             var c = ruta.CellAt(d);
-            if (InGrid(c))
-                _colocable[Index(c)] = false;
+
+            if (!InGrid(c))
+                continue;
+
+            _colocable[Index(c)] = false;
+            _esRuta[Index(c)] = true;
         }
     }
 
@@ -109,6 +128,16 @@ public sealed class Map
 
     /// <summary>¿Se puede poner un defensor acá?</summary>
     public bool EsColocable(Cell c) => InGrid(c) && _colocable[Index(c)];
+
+    /// <summary>
+    /// ¿Pasa la ruta por esta celda?
+    /// </summary>
+    /// <remarks>
+    /// Fuera de la grilla devuelve <c>false</c>: el borde del mundo no es camino,
+    /// y quien orienta un defensor necesita que el afuera cuente como "acá no hay
+    /// nada" y no como un caso especial que tenga que recordar.
+    /// </remarks>
+    public bool EsRuta(Cell c) => InGrid(c) && _esRuta[Index(c)];
 
     private int Index(Cell c) => (c.Y * Width) + c.X;
 }

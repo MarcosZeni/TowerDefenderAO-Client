@@ -108,13 +108,31 @@ public static class UiWidgets
         var acento = elegida ? Palette.Info : Palette.BorderNormal;
 
         ci.DrawRect(r, Palette.PanelElevated.Alpha(elegida ? 0.96f : 0.88f));
-        ci.DrawRect(r.Row(0, 3f), acento.Alpha(elegida ? 1f : 0.35f));
+
+        // ⚠ La clase ELEGIDA es la que se va a poner con el próximo click en el
+        // mapa, así que tiene que verse de lejos y sin buscarla: es la pregunta
+        // «¿qué estoy por poner?», y se contesta mirando de reojo mientras el ojo
+        // está en el tablero.
+        //
+        // Antes la diferencia era un borde de 2,5 px contra 1,5 y una franja
+        // arriba: en una columna de cinco tarjetas iguales, invisible.
+        if (elegida)
+            ci.DrawRect(r, Palette.Info.Alpha(0.16f));
+
+        ci.DrawRect(r.Row(0, elegida ? 5f : 3f), acento.Alpha(elegida ? 1f : 0.35f));
 
         if (elegida)
-            ci.Glow(r, Palette.Info, 1.4f);
+            ci.Glow(r, Palette.Info, 2.4f, 7);
 
-        ci.DrawRect(r, acento, filled: false, width: elegida ? 2.5f : 1.5f);
-        ci.Corners(r, elegida ? Palette.Info : Palette.BorderLight.Alpha(0.7f));
+        ci.DrawRect(r, acento, filled: false, width: elegida ? 3f : 1.5f);
+        ci.Corners(r, elegida ? Palette.Info : Palette.BorderLight.Alpha(0.7f),
+            elegida ? 3f : 2f);
+
+        // La lengüeta de la izquierda: una barra maciza pegada al borde. Es la
+        // señal que sobrevive a tener la tarjeta medio tapada por el fantasma que
+        // acompaña al cursor mientras se arrastra.
+        if (elegida)
+            ci.DrawRect(new Rect2(r.Position.X, r.Position.Y, 5f, r.Size.Y), Palette.Info);
 
         // El retrato ocupa el alto entero de la tarjeta menos el margen; el
         // texto arranca donde termina.

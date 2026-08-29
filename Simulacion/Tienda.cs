@@ -747,6 +747,31 @@ public sealed class Shop
     }
 
     /// <summary>
+    /// Retira la oferta de reclutar una clase que el jugador acaba de conseguir.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Existe porque <b>la tienda ahora se arma ANTES de la elección</b>,
+    /// para que las dos decisiones se vean juntas. El precio de ese orden es que
+    /// el stock puede ofrecer «reclutar Cazador» y que la elección, dos segundos
+    /// después, regale Cazador.</para>
+    ///
+    /// <para>Antes ese caso <b>colgaba el juego</b>: comprarla rebotaba sin
+    /// marcarse vendida, y un bot que reintenta con el reloj congelado no termina
+    /// nunca. Medido: <c>--balance 24</c> sin terminar en 30 minutos.</para>
+    ///
+    /// <para>Se marca vendida y no se cobra nada. No consume RNG, así que
+    /// llamarla no mueve la secuencia.</para>
+    /// </remarks>
+    public void RetirarClase(DefenderClass clase)
+    {
+        for (int i = 0; i < _stock.Count; i++)
+        {
+            if (_stock[i].Kind == ShopKind.Class && !_stock[i].Sold && _stock[i].Id == (int)clase)
+                _stock[i] = _stock[i] with { Sold = true };
+        }
+    }
+
+    /// <summary>
     /// Cierra la tienda: lo que no se compró desaparece.
     /// </summary>
     /// <remarks>

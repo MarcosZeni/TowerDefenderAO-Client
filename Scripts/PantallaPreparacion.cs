@@ -123,6 +123,16 @@ public partial class PantallaPreparacion : Control
         if (!_visible)
             return;
 
+        // El botón de reabrir el mercado va primero: está pegado arriba del de
+        // comenzar, y un click ahí no puede lanzar la oleada.
+        if (evento is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } abre
+            && HayMercado() && BotonMercado().HasPoint(abre.Position))
+        {
+            _juego.Mercado!.Abrir();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         bool arranca = evento switch
         {
             InputEventKey { Pressed: true, Echo: false, Keycode: Key.Space or Key.Enter } => true,
@@ -146,7 +156,37 @@ public partial class PantallaPreparacion : Control
     /// porque es la esquina más lejos de la ruta y la que la mano ya tiene cerca
     /// del borde de la pantalla.
     /// </remarks>
-    private static Rect2 Boton() => UiLayout.Consumables.Inset(4f);
+    private static Rect2 Boton()
+    {
+        var bloque = UiLayout.RunBottomBlock(3).Inset(4f);
+
+        return new Rect2(bloque.Position.X, bloque.Position.Y + 40f,
+            bloque.Size.X, bloque.Size.Y - 40f);
+    }
+
+    /// <summary>
+    /// El botón que reabre el mercado, arriba del de comenzar.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Existe porque el mercado <b>se puede cerrar</b> una vez resuelta la
+    /// elección: el jugador cierra la ventana para mirar el tablero y necesita
+    /// una puerta de vuelta. Sin esto, cerrarla perdería la tienda de esa oleada
+    /// —y la tienda no se repone—.
+    ///
+    /// Chico y arriba: comenzar la oleada es la acción principal de esta barra y
+    /// se queda con el botón grande.
+    /// </remarks>
+    private static Rect2 BotonMercado()
+    {
+        var bloque = UiLayout.RunBottomBlock(3).Inset(4f);
+
+        return new Rect2(bloque.Position.X, bloque.Position.Y, bloque.Size.X, 34f);
+    }
+
+    /// <summary>Si hay tienda sin resolver que reabrir.</summary>
+    private bool HayMercado()
+        => _juego.Mercado is { Abierta: false } && _juego.Run is { } p
+           && p.Shop.OleadaDelStock == p.ProximaOleada && p.Shop.Stock.Count > 0;
 
     public override void _Draw()
     {
@@ -160,11 +200,11 @@ public partial class PantallaPreparacion : Control
         // Lo que el jugador tiene que mirar en esta fase es EL MAPA: dónde queda
         // libre, por dónde pasa la ruta, qué cubre lo que ya puso. Un modal
         // centrado le taparía justo eso y lo obligaría a cerrarlo para decidir.
-        this.Panel(UiLayout.BuildPanel);
+        this.Panel(UiLayout.RunBottomBar);
 
         // La franja ámbar de arriba: es lo que dice, de reojo, que el juego está
         // esperando y no colgado.
-        DrawRect(UiLayout.BuildPanel.Row(0f, 3f), Palette.Warning);
+        DrawRect(UiLayout.RunBottomBar.Row(0f, 3f), Palette.Warning);
 
         Cabecera(partida);
         DibujarAvance(partida);
@@ -174,19 +214,23 @@ public partial class PantallaPreparacion : Control
     /// <summary>Qué oleada viene, cuánto oro hay y cómo se juega.</summary>
     private void Cabecera(Run partida)
     {
-        var r = UiLayout.EquippedPerks;
+        var r = UiLayout.RunBottomBlock(0);
         int total = CargadorDatos.Actual.Curves.RunCurve.WavesPerRun;
 
-        this.Label(r.Row(0f, 22f), Loc.Get("ui.preparacion.wave").ToUpperInvariant(), 14,
+        this.Label(r.Row(0f, 18f), Loc.Get("ui.preparacion.wave").ToUpperInvariant(), 13,
             Palette.TextMuted);
 
-        this.Label(r.Row(20f, 38f),
-            $"{partida.ProximaOleada} {Loc.Get("ui.preparacion.de")} {total}", 32,
+        this.Label(r.Row(16f, 32f),
+            $"{partida.ProximaOleada} {Loc.Get("ui.preparacion.de")} {total}", 28,
             Palette.TextPrimary);
 
-        this.Price(r.Row(62f, 26f), partida.Gold);
+        this.Price(r.Row(50f, 22f), partida.Gold);
 
-        this.Paragraph(r.Row(92f, r.Size.Y - 92f), Loc.Get("ui.preparacion.instrucciones"), 13,
+        // La barra de abajo del marco mide 124 px y no los 187 del diseño, así
+        // que las instrucciones entran en dos renglones justos. Se achica el
+        // cuerpo antes que recortar la frase: es el renglón que le explica la
+        // fase al que juega por primera vez.
+        this.Paragraph(r.Row(74f, r.Size.Y - 74f), Loc.Get("ui.preparacion.instrucciones"), 12,
             Palette.TextMuted);
     }
 
@@ -203,9 +247,9 @@ public partial class PantallaPreparacion : Control
         // El bloque del avance ocupa los dos del medio del diseño —el del arma y
         // el de los planos—: una fila de bichos no entra en uno solo.
         var zona = new Rect2(
-            UiLayout.EquippedWeapon.Position,
-            new Vector2(UiLayout.ActiveBlueprints.End.X - UiLayout.EquippedWeapon.Position.X,
-                UiLayout.EquippedWeapon.Size.Y));
+            UiLayout.RunBottomBlock(1).Position,
+            new Vector2(UiLayout.RunBottomBlock(2).End.X - UiLayout.RunBottomBlock(1).Position.X,
+                UiLayout.RunBottomBlock(1).Size.Y));
 
         this.Label(zona.Row(0f, 22f), Loc.Get("ui.preparacion.avance").ToUpperInvariant(), 14,
             Palette.TextMuted);
@@ -278,6 +322,12 @@ public partial class PantallaPreparacion : Control
     {
         var caja = Boton();
         int cuenta = Cuenta();
+
+        // ⚠ El botón del mercado se dibuja EN ÁMBAR y solo si quedó tienda sin
+        // resolver. Es un recordatorio: la tienda no se repone, así que lanzar la
+        // oleada con ofertas sin mirar tira esa tienda entera.
+        if (HayMercado())
+            this.Button(BotonMercado(), Loc.Get("ui.preparacion.mercado"), Palette.Gold);
 
         if (cuenta > 0)
         {

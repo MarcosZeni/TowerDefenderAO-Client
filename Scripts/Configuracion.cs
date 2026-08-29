@@ -57,6 +57,23 @@ public static class Configuracion
     /// <summary>Si el portal y el cristal de la Torre laten y giran.</summary>
     public static bool AnimarEfectos { get; set; } = true;
 
+    /// <summary>
+    /// Si el token de la sesión se guarda en disco para no volver a entrar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Prendido de fábrica: escribir la contraseña en cada arranque es la
+    /// molestia más grande del juego y la que menos aporta.</para>
+    ///
+    /// <para>⚠ <b>Existe apagado porque el archivo no se puede cifrar de verdad.</b>
+    /// Para descifrarlo el juego necesitaría la clave, y la clave viviría al lado
+    /// del archivo. En una computadora compartida, el tilde es la respuesta real;
+    /// un cifrado casero sería solo una forma de decir que hay seguridad donde no
+    /// la hay. Ver <see cref="Sesion"/>.</para>
+    ///
+    /// <para>Lo que se guarda es el <b>token</b>, nunca la contraseña.</para>
+    /// </remarks>
+    public static bool RecordarSesion { get; set; } = true;
+
     /// <summary>Código del idioma: «es», «en»… Sale de Datosang.</summary>
     /// <remarks>
     /// ⚠ NO entra al hash de la corrida. Traducir no cambia la simulación: dos
@@ -156,6 +173,7 @@ public static class Configuracion
         AnimarArmas = (bool)config.GetValue("animaciones", "armas", true);
         AnimarEfectos = (bool)config.GetValue("animaciones", "efectos", true);
         Idioma = (string)config.GetValue("idioma", "codigo", Loc.Referencia);
+        RecordarSesion = (bool)config.GetValue("cuenta", "recordar", true);
 
         for (int i = 0; i < _teclas.Length; i++)
         {
@@ -176,6 +194,7 @@ public static class Configuracion
         config.SetValue("animaciones", "armas", AnimarArmas);
         config.SetValue("animaciones", "efectos", AnimarEfectos);
         config.SetValue("idioma", "codigo", Idioma);
+        config.SetValue("cuenta", "recordar", RecordarSesion);
 
         for (int i = 0; i < _teclas.Length; i++)
             config.SetValue("teclas", ((Atajo)i).ToString(), (int)_teclas[i]);

@@ -103,7 +103,7 @@ public partial class PantallaOpciones : Control
 
     /// <summary>
     /// ⚠ <c>_Input</c> y no <c>_GuiInput</c>, por la cicatriz de
-    /// <see cref="PantallaEleccion"/>: el hook de GUI dejaba las pantallas sordas.
+    /// <see cref="PantallaMercado"/>: el hook de GUI dejaba las pantallas sordas.
     /// </summary>
     public override void _Input(InputEvent evento)
     {
