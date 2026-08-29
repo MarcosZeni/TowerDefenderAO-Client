@@ -662,6 +662,8 @@ public partial class PantallaMochila : Control
         if (partida is null)
             return;
 
+        UiTooltip.Comenzar(GetGlobalMousePosition());
+
         this.Scrim();
 
         ColumnaDeClases(partida);
@@ -669,6 +671,10 @@ public partial class PantallaMochila : Control
         ColumnaDeDetalle(partida);
         ColumnaDeLaClaseMirada(partida);
         Pie();
+
+        // Antes de la confirmación: con el modal abierto no hay nada que
+        // explicar, y el cartel quedaría flotando arriba del cartel.
+        UiTooltip.Dibujar(this);
 
         if (_confirmarSacar is not null)
             DibujarConfirmacion();
@@ -882,7 +888,12 @@ public partial class PantallaMochila : Control
         // números flojos puede valer más que una sin ella, y el jugador no puede
         // saberlo si solo ve los stats.
         if (arma is not null && arma.Ability != WeaponAbility.None)
-            this.Label(celda.Row(2f, 18f), "★", 14, color, HorizontalAlignment.Right, 5f);
+        {
+            // El rayo y no una estrella: IBM Plex Mono no trae el ★, y además el
+            // rayo dice «esto hace algo», que es lo que la marca significa.
+            this.Icon(new Rect2(celda.End.X - 20f, celda.Position.Y + 3f, 16f, 16f),
+                UiStyle.Icono.Ability, color);
+        }
     }
 
     /// <summary>
@@ -980,7 +991,7 @@ public partial class PantallaMochila : Control
         var stats = UiLayout.DetailStats;
         float alto = 22f;
 
-        this.StatRow(stats.Row(0f, alto), Loc.Effect(def.Effect), $"{def.Magnitude}%", color);
+        this.EffectRow(stats.Row(0f, alto + 4f), def, color);
 
         // El segundo número lo tienen los Únicos, que son la fusión de dos Oro:
         // Onda de Frío hace splash por el primero y ralentiza por este.
@@ -1004,7 +1015,7 @@ public partial class PantallaMochila : Control
         var icono = UiLayout.Square(UiLayout.DetailIcon);
 
         this.Slot(icono, color);
-        this.Label(icono, "⚔", (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
+        this.Icon(icono.Inset(icono.Size.X * 0.22f), UiStyle.Icono.Weapon, color);
 
         if (arma.Ability != WeaponAbility.None)
         {

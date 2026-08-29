@@ -32,6 +32,18 @@
     // El separador de miles. El diseño escribe «12.450» y «1.250 / 1.250»: sin
     // esto, los cinco dígitos del oro de una corrida larga se leen de a uno.
     "ui.format.miles": ".",
+    // --- Los carteles de los iconos -----------------------------------------
+    //
+    // ⚠ Existen porque los iconos reemplazaron palabras. Cambiar «daño 7» por una
+    // espada y un 7 alinea las columnas y saca el largo del texto de la ecuación,
+    // pero le pide al jugador que YA SEPA qué significa cada dibujo: un reloj
+    // puede ser cadencia, duración o tiempo restante. El cartel es lo que hace
+    // que el icono no sea un acertijo la primera vez.
+    //
+    // La clave sale del nombre del enum UiStyle.Stat, igual que los atajos.
+    "ui.stat.Damage": "daño por golpe",
+    "ui.stat.Range": "alcance, en celdas",
+    "ui.stat.Cadence": "cada cuántos ticks dispara — menos es más rápido",
 
     // --- Las nueve clases ---------------------------------------------------
     // ⚠ NO existe "arquero": el que tira flechas es el Cazador.
@@ -290,16 +302,28 @@
     "ui.preparacion.instrucciones": "poné defensores, equipá y comprá — el reloj está detenido",
     "ui.preparacion.avance": "Lo que viene",
     "ui.preparacion.jefe": "(JEFE)",
-    "ui.preparacion.con_perk": "con perk",
-
-    // ⚠ Los rasgos van en su propio renglón: no son un número más de vida o
-    // velocidad, cambian una situación. Contra un líder conviene concentrar fuego
-    // en él antes que repartir, y eso es una respuesta distinta.
-    "ui.preparacion.con_rasgo": "con rasgo (impulsivo o líder)",
     "ui.preparacion.ahi_vienen": "AHÍ VIENEN...",
     "ui.preparacion.comenzar_oleada": "COMENZAR OLEADA",
     "ui.preparacion.mercado": "abrir mercado",
     "ui.preparacion.espacio_sin_apuro": "espacio · sin apuro, el reloj está detenido",
+
+    // --- La ventana de «lo que viene» ---------------------------------------
+    //
+    // ⚠ Los perks y los rasgos van CONTADOS UNO POR UNO. Antes eran dos números
+    // lumpeados —«2 con perk», «1 con rasgo (impulsivo o líder)»— y el segundo ni
+    // siquiera decía cuál: contra un líder conviene concentrar fuego en él,
+    // contra un impulsivo tener algo listo antes de tiempo. Son dos respuestas
+    // distintas, y la pantalla obligaba a prepararse para las dos.
+    "ui.preparacion.ver_oleada": "ver la oleada",
+    "ui.preparacion.mas_tipos": "tipos más que no entran acá",
+    "ui.preparacion.con_vida": "con más vida",
+    "ui.preparacion.con_velocidad": "más rápidos",
+    "ui.preparacion.impulsivos": "impulsivo: entra antes",
+    "ui.preparacion.lideres": "LÍDER: buffea a los de al lado",
+    "ui.preparacion.sin_nada": "sin modificadores",
+    "ui.preparacion.stat_vida": "vida de cada uno",
+    "ui.preparacion.stat_dano": "cuánto le saca a la Torre por golpe",
+    "ui.preparacion.stat_velocidad": "celdas por segundo",
 
     // --- La tienda rotativa de la corrida ------------------------------------
     //

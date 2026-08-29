@@ -58,7 +58,8 @@ public sealed record RunData(
     int[] LastWavePerArea,
     int WavesBetweenChoices,
     int PreparationSeconds,
-    int FreeClasses);
+    int FreeClasses,
+    int ChoiceDiscountPercent);
 
 public sealed record DefenderData(
     int BackpackSlots,
@@ -1386,7 +1387,8 @@ public static class TableReader
                 ultimaPorArea,
                 Int(corrida, "wavesBetweenChoices", archivo),
                 Int(corrida, "preparationSeconds", archivo),
-                Int(corrida, "freeClasses", archivo)),
+                Int(corrida, "freeClasses", archivo),
+                Int(corrida, "choiceDiscountPercent", archivo)),
 
             new DefenderData(
                 Int(defensores, "backpackSlots", archivo),

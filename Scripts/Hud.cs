@@ -71,6 +71,8 @@ public partial class Hud : Control
         if (p is null)
             return;
 
+        UiTooltip.Comenzar(GetGlobalMousePosition());
+
         // El bisel primero: tapa lo que se haya salido del mundo, y las paredes
         // se dibujan después encima de sus bordes.
         this.Bezel(UiLayout.WorldFrame, UiLayout.WorldOnScreen);
@@ -85,6 +87,11 @@ public partial class Hud : Control
             BarraDeBuild(p);
 
         Pie();
+
+        // Antes del fantasma: mientras se arrastra una ficha el cursor lleva un
+        // muñeco pegado, y un cartel debajo de él no se lee.
+        if (!_arrastrando)
+            UiTooltip.Dibujar(this);
 
         if (_arrastrando)
             DibujarFantasma(p);

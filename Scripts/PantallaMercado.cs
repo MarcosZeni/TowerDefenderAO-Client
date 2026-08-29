@@ -354,6 +354,8 @@ public partial class PantallaMercado : Control
         if (p is null || !Abierta)
             return;
 
+        UiTooltip.Comenzar(GetGlobalMousePosition());
+
         // El mundo se oscurece pero se sigue viendo: las dos decisiones se toman
         // mirando la defensa, no de memoria.
         this.Scrim();
@@ -364,6 +366,9 @@ public partial class PantallaMercado : Control
             DibujarColumna(p, c);
 
         Pie(p);
+
+        // Último de todo: el cartel tiene que quedar encima de las tarjetas.
+        UiTooltip.Dibujar(this);
     }
 
     private void Cabecera(Run p)
@@ -720,8 +725,7 @@ public partial class PantallaMercado : Control
 
         this.Label(nombre, Loc.Perk(def).ToUpperInvariant(), 24, Palette.TextPrimary);
 
-        this.Label(cuerpo.Row(0f, 19f), $"{Loc.Effect(def.Effect)} · {def.Magnitude}%", 14,
-            Palette.TextSecondary);
+        this.EffectRow(cuerpo.Row(0f, 20f), def, acento);
 
         // ⚠ Sin el rótulo «le sirve a»: la lista de clases en gris ya se lee como
         // lo que es, y ese renglón le comía la mitad del lugar a lo único que no
@@ -788,7 +792,10 @@ public partial class PantallaMercado : Control
     {
         var color = tiene ? Palette.Success : Palette.Danger;
 
-        this.Label(r, tiene ? "✓" : "✗", 14, color);
+        // ⚠ La cruz es «×» y no «✗»: IBM Plex Mono no trae la segunda, y un
+        // glifo que la fuente no tiene se dibuja como un rectángulo vacío — que
+        // en una receta se lee como «no sé», no como «falta».
+        this.Label(r, tiene ? "✓" : "×", 14, color);
 
         this.Label(new Rect2(r.Position.X + 18f, r.Position.Y, r.Size.X - 18f, r.Size.Y),
             nombre, 13, tiene ? Palette.TextSecondary : Palette.TextMuted);
@@ -827,7 +834,7 @@ public partial class PantallaMercado : Control
         var color = arma.Ability == WeaponAbility.None ? acento : Palette.Epic;
 
         this.Slot(icono, color);
-        this.Label(icono, "⚔", (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
+        this.Icon(icono.Inset(icono.Size.X * 0.22f), UiStyle.Icono.Weapon, color);
 
         this.Label(nombre, Loc.Weapon(arma).ToUpperInvariant(), 21, Palette.TextPrimary);
 

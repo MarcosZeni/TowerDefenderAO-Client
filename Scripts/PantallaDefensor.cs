@@ -244,6 +244,8 @@ public partial class PantallaDefensor : Control
         var stats = partida.Roster.StatsOf(defensor.DefenderClass, partida.Backpack);
         var caja = Caja();
 
+        UiTooltip.Comenzar(GetGlobalMousePosition());
+
         this.Panel(caja);
 
         // El retrato arriba de todo: el jugador acaba de clickear una unidad del
@@ -291,6 +293,8 @@ public partial class PantallaDefensor : Control
 
         this.Label(caja.Row(caja.Size.Y - 26f, 22f), Loc.Get("ui.defensor.cerrar"), 13,
             Palette.TextDisabled, HorizontalAlignment.Center);
+
+        UiTooltip.Dibujar(this);
     }
 
     /// <summary>

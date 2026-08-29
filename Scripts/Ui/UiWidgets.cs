@@ -41,13 +41,32 @@ public static class UiWidgets
         float franja = nivel > 0 ? Mathf.Min(18f, r.Size.Y * 0.24f) : 0f;
         var hueco = UiLayout.Square(new Rect2(r.Position, new Vector2(r.Size.X, r.Size.Y - franja))).Inset(5f);
 
+        // El orden de reserva es: arte propio → RPG Awesome → la inicial.
+        //
+        // ⚠ El del medio es nuevo y cambia mucho: hasta ahora casi ningún perk
+        // tenía arte, así que la grilla de la mochila era veinte LETRAS de
+        // colores. Con el icono del efecto, un perk se reconoce por lo que hace
+        // —una llama es quemadura, un copo es lento— sin leer el nombre.
+        //
+        // El arte propio sigue primero porque es por PERK y esto es por EFECTO:
+        // dos perks del mismo efecto comparten dibujo, que alcanza para
+        // reconocerlos pero no para distinguirlos.
         if (!CargadorIconos.Dibujar(ci, perk.Key, hueco.Position.X, hueco.Position.Y, hueco.Size.X))
         {
-            // Sin icono queda la inicial del perk, en el color del tier. Es feo
-            // a propósito: se tiene que notar cuál falta.
-            ci.Label(hueco, Loc.Perk(perk)[..1].ToUpperInvariant(),
-                (int)(hueco.Size.X * 0.6f), color, HorizontalAlignment.Center);
+            if (UiStyle.Icons is not null)
+            {
+                ci.Icon(hueco, IconoDe(perk.Effect), color);
+            }
+            else
+            {
+                // Sin ninguna de las dos queda la inicial, en el color del tier.
+                // Es feo a propósito: se tiene que notar cuál falta.
+                ci.Label(hueco, Loc.Perk(perk)[..1].ToUpperInvariant(),
+                    (int)(hueco.Size.X * 0.6f), color, HorizontalAlignment.Center);
+            }
         }
+
+        UiTooltip.Sobre(r, $"{Loc.Perk(perk)} · {Loc.Effect(perk.Effect)} {perk.Magnitude}%");
 
         if (nivel > 0)
         {
@@ -55,6 +74,88 @@ public static class UiWidgets
                 $"{Loc.Get("ui.hud.niv")} {nivel}", (int)Mathf.Min(13f, franja * 0.8f),
                 Palette.TextSecondary, HorizontalAlignment.Center);
         }
+    }
+
+    /// <summary>
+    /// Qué icono de RPG Awesome le toca a cada efecto de perk.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Es por <b>efecto</b> y no por perk, y esa es la decisión que hace
+    /// la tabla escribible: hay 47 perks y 35 efectos, pero los efectos son
+    /// conceptos —quemar, ralentizar, rebotar— y un concepto tiene un dibujo
+    /// obvio. Perk por perk habría que elegir 47 veces y la mitad terminarían
+    /// repetidos igual.</para>
+    ///
+    /// <para>El criterio de cada elección es <b>qué hace</b>, no cómo se llama:
+    /// Quebranto y Debilidad son los dos escudos rotos porque los dos bajan la
+    /// defensa, y el jugador los agrupa así aunque los nombres no se parezcan.</para>
+    ///
+    /// <para>El comentario de cada línea es la clase CSS de RPG Awesome, que es
+    /// como se busca un reemplazo en la hoja de referencia.</para>
+    /// </remarks>
+    public static UiStyle.Icono IconoDe(PerkEffect efecto) => efecto switch
+    {
+        // --- Bronce y plata: los tres números ---------------------------------
+        PerkEffect.Damage => UiStyle.Icono.Damage,
+        PerkEffect.Cadence => UiStyle.Icono.Cadence,
+        PerkEffect.Range => UiStyle.Icono.Range,
+
+        // --- Oro: los comportamientos -----------------------------------------
+        PerkEffect.Ricochet => (UiStyle.Icono)0xEAC0,          // ra-supersonic-arrow
+        PerkEffect.Splash => (UiStyle.Icono)0xE9B1,            // ra-explosion
+        PerkEffect.Slow => (UiStyle.Icono)0xEAA7,              // ra-snowflake
+        PerkEffect.CriticalHit => (UiStyle.Icono)0xEA52,       // ra-on-target
+        PerkEffect.Poison => (UiStyle.Icono)0xEA71,            // ra-poison-cloud
+        PerkEffect.Chain => (UiStyle.Icono)0xE960,             // ra-chain
+        PerkEffect.Burn => (UiStyle.Icono)0xE9C3,              // ra-fire
+        PerkEffect.Weaken => (UiStyle.Icono)0xE94A,            // ra-broken-shield
+        PerkEffect.Sunder => (UiStyle.Icono)0xE976,            // ra-cracked-shield
+        PerkEffect.Focus => (UiStyle.Icono)0xEAC4,             // ra-target-laser
+        PerkEffect.HuntMark => (UiStyle.Icono)0xE9B5,          // ra-eyeball
+        PerkEffect.Bleed => (UiStyle.Icono)0xE9A9,             // ra-droplet
+        PerkEffect.Root => (UiStyle.Icono)0xEAE2,              // ra-vine-whip
+        PerkEffect.Seismic => (UiStyle.Icono)0xE93C,           // ra-boot-stomp
+        PerkEffect.Inspire => (UiStyle.Icono)0xEA04,           // ra-horn-call
+        PerkEffect.Loot => (UiStyle.Icono)0xE9E4,              // ra-gold-bar
+        PerkEffect.Opportunist => (UiStyle.Icono)0xEA65,       // ra-plain-dagger
+        PerkEffect.ThresholdGuard => (UiStyle.Icono)0xEAD2,    // ra-tower
+        PerkEffect.ArcaneEcho => (UiStyle.Icono)0xE965,        // ra-circle-of-circles
+        PerkEffect.Overpenetration => (UiStyle.Icono)0xE911,   // ra-arrow-cluster
+        PerkEffect.FirstStrike => (UiStyle.Icono)0xE97D,       // ra-crossed-swords
+        PerkEffect.Charge => (UiStyle.Icono)0xE9D0,            // ra-focused-lightning
+
+        // --- Únicos: los nueve --------------------------------------------------
+        PerkEffect.Perforation => (UiStyle.Icono)0xE919,       // ra-barbed-arrow
+        PerkEffect.FrostWave => (UiStyle.Icono)0xE9D6,         // ra-frost-emblem
+        PerkEffect.WrathOfGod => (UiStyle.Icono)0xEABE,        // ra-sunbeams
+        PerkEffect.Apocalypse => (UiStyle.Icono)0xE98C,        // ra-death-skull
+        PerkEffect.TerribleHunger => (UiStyle.Icono)0xEAE7,    // ra-wolf-head
+        PerkEffect.DivineStorm => (UiStyle.Icono)0xEA31,       // ra-lightning
+        PerkEffect.Blindness => (UiStyle.Icono)0xE950,         // ra-burning-eye
+        PerkEffect.Strength => (UiStyle.Icono)0xE979,          // ra-crossed-axes
+        PerkEffect.Invisibility => (UiStyle.Icono)0xE927,      // ra-batwings
+
+        _ => UiStyle.Icono.Damage,
+    };
+
+    /// <summary>
+    /// El efecto de un perk con su icono: <b>icono, hueco, texto</b>.
+    /// </summary>
+    /// <remarks>
+    /// El mismo formato que <see cref="UiStyle.StatIcon"/>, para que una tarjeta
+    /// de perk y una de clase se lean con el mismo movimiento del ojo.
+    /// </remarks>
+    public static void EffectRow(this CanvasItem ci, Rect2 r, PerkDefinition perk, Color color)
+    {
+        float lado = Mathf.Min(r.Size.Y, 18f);
+        var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
+
+        ci.Icon(caja, IconoDe(perk.Effect), color);
+
+        int tamano = (int)Mathf.Min(15f, r.Size.Y * 0.78f);
+
+        ci.Label(new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
+            $"{Loc.Effect(perk.Effect)} {perk.Magnitude}%", tamano, Palette.TextSecondary);
     }
 
     /// <summary>
@@ -225,12 +326,49 @@ public static class UiWidgets
         if (cuerpo is null || apariencia is null)
             return;
 
-        // La escala la fija el alto del marco; el muñeco se apoya en su base.
-        float s = marco.Size.Y / cuerpo.GetSize().Y;
+        // ⚠ LA ESCALA SALE DEL MUÑECO ENTERO, NO DEL CUERPO.
+        //
+        // Antes era `marco.alto / alto del cuerpo`, y el muñeco se salía del
+        // recuadro por arriba: la cabeza NO se dibuja adentro del cuerpo, se
+        // dibuja corrida hacia arriba por `HeadOffset.Y` —que ronda los -152 px
+        // del arte x4—. O sea que el alto real del muñeco es el del cuerpo MÁS
+        // ese corrimiento, y escalando solo por el cuerpo la cabeza siempre
+        // quedaba afuera. Es lo que se veía en las tarjetas de la tienda.
+        //
+        // El ancho entra en la cuenta por lo mismo: un marco apaisado no puede
+        // decidir la escala por el alto solo.
+        var lienzo = Extensiones(cuerpo, apariencia);
+
+        var caja = marco.Inset(4f);
+        float s = Mathf.Min(caja.Size.Y / lienzo.Y, caja.Size.X / lienzo.X);
 
         ci.Doll(cuerpo, apariencia, s,
-            new Vector2(marco.Position.X + (marco.Size.X / 2f), marco.End.Y),
+            new Vector2(caja.Position.X + (caja.Size.X / 2f), caja.End.Y),
             Colors.White);
+    }
+
+    /// <summary>
+    /// Cuánto mide el muñeco entero —cuerpo más cabeza corrida— en píxeles del arte.
+    /// </summary>
+    /// <remarks>
+    /// El alto se mide <b>desde los pies</b>, que es el punto en el que
+    /// <see cref="Doll"/> ancla las dos piezas. Como <c>HeadOffset.Y</c> es
+    /// negativo, restarlo suma: <c>altoCabeza − offset</c> es «hasta dónde llega
+    /// la cabeza por encima del piso».
+    /// </remarks>
+    private static Vector2 Extensiones(Texture2D cuerpo, Apariencia apariencia)
+    {
+        var c = cuerpo.GetSize();
+        var cabeza = CargadorGraficos.Textura($"{apariencia.Head}.sur");
+
+        if (cabeza is null)
+            return c;
+
+        var h = cabeza.GetSize();
+
+        return new Vector2(
+            Mathf.Max(c.X, h.X + (Mathf.Abs(apariencia.HeadOffset.X) * 2f)),
+            Mathf.Max(c.Y, h.Y - apariencia.HeadOffset.Y));
     }
 
     /// <summary>El cuerpo al sur de una clase, con su apariencia. Compartido.</summary>
@@ -290,8 +428,8 @@ public static class UiWidgets
         (Color Color, string Texto)[] items =
         [
             (Palette.Common, Loc.Get("ui.hud.libre")),
-            (Palette.Uncommon, Loc.Tier(PerkTier.Bronze)),
-            (Palette.Rare, Loc.Tier(PerkTier.Silver)),
+            (Palette.Rarity(PerkTier.Bronze), Loc.Tier(PerkTier.Bronze)),
+            (Palette.Rarity(PerkTier.Silver), Loc.Tier(PerkTier.Silver)),
             (Palette.Epic, Loc.Get("ui.hud.arma_equipada")),
             (Palette.Legendary, Loc.Tier(PerkTier.Gold)),
             (Palette.Unique, Loc.Tier(PerkTier.Unique)),

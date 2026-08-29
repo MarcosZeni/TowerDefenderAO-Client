@@ -380,8 +380,39 @@ public sealed class WavePreview
 
     public int Cuantos { get; set; }
 
+    // --- Los stats base, para la tarjeta --------------------------------------
+    //
+    // ⚠ Son los del BESTIARIO, sin los perks de NPC encima. La tarjeta dice
+    // «así es un cuervo» y aparte «dos de estos vienen con más vida»: mezclarlo
+    // en un solo número escondería cuál de las dos cosas cambió, que es
+    // justamente lo que el jugador necesita para decidir.
+    //
+    // El HP viene en centésimas de punto como todo adentro de la simulación:
+    // quien lo muestre lo pasa por `Loc.Points`.
+
+    /// <summary>Vida base, en centésimas de punto.</summary>
+    public int Hp { get; set; }
+
+    /// <summary>Daño máximo por golpe, en centésimas de punto.</summary>
+    public int MaxDamage { get; set; }
+
+    /// <summary>Cuánto camina por tick, en milésimas de celda.</summary>
+    public int Speed { get; set; }
+
     /// <summary>Cuántos de esos vienen buffeados. Tiene que verse.</summary>
     public int ConPerk { get; set; }
+
+    /// <summary>Cuántos traen más vida.</summary>
+    public int ConVida { get; set; }
+
+    /// <summary>Cuántos traen más velocidad.</summary>
+    public int ConVelocidad { get; set; }
+
+    /// <summary>Cuántos son impulsivos: entran antes de lo que les toca.</summary>
+    public int Impulsivos { get; set; }
+
+    /// <summary>Cuántos son líderes: buffean a los que tienen cerca.</summary>
+    public int Lideres { get; set; }
 
     /// <summary>
     /// Cuántos traen un <b>rasgo</b>: impulsivo o líder.

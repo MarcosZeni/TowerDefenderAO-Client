@@ -267,6 +267,9 @@ public sealed class Run
                     Name = dato?.Name ?? "?",
                     Graphic = dato?.Graphic ?? "",
                     IsBoss = compra.IsBoss,
+                    Hp = dato?.Hp ?? 0,
+                    MaxDamage = dato?.MaxDamage ?? 0,
+                    Speed = dato?.Speed ?? 0,
                 };
 
                 porTipo[compra.TypeId] = fila;
@@ -278,9 +281,28 @@ public sealed class Run
             if (compra.HealthPerk > 0 || compra.SpeedPerk > 0)
                 fila.ConPerk++;
 
-            // ⚠ Los rasgos van aparte y también tienen que verse: un líder que se
-            // ve igual que un lobo normal es una mecánica invisible, y el jugador
-            // que pierde contra algo que no sabía que estaba ahí no aprende nada.
+            // ⚠ Y se cuenta CUÁL, no solo cuántos.
+            //
+            // Antes esto era un contador único y la pantalla decía «1 con rasgo
+            // (impulsivo o líder)» — o sea que el jugador tenía que prepararse
+            // para las dos cosas porque no se le decía cuál era. Contra un líder
+            // conviene concentrar fuego en él; contra un impulsivo, tener algo
+            // listo antes de tiempo. Son dos respuestas distintas.
+            if (compra.HealthPerk > 0)
+                fila.ConVida++;
+
+            if (compra.SpeedPerk > 0)
+                fila.ConVelocidad++;
+
+            // Los rasgos también tienen que verse: un líder que se ve igual que
+            // un lobo normal es una mecánica invisible, y el jugador que pierde
+            // contra algo que no sabía que estaba ahí no aprende nada.
+            if (compra.Impulsive)
+                fila.Impulsivos++;
+
+            if (compra.Leader)
+                fila.Lideres++;
+
             if (compra.Impulsive || compra.Leader)
                 fila.ConRasgo++;
         }

@@ -94,6 +94,24 @@ public static class Palette
     /// <summary>El color de la moneda, en el HUD y en cada precio.</summary>
     public static readonly Color Gold = new("#F0B63C");
 
+    // --- Los metales de los tiers ---------------------------------------------
+    //
+    // ⚠ EL TIER SE LLAMA BRONCE Y TIENE QUE VERSE DE BRONCE. Antes tomaba el
+    // verde y el azul de la escala de rareza del panel del diseñador, y eso
+    // producía la contradicción más fácil de ver del juego: una tarjeta que dice
+    // BRONCE con todo el marco azul. Que el rótulo lo aclare no alcanza — el
+    // color se lee antes que la palabra, y en una grilla de veinte huecos el
+    // jugador NUNCA lee la palabra.
+    //
+    // El verde y el azul no se tiran: siguen siendo la escala de rareza de las
+    // ARMAS, que es otra cosa y ya estaba escrito que tenía que distinguirse.
+
+    /// <summary>Cobre quemado. El tier Bronce.</summary>
+    public static readonly Color Bronze = new("#C87A3C");
+
+    /// <summary>Plata fría, tirando a azul para que no se confunda con el gris.</summary>
+    public static readonly Color Silver = new("#C6D4E4");
+
     /// <summary>
     /// El color de rareza de un tier de perk.
     /// </summary>
@@ -111,13 +129,21 @@ public static class Palette
     /// compartiera color con el Oro, esa competencia no se vería.</item>
     /// </list>
     ///
-    /// <para>Los cuatro tiers reales quedan en la escala que el jugador ya
-    /// espera de un ARPG: verde → azul → dorado → rojo.</para>
+    /// <para>⚠ <b>Los cuatro tiers usan sus METALES, no la escala de rareza.</b>
+    /// Iban en verde → azul → dorado → rojo, la escala que un ARPG usa, y eso
+    /// producía la contradicción más fácil de ver del juego: una tarjeta que dice
+    /// <b>BRONCE</b> con todo el marco <b>azul</b>. Que el rótulo lo aclare no
+    /// alcanza — el color se lee antes que la palabra, y en una grilla de veinte
+    /// huecos el jugador nunca llega a la palabra.</para>
+    ///
+    /// <para>El verde y el azul no se tiran: quedan para la escala de rareza de
+    /// las <b>armas</b>, que es otra escala y ya estaba escrito que tenía que
+    /// distinguirse de esta.</para>
     /// </remarks>
     public static Color Rarity(PerkTier tier) => tier switch
     {
-        PerkTier.Bronze => Uncommon,
-        PerkTier.Silver => Rare,
+        PerkTier.Bronze => Bronze,
+        PerkTier.Silver => Silver,
         PerkTier.Gold => Legendary,
         PerkTier.Unique => Unique,
         _ => Common,

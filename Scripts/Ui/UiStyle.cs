@@ -39,12 +39,27 @@ public static class UiStyle
     /// La tipografía de toda la interfaz.
     /// </summary>
     /// <remarks>
-    /// ⚠ Hoy es la de respaldo del motor. El diseño usa una condensada en
-    /// mayúsculas y traerla es un cambio de una línea acá —no de trece
-    /// pantallas—, que es justamente el motivo de que la fuente viva en un solo
-    /// campo.
+    /// ⚠ <b>Es IBM Plex Mono</b> desde el 2026-08-28, y es monoespaciada a
+    /// propósito: media pantalla del juego son <b>números en columna</b> —daño,
+    /// alcance, cadencia, precios, oleada, oro— y con una proporcional los
+    /// dígitos bailan de fila a fila, así que comparar dos tarjetas obliga a
+    /// leerlas en vez de mirarlas. En mono, la columna de números queda clavada.
+    ///
+    /// Vive en <c>Datos\font\</c>, SIL OFL 1.1, con la licencia al lado. Si el
+    /// <c>.ttf</c> no está importado, cae a la de respaldo del motor: fea, pero
+    /// legible.
     /// </remarks>
     public static Font Font { get; set; } = null!;
+
+    /// <summary>
+    /// La variante fuerte: títulos, botones y pestañas.
+    /// </summary>
+    /// <remarks>
+    /// El panel del diseñador usa dos pesos, y con uno solo la jerarquía se
+    /// tiene que dar toda con el tamaño — que en una pantalla con doce tarjetas
+    /// no alcanza. Cae a <see cref="Font"/> si no está.
+    /// </remarks>
+    public static Font FontFuerte { get; set; } = null!;
 
     /// <summary>
     /// La fuente de <b>iconos</b>: RPG Awesome.
@@ -68,22 +83,28 @@ public static class UiStyle
     public static Font? Icons { get; set; }
 
     private const string RutaIconos = "res://Datos/font/rpgawesome-webfont.ttf";
+    private const string RutaTexto = "res://Datos/font/IBMPlexMono-Regular.ttf";
+    private const string RutaFuerte = "res://Datos/font/IBMPlexMono-SemiBold.ttf";
 
     /// <summary>Se llama una vez, al arrancar. Sin esto no se dibuja nada.</summary>
+    /// <remarks>
+    /// ⚠ <c>ResourceLoader.Exists</c> antes de cargar: <c>GD.Load</c> de un
+    /// recurso que no está escupe un error en rojo <b>por cada llamada</b>, y
+    /// esto corre desde el <c>_Ready</c> de trece pantallas. Con el chequeo, la
+    /// falta de una fuente es un renglón de aviso y el juego sigue.
+    /// </remarks>
     public static void Init()
     {
-        Font ??= ThemeDB.FallbackFont;
-
-        // ⚠ `ResourceLoader.Exists` antes de cargar: `GD.Load` de un recurso que
-        // no está escupe un error en rojo por cada llamada, y esto se llama desde
-        // el `_Ready` de trece pantallas. Con el chequeo, la falta de la fuente
-        // es un renglón de aviso y el juego sigue con los iconos dibujados a mano.
-        if (Icons is null && ResourceLoader.Exists(RutaIconos))
-            Icons = GD.Load<Font>(RutaIconos);
+        Font ??= Cargar(RutaTexto) ?? ThemeDB.FallbackFont;
+        FontFuerte ??= Cargar(RutaFuerte) ?? Font;
+        Icons ??= Cargar(RutaIconos);
 
         if (Icons is null)
             GD.PushWarning($"No se pudo cargar {RutaIconos}. Los iconos van dibujados a mano.");
     }
+
+    private static Font? Cargar(string ruta)
+        => ResourceLoader.Exists(ruta) ? GD.Load<Font>(ruta) : null;
 
     // =====================================================================
     // Texto
@@ -98,12 +119,22 @@ public static class UiStyle
     /// cuando la base es lo que importa.
     /// </remarks>
     public static void Text(
-        this CanvasItem ci, string s, float x, float y, int tamano, Color color)
-        => ci.DrawString(Font, new Vector2(x, y), s, HorizontalAlignment.Left, -1, tamano, color);
+        this CanvasItem ci, string s, float x, float y, int tamano, Color color,
+        Font? fuente = null)
+        => ci.DrawString(fuente ?? Font, new Vector2(x, y), s,
+            HorizontalAlignment.Left, -1, tamano, color);
 
-    /// <summary>Cuánto mide un texto. Para alinear a la derecha y para medir columnas.</summary>
-    public static float Width(string s, int tamano)
-        => Font.GetStringSize(s, HorizontalAlignment.Left, -1, tamano).X;
+    /// <summary>
+    /// Cuánto mide un texto. Para alinear a la derecha y para medir columnas.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ La fuente tiene que ser <b>la misma</b> con la que se va a dibujar. Con
+    /// dos pesos en juego, medir con la regular y dibujar con la semibold deja
+    /// todo lo alineado a la derecha corrido, y el recorte por ancho cortando de
+    /// menos.
+    /// </remarks>
+    public static float Width(string s, int tamano, Font? fuente = null)
+        => (fuente ?? Font).GetStringSize(s, HorizontalAlignment.Left, -1, tamano).X;
 
     /// <summary>
     /// Texto centrado verticalmente dentro de un rectángulo.
@@ -112,8 +143,10 @@ public static class UiStyle
     public static void Label(
         this CanvasItem ci, Rect2 r, string s, int tamano, Color color,
         HorizontalAlignment alineacion = HorizontalAlignment.Left, float pad = 0f,
-        bool recortar = true)
+        bool recortar = true, Font? fuente = null)
     {
+        var f = fuente ?? Font;
+
         // ⚠ El texto que no entra SE CORTA, no desborda.
         //
         // Es el arreglo de la queja más visible de las tarjetas: un nombre largo
@@ -121,21 +154,20 @@ public static class UiStyle
         // marco dejaba de significar algo. Cortado con puntos suspensivos el
         // jugador ve que hay más; desbordado, ve dos cosas mezcladas.
         if (recortar)
-            s = Recortar(s, tamano, r.Size.X - (pad * 2f));
+            s = Recortar(s, tamano, r.Size.X - (pad * 2f), f);
 
         // La base va en el centro corregida por ascendente y descendente: sin
         // eso el texto queda visiblemente alto dentro de su caja.
-        float baseY = r.Position.Y
-            + ((r.Size.Y + Font.GetAscent(tamano) - Font.GetDescent(tamano)) / 2f);
+        float baseY = r.Position.Y + ((r.Size.Y + f.GetAscent(tamano) - f.GetDescent(tamano)) / 2f);
 
         float x = alineacion switch
         {
-            HorizontalAlignment.Center => r.Position.X + ((r.Size.X - Width(s, tamano)) / 2f),
-            HorizontalAlignment.Right => r.End.X - Width(s, tamano) - pad,
+            HorizontalAlignment.Center => r.Position.X + ((r.Size.X - Width(s, tamano, f)) / 2f),
+            HorizontalAlignment.Right => r.End.X - Width(s, tamano, f) - pad,
             _ => r.Position.X + pad,
         };
 
-        ci.DrawString(Font, new Vector2(x, baseY), s, HorizontalAlignment.Left, -1, tamano, color);
+        ci.DrawString(f, new Vector2(x, baseY), s, HorizontalAlignment.Left, -1, tamano, color);
     }
 
     /// <summary>
@@ -147,18 +179,18 @@ public static class UiStyle
     /// mismo, así que estimar deja unos textos cortados de más y otros
     /// desbordando igual — que es peor que no cortar, porque parece arbitrario.
     /// </remarks>
-    public static string Recortar(string s, int tamano, float ancho)
+    public static string Recortar(string s, int tamano, float ancho, Font? fuente = null)
     {
-        if (ancho <= 0f || s.Length == 0 || Width(s, tamano) <= ancho)
+        if (ancho <= 0f || s.Length == 0 || Width(s, tamano, fuente) <= ancho)
             return s;
 
         const string Puntos = "…";
 
-        float puntos = Width(Puntos, tamano);
+        float puntos = Width(Puntos, tamano, fuente);
 
         for (int n = s.Length - 1; n > 0; n--)
         {
-            if (Width(s[..n], tamano) + puntos <= ancho)
+            if (Width(s[..n], tamano, fuente) + puntos <= ancho)
                 return s[..n].TrimEnd() + Puntos;
         }
 
@@ -341,11 +373,11 @@ public static class UiStyle
         string s = texto.ToUpperInvariant();
 
         int tamano = (int)Mathf.Min(20f, r.Size.Y * 0.62f);
-        float ancho = Width(s, tamano);
+        float ancho = Width(s, tamano, FontFuerte);
         float medio = r.Position.Y + (r.Size.Y / 2f);
         float hueco = 12f;
 
-        ci.Label(r, s, tamano, c, HorizontalAlignment.Center);
+        ci.Label(r, s, tamano, c, HorizontalAlignment.Center, fuente: FontFuerte);
 
         // Las reglas salen desde el texto hacia los dos bordes. Si el título no
         // deja lugar, no se dibujan: mejor sin regla que con un guion suelto.
@@ -470,7 +502,7 @@ public static class UiStyle
         ci.Label(r, texto.ToUpperInvariant(),
             (int)Mathf.Min(19f, r.Size.Y * 0.46f),
             habilitado ? Palette.TextPrimary : Palette.TextDisabled,
-            HorizontalAlignment.Center);
+            HorizontalAlignment.Center, fuente: FontFuerte);
     }
 
     /// <summary>
@@ -490,7 +522,7 @@ public static class UiStyle
         ci.Label(r, texto.ToUpperInvariant(),
             (int)Mathf.Min(17f, r.Size.Y * 0.44f),
             activa ? Palette.TextPrimary : Palette.TextMuted,
-            HorizontalAlignment.Center);
+            HorizontalAlignment.Center, fuente: FontFuerte);
     }
 
     /// <summary>Una lista desplegable: etiqueta, valor y el triangulito.</summary>
@@ -686,6 +718,12 @@ public static class UiStyle
 
         /// <summary>ra-skull. La oleada que viene.</summary>
         Wave = 0xEAA1,
+
+        /// <summary>ra-relic-blade. Un arma. Reemplaza al ⚔, que IBM Plex no trae.</summary>
+        Weapon = 0xEA7E,
+
+        /// <summary>ra-lightning-bolt. El arma TIENE habilidad. Reemplaza al ★.</summary>
+        Ability = 0xEA2D,
     }
 
     /// <summary>Los tres números que describen a un defensor o a un arma.</summary>
@@ -717,6 +755,33 @@ public static class UiStyle
     public static void StatIcon(
         this CanvasItem ci, Rect2 r, Stat cual, string valor, Color? colorValor = null)
     {
+        var icono = cual switch
+        {
+            Stat.Damage => Icono.Damage,
+            Stat.Range => Icono.Range,
+            _ => Icono.Cadence,
+        };
+
+        // ⚠ El cartel cubre el ICONO Y EL NÚMERO, no solo el icono.
+        //
+        // Un blanco de 18 px obliga a apuntar, y quien no sabe qué significa el
+        // dibujo tampoco sabe que hay algo que señalar ahí. Con el renglón entero
+        // sensible, pasar el cursor por la fila de stats explica los tres.
+        ci.IconRow(r, icono, valor, colorValor, Loc.Get($"ui.stat.{cual}"));
+    }
+
+    /// <summary>
+    /// Un renglón de <b>icono, hueco y valor</b>, con su cartel.
+    /// </summary>
+    /// <remarks>
+    /// Es el formato de toda la interfaz desde que los iconos reemplazaron
+    /// palabras: stats de clase, stats de arma, efecto de perk y lo que trae una
+    /// oleada se leen todos con el mismo movimiento del ojo.
+    /// </remarks>
+    public static void IconRow(
+        this CanvasItem ci, Rect2 r, Icono cual, string valor, Color? colorValor = null,
+        string cartel = "")
+    {
         float lado = Mathf.Min(r.Size.Y, 18f);
         var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
 
@@ -727,6 +792,8 @@ public static class UiStyle
         ci.Label(
             new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
             valor, tamano, colorValor ?? Palette.TextPrimary);
+
+        UiTooltip.Sobre(r, cartel);
     }
 
     /// <summary>

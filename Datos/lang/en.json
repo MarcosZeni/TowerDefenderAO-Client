@@ -27,6 +27,9 @@
 
     // Thousands separator. The mockup writes «12,450» and «1,250 / 1,250».
     "ui.format.miles": ",",
+    "ui.stat.Damage": "damage per hit",
+    "ui.stat.Range": "range, in cells",
+    "ui.stat.Cadence": "ticks between shots — lower is faster",
 
     // --- The nine classes ---------------------------------------------------
     "class.Mage.name": "Mage",
@@ -276,12 +279,20 @@
     "ui.preparacion.instrucciones": "place defenders, equip and buy — the clock is stopped",
     "ui.preparacion.avance": "What is coming",
     "ui.preparacion.jefe": "(BOSS)",
-    "ui.preparacion.con_perk": "with perk",
-    "ui.preparacion.con_rasgo": "with a trait (impulsive or leader)",
     "ui.preparacion.ahi_vienen": "HERE THEY COME...",
     "ui.preparacion.comenzar_oleada": "START WAVE",
     "ui.preparacion.mercado": "open market",
     "ui.preparacion.espacio_sin_apuro": "space · no rush, the clock is stopped",
+    "ui.preparacion.ver_oleada": "see the wave",
+    "ui.preparacion.mas_tipos": "more types that do not fit here",
+    "ui.preparacion.con_vida": "with more health",
+    "ui.preparacion.con_velocidad": "faster",
+    "ui.preparacion.impulsivos": "impulsive: comes in early",
+    "ui.preparacion.lideres": "LEADER: buffs the ones nearby",
+    "ui.preparacion.sin_nada": "no modifiers",
+    "ui.preparacion.stat_vida": "health of each one",
+    "ui.preparacion.stat_dano": "damage to the Tower per hit",
+    "ui.preparacion.stat_velocidad": "cells per second",
 
     // --- La tienda rotativa de la corrida ------------------------------------
 

@@ -752,7 +752,7 @@ public partial class EditorLayouts : Node2D
 
         this.Label(estado.Row(0f, 22f), "layout".ToUpperInvariant(), 14, Palette.TextMuted);
 
-        this.Label(estado.Row(24f, 34f), (_valido ? "✓  " : "✗  ") + _estado, 24, color);
+        this.Label(estado.Row(24f, 34f), (_valido ? "✓  " : "×  ") + _estado, 24, color);
 
         this.Label(estado.Row(64f, 24f),
             $"campo {Width}×{Height}, celda {Cell} px — la vista de AO, 220 celdas",
