@@ -17,7 +17,7 @@ namespace TowerOfArgentum.Ui;
 /// vez de eso, cada pieza que quiere explicarse <b>declara su rectángulo</b>
 /// mientras se dibuja, y el que gana es el último que contiene al cursor — que,
 /// por el orden de dibujo, es también el que está más arriba. La pantalla llama
-/// <see cref="Comenzar"/> al empezar su <c>_Draw</c> y <see cref="Dibujar"/> al
+/// <see cref="Begin"/> al empezar su <c>_Draw</c> y <see cref="Draw"/> al
 /// terminarlo, para que el cartel quede por encima de todo lo demás.</para>
 ///
 /// <para>⚠ <b>Es estático y eso está bien acá.</b> Vive un solo cuadro: se
@@ -40,7 +40,7 @@ public static class UiTooltip
     /// las pantallas eso es <c>GetGlobalMousePosition()</c>; el mundo, que está
     /// corrido y a escala adentro del marco, no usa esto.
     /// </param>
-    public static void Comenzar(Vector2 cursor)
+    public static void Begin(Vector2 cursor)
     {
         _cursor = cursor;
         _texto = "";
@@ -52,7 +52,7 @@ public static class UiTooltip
     /// llamadas es el orden de dibujo, el último es también el que está encima —
     /// que es exactamente el que el jugador cree estar señalando.
     /// </remarks>
-    public static void Sobre(Rect2 r, string texto)
+    public static void Over(Rect2 r, string texto)
     {
         if (texto.Length == 0 || !r.HasPoint(_cursor))
             return;
@@ -73,7 +73,7 @@ public static class UiTooltip
     /// por la derecha es peor que uno corrido, porque la mitad que falta es
     /// justo el final de la frase.</para>
     /// </remarks>
-    public static void Dibujar(CanvasItem ci)
+    public static void Draw(CanvasItem ci)
     {
         if (_texto.Length == 0)
             return;
@@ -90,7 +90,7 @@ public static class UiTooltip
         if (y < 4f)
             y = _ancla.End.Y + 6f;
 
-        x = Mathf.Clamp(x, 4f, Escala.LienzoAncho - ancho - 4f);
+        x = Mathf.Clamp(x, 4f, Canvas.CanvasWidth - ancho - 4f);
 
         var caja = new Rect2(x, y, ancho, alto);
 

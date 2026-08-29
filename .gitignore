@@ -494,8 +494,8 @@ appsettings.Local.json
 # -----------------------------------------------------------------------------
 #  El paquete de la simulación
 # -----------------------------------------------------------------------------
-# Simulacion\ tiene su propio .csproj: empaqueta la simulación para que el
+# Simulation\ tiene su propio .csproj: empaqueta la simulación para que el
 # servidor pueda revalidar corridas (ver GameApi\nuget.config). Sus intermedios y
 # el .nupkg son artefactos generados.
-Simulacion/obj/
-Simulacion/bin/
+Simulation/obj/
+Simulation/bin/

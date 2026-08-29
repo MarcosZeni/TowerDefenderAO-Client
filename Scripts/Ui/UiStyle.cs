@@ -45,7 +45,7 @@ public static class UiStyle
     /// dígitos bailan de fila a fila, así que comparar dos tarjetas obliga a
     /// leerlas en vez de mirarlas. En mono, la columna de números queda clavada.
     ///
-    /// Vive en <c>Datos\font\</c>, SIL OFL 1.1, con la licencia al lado. Si el
+    /// Vive en <c>Data\font\</c>, SIL OFL 1.1, con la licencia al lado. Si el
     /// <c>.ttf</c> no está importado, cae a la de respaldo del motor: fea, pero
     /// legible.
     /// </remarks>
@@ -72,7 +72,7 @@ public static class UiStyle
     /// Awesome, no una tipografía: <b>no reemplaza a <see cref="Font"/></b>, que
     /// sigue siendo la que dibuja todo el texto de la interfaz.</para>
     ///
-    /// <para>Vive en <c>Datos\font\</c>. SIL OFL 1.1, y la licencia va al lado del
+    /// <para>Vive en <c>Data\font\</c>. SIL OFL 1.1, y la licencia va al lado del
     /// archivo — es lo que la OFL pide para redistribuir.</para>
     ///
     /// <para>Puede quedar en <c>null</c> si Godot todavía no importó el
@@ -82,9 +82,9 @@ public static class UiStyle
     /// </remarks>
     public static Font? Icons { get; set; }
 
-    private const string RutaIconos = "res://Datos/font/rpgawesome-webfont.ttf";
-    private const string RutaTexto = "res://Datos/font/IBMPlexMono-Regular.ttf";
-    private const string RutaFuerte = "res://Datos/font/IBMPlexMono-SemiBold.ttf";
+    private const string RutaIconos = "res://Data/font/rpgawesome-webfont.ttf";
+    private const string RutaTexto = "res://Data/font/IBMPlexMono-Regular.ttf";
+    private const string RutaFuerte = "res://Data/font/IBMPlexMono-SemiBold.ttf";
 
     /// <summary>Se llama una vez, al arrancar. Sin esto no se dibuja nada.</summary>
     /// <remarks>
@@ -95,15 +95,15 @@ public static class UiStyle
     /// </remarks>
     public static void Init()
     {
-        Font ??= Cargar(RutaTexto) ?? ThemeDB.FallbackFont;
-        FontFuerte ??= Cargar(RutaFuerte) ?? Font;
-        Icons ??= Cargar(RutaIconos);
+        Font ??= Load(RutaTexto) ?? ThemeDB.FallbackFont;
+        FontFuerte ??= Load(RutaFuerte) ?? Font;
+        Icons ??= Load(RutaIconos);
 
         if (Icons is null)
             GD.PushWarning($"No se pudo cargar {RutaIconos}. Los iconos van dibujados a mano.");
     }
 
-    private static Font? Cargar(string ruta)
+    private static Font? Load(string ruta)
         => ResourceLoader.Exists(ruta) ? GD.Load<Font>(ruta) : null;
 
     // =====================================================================
@@ -154,7 +154,7 @@ public static class UiStyle
         // marco dejaba de significar algo. Cortado con puntos suspensivos el
         // jugador ve que hay más; desbordado, ve dos cosas mezcladas.
         if (recortar)
-            s = Recortar(s, tamano, r.Size.X - (pad * 2f), f);
+            s = Truncate(s, tamano, r.Size.X - (pad * 2f), f);
 
         // La base va en el centro corregida por ascendente y descendente: sin
         // eso el texto queda visiblemente alto dentro de su caja.
@@ -179,7 +179,7 @@ public static class UiStyle
     /// mismo, así que estimar deja unos textos cortados de más y otros
     /// desbordando igual — que es peor que no cortar, porque parece arbitrario.
     /// </remarks>
-    public static string Recortar(string s, int tamano, float ancho, Font? fuente = null)
+    public static string Truncate(string s, int tamano, float ancho, Font? fuente = null)
     {
         if (ancho <= 0f || s.Length == 0 || Width(s, tamano, fuente) <= ancho)
             return s;
@@ -259,8 +259,8 @@ public static class UiStyle
             // El último renglón, si quedó texto afuera, lleva los puntos: sin
             // ellos el párrafo parece terminar donde en realidad se cortó.
             string texto = sobra && i == cuantas - 1
-                ? Recortar(lineas[i] + " …", tamano, r.Size.X)
-                : Recortar(lineas[i], tamano, r.Size.X);
+                ? Truncate(lineas[i] + " …", tamano, r.Size.X)
+                : Truncate(lineas[i], tamano, r.Size.X);
 
             ci.Text(texto, r.Position.X, y, tamano, color);
             y += alto;
@@ -435,7 +435,7 @@ public static class UiStyle
         ci.Rivets(r, Palette.BorderLight.Alpha(0.8f));
 
         if (elegido)
-            ci.MarcaDeElegido(r, rareza);
+            ci.ChosenMark(r, rareza);
     }
 
     /// <summary>
@@ -453,7 +453,7 @@ public static class UiStyle
     /// se ve aunque el hueco sea chiquito. Todas en el color de la rareza, así que
     /// no agregan un color nuevo a una pantalla que ya tiene seis.</para>
     /// </remarks>
-    public static void MarcaDeElegido(this CanvasItem ci, Rect2 r, Color color)
+    public static void ChosenMark(this CanvasItem ci, Rect2 r, Color color)
     {
         var dentro = r.Inset(4f);
 
@@ -793,7 +793,7 @@ public static class UiStyle
             new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
             valor, tamano, colorValor ?? Palette.TextPrimary);
 
-        UiTooltip.Sobre(r, cartel);
+        UiTooltip.Over(r, cartel);
     }
 
     /// <summary>
@@ -982,6 +982,6 @@ public static class UiStyle
     /// </remarks>
     public static void Scrim(this CanvasItem ci)
         => ci.DrawRect(
-            new Rect2(0, 0, Escala.LienzoAncho, Escala.LienzoAlto),
+            new Rect2(0, 0, Canvas.CanvasWidth, Canvas.CanvasHeight),
             Palette.BackgroundMain.Alpha(0.82f));
 }

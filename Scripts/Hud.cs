@@ -1,5 +1,5 @@
 using Godot;
-using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Simulation;
 using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
@@ -30,20 +30,20 @@ namespace TowerOfArgentum;
 /// </list>
 ///
 /// <para>La <b>quinta</b>, la columna de la derecha, no la dibuja el HUD: la
-/// la ocupan <see cref="PantallaDefensor"/> y el mercado, que
+/// la ocupan <see cref="DefenderScreen"/> y el mercado, que
 /// aparecen y desaparecen. El HUD deja el hueco y ellas lo llenan.</para>
 ///
 /// <para>Y el HUD dibuja el <b>bisel</b>: el borde de metal entre las paredes y
 /// el mundo, más el sobrante que deja centrar el 20×11 adentro del hueco. Va acá
-/// y no en <see cref="Juego"/> porque tiene que quedar <b>encima</b> del mundo,
+/// y no en <see cref="Game"/> porque tiene que quedar <b>encima</b> del mundo,
 /// para tapar lo que se salga —las partículas del portal, un sprite alto de la
 /// primera fila—.</para>
 /// </remarks>
 public partial class Hud : Control
 {
-    private readonly Juego _juego;
+    private readonly Game _juego;
 
-    public Hud(Juego juego)
+    public Hud(Game juego)
     {
         _juego = juego;
     }
@@ -71,7 +71,7 @@ public partial class Hud : Control
         if (p is null)
             return;
 
-        UiTooltip.Comenzar(GetGlobalMousePosition());
+        UiTooltip.Begin(GetGlobalMousePosition());
 
         // El bisel primero: tapa lo que se haya salido del mundo, y las paredes
         // se dibujan después encima de sus bordes.
@@ -83,7 +83,7 @@ public partial class Hud : Control
         // ⚠ La barra de abajo la comparten dos pantallas: en combate muestra la
         // build y entre oleadas la preparación. Es el mismo rectángulo del
         // diseño, así que la que no manda se calla en vez de dibujar encima.
-        if (!PantallaPreparacion.EstaAbierta(p))
+        if (!PreparationScreen.IsOpen(p))
             BarraDeBuild(p);
 
         Pie();
@@ -91,7 +91,7 @@ public partial class Hud : Control
         // Antes del fantasma: mientras se arrastra una ficha el cursor lleva un
         // muñeco pegado, y un cartel debajo de él no se lee.
         if (!_arrastrando)
-            UiTooltip.Dibujar(this);
+            UiTooltip.Draw(this);
 
         if (_arrastrando)
             DibujarFantasma(p);
@@ -121,7 +121,7 @@ public partial class Hud : Control
         //     la 100, y eso hay que comunicarlo desde la oleada 1, no
         //     descubrirlo al llegar.
         var oleada = UiLayout.WaveStatus;
-        int total = CargadorDatos.Actual.Curves.RunCurve.WavesPerRun;
+        int total = DataLoader.Current.Curves.RunCurve.WavesPerRun;
 
         Emblema(oleada, Palette.TextSecondary);
 
@@ -322,7 +322,7 @@ public partial class Hud : Control
         for (int i = 0; i < visibles; i++)
         {
             var ficha = clases[i];
-            int costo = CargadorDatos.Actual.StatsOf(ficha.DefenderClass).Cost;
+            int costo = DataLoader.Current.StatsOf(ficha.DefenderClass).Cost;
 
             int puestas = 0;
 
@@ -334,7 +334,7 @@ public partial class Hud : Control
 
             this.ClassCard(UiLayout.HeroCard(i), ficha, costo,
                 alcanza: p.Gold >= costo,
-                elegida: ficha.DefenderClass == _juego.ClaseElegida,
+                elegida: ficha.DefenderClass == _juego.ChosenClass,
                 puestas);
         }
 
@@ -376,7 +376,7 @@ public partial class Hud : Control
     {
         this.Panel(UiLayout.RunBottomBar);
 
-        var ficha = p.Roster.Find(_juego.ClaseElegida);
+        var ficha = p.Roster.Find(_juego.ChosenClass);
 
         Bloque(UiLayout.RunBottomBlock(0), Loc.Get("ui.hud.perks_equipados"));
         Bloque(UiLayout.RunBottomBlock(1), Loc.Get("ui.hud.arma_equipada"));
@@ -419,7 +419,7 @@ public partial class Hud : Control
 
             if (i < ficha.Perks.Count)
             {
-                var perk = CargadorDatos.Actual.Perks.Get(ficha.Perks[i]);
+                var perk = DataLoader.Current.Perks.Get(ficha.Perks[i]);
 
                 this.PerkSlot(hueco, perk);
             }
@@ -485,7 +485,7 @@ public partial class Hud : Control
         float lado = fila.Size.Y;
         float paso = lado + 8f;
 
-        var todos = CargadorDatos.Actual.Blueprints.All;
+        var todos = DataLoader.Current.Blueprints.All;
         int caben = Mathf.Max(1, (int)((fila.Size.X - 34f) / paso));
 
         // ⚠ Se cuentan los tres orígenes juntos —el de `initial`, el comprado con
@@ -497,7 +497,7 @@ public partial class Hud : Control
 
         for (int i = 0; i < todos.Count; i++)
         {
-            if (!p.ConocePlano(i))
+            if (!p.KnowsBlueprint(i))
                 continue;
 
             conocidos++;
@@ -506,12 +506,12 @@ public partial class Hud : Control
                 continue;
 
             var hueco = new Rect2(fila.Position.X + (dibujados * paso), fila.Position.Y, lado, lado);
-            var salida = CargadorDatos.Actual.Perks.Get(todos[i].ResultingUnique);
+            var salida = DataLoader.Current.Perks.Get(todos[i].ResultingUnique);
 
             // El plano se pinta con el color de lo que produce: un Único.
             this.Slot(hueco, Palette.Unique);
 
-            if (!CargadorIconos.Dibujar(this, salida.Key,
+            if (!IconLoader.Draw(this, salida.Key,
                     hueco.Position.X + 5f, hueco.Position.Y + 5f, lado - 10f))
             {
                 this.Label(hueco, Loc.Perk(salida)[..1].ToUpperInvariant(),
@@ -549,13 +549,13 @@ public partial class Hud : Control
     private void Mochila(Rect2 r, Run p)
     {
         var fila = FilaDeHuecos(r);
-        int cap = CargadorDatos.Actual.Curves.Defenders.BackpackSlots;
-        bool llena = p.Backpack.Ocupados >= cap;
+        int cap = DataLoader.Current.Curves.Defenders.BackpackSlots;
+        bool llena = p.Backpack.Used >= cap;
 
         float lado = fila.Size.Y;
         float paso = lado + 8f;
         int caben = Mathf.Max(1, (int)((fila.Size.X - 60f) / paso));
-        int cuantos = Mathf.Min(p.Backpack.Ocupados, caben);
+        int cuantos = Mathf.Min(p.Backpack.Used, caben);
 
         for (int i = 0; i < cuantos; i++)
         {
@@ -563,7 +563,7 @@ public partial class Hud : Control
             var cosa = p.Backpack.Items[i];
 
             if (cosa.Kind == ItemType.Perk)
-                this.PerkSlot(hueco, CargadorDatos.Actual.Perks.Get(cosa.Id));
+                this.PerkSlot(hueco, DataLoader.Current.Perks.Get(cosa.Id));
             else
                 this.Slot(hueco, Palette.Rare);
         }
@@ -571,7 +571,7 @@ public partial class Hud : Control
         if (cuantos == 0)
             this.EmptySlot(new Rect2(fila.Position, new Vector2(lado, lado)));
 
-        this.Label(fila, $"{p.Backpack.Ocupados}/{cap}", 17,
+        this.Label(fila, $"{p.Backpack.Used}/{cap}", 17,
             llena ? Palette.Warning : Palette.TextSecondary, HorizontalAlignment.Right);
     }
 
@@ -613,7 +613,7 @@ public partial class Hud : Control
         var color = gano ? Palette.Success : Palette.Danger;
 
         var r = new Rect2(
-            (Escala.LienzoAncho / 2f) - 300f, (Escala.LienzoAlto / 2f) - 80f, 600f, 160f);
+            (Canvas.CanvasWidth / 2f) - 300f, (Canvas.CanvasHeight / 2f) - 80f, 600f, 160f);
 
         this.Panel(r, elevado: true, opacidad: 0.96f);
         this.Glow(r, color, 2f, 6);
@@ -658,7 +658,7 @@ public partial class Hud : Control
     /// casos; si el botón se suelta sobre el mapa, además pone.</para>
     ///
     /// <para>El evento se marca atendido para que no siga viaje a
-    /// <see cref="Juego"/>: sin eso, el click en una tarjeta que tapa una celda
+    /// <see cref="Game"/>: sin eso, el click en una tarjeta que tapa una celda
     /// colocable pondría un defensor abajo del panel.</para>
     /// </remarks>
     public override void _UnhandledInput(InputEvent evento)
@@ -706,7 +706,7 @@ public partial class Hud : Control
             if (i < 0)
                 return;
 
-            _juego.SeleccionarClase(p.Roster.Classes[i].DefenderClass);
+            _juego.SelectClass(p.Roster.Classes[i].DefenderClass);
             _arrastrando = true;
             GetViewport().SetInputAsHandled();
         }
@@ -717,7 +717,7 @@ public partial class Hud : Control
             // Soltó fuera de la columna: eso es un arrastre al mapa. Si soltó
             // sobre otra tarjeta fue un click normal, y no hay que poner nada.
             if (FichaEn(boton.Position) < 0)
-                _juego.PonerEn(boton.Position);
+                _juego.PlaceAt(boton.Position);
 
             GetViewport().SetInputAsHandled();
         }
@@ -728,11 +728,11 @@ public partial class Hud : Control
         switch (boton)
         {
             case 0:
-                _juego.Opciones?.Abrir();
+                _juego.Options?.Open();
                 break;
 
             case 1:
-                _juego.EscMenu?.Abrir();
+                _juego.EscMenu?.Open();
                 break;
 
             case 2:
@@ -747,7 +747,7 @@ public partial class Hud : Control
     /// <remarks>
     /// <para>Es lo que hace que arrastrar se sienta como <b>llevar</b> la unidad
     /// y no como mover un puntero. Se imanta al centro de la celda de abajo —el
-    /// mismo redondeo que va a usar <see cref="Juego.PonerEn"/> al soltar, así lo
+    /// mismo redondeo que va a usar <see cref="Game.PlaceAt"/> al soltar, así lo
     /// que se ve es lo que va a pasar— y se tiñe de rojo cuando en esa celda no
     /// se puede: ruta, ocupada, bloqueada o sin oro.</para>
     ///
@@ -756,7 +756,7 @@ public partial class Hud : Control
     /// </remarks>
     private void DibujarFantasma(Run p)
     {
-        var ficha = p.Roster.Find(_juego.ClaseElegida);
+        var ficha = p.Roster.Find(_juego.ChosenClass);
 
         if (ficha is null)
             return;
@@ -785,12 +785,12 @@ public partial class Hud : Control
             var mundo = UiLayout.ToWorld(mouse);
 
             var celda = new Cell(
-                (int)(mundo.X / Escala.LadoCelda),
-                (int)(mundo.Y / Escala.LadoCelda));
+                (int)(mundo.X / Canvas.CellSide),
+                (int)(mundo.Y / Canvas.CellSide));
 
-            if (UiLayout.InWorld(mouse) && p.PuedePoner(_juego.ClaseElegida, celda))
+            if (UiLayout.InWorld(mouse) && p.CanPlace(_juego.ChosenClass, celda))
             {
-                var (cx, cy) = Escala.CentroDe(celda.X, celda.Y);
+                var (cx, cy) = Canvas.CentroDe(celda.X, celda.Y);
 
                 pie = UiLayout.ToScreen(new Vector2(cx, cy))
                     + new Vector2(0, UiLayout.CellOnScreen / 2f);

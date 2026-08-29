@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using Godot;
-using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Simulation;
 
 using ArchivoGodot = Godot.FileAccess;
 
@@ -12,12 +12,12 @@ namespace TowerOfArgentum;
 /// </summary>
 /// <remarks>
 /// <para>⚠ <b>Los idiomas NO entran al hash de <c>/run/start</c>.</b> Es la única
-/// carpeta de <c>Datos\</c> que queda afuera, y es a propósito: traducir no
+/// carpeta de <c>Data\</c> que queda afuera, y es a propósito: traducir no
 /// cambia la simulación —un jugador en inglés y uno en español juegan
 /// exactamente la misma corrida con la misma seed—. Si entrara al hash, corregir
 /// una tilde invalidaría el ranking de la temporada.</para>
 ///
-/// <para><b>Y por eso mismo vive acá y no en <c>Simulacion\</c>:</b> el servidor
+/// <para><b>Y por eso mismo vive acá y no en <c>Simulation\</c>:</b> el servidor
 /// revalida corridas y no necesita saber en qué idioma se jugaron.</para>
 ///
 /// <para>⚠ <b>Una clave que falta se muestra cruda</b> —<c>perk.filo.name</c>—
@@ -27,7 +27,7 @@ namespace TowerOfArgentum;
 /// </remarks>
 public static class Loc
 {
-    private const string Carpeta = "res://Datos/lang";
+    private const string Carpeta = "res://Data/lang";
 
     /// <summary>
     /// El idioma al que se cae cuando falta una clave.
@@ -37,16 +37,16 @@ public static class Loc
     /// agrega un texto nuevo, lo agrega acá primero, y los demás idiomas lo
     /// heredan hasta que alguien los traduzca.
     /// </remarks>
-    public const string Referencia = "es";
+    public const string Reference = "es";
 
     private static readonly Dictionary<string, string> _actual = [];
     private static readonly Dictionary<string, string> _respaldo = [];
 
     /// <summary>El código del idioma cargado.</summary>
-    public static string Codigo { get; private set; } = "";
+    public static string Code { get; private set; } = "";
 
     /// <summary>Los idiomas que hay en disco, ordenados. Para el menú de opciones.</summary>
-    public static List<(string Codigo, string Nombre)> Disponibles()
+    public static List<(string Code, string Nombre)> Disponibles()
     {
         var salida = new List<(string, string)>();
 
@@ -76,20 +76,20 @@ public static class Loc
     /// <summary>
     /// Carga un idioma. Si no está, se queda con el de referencia.
     /// </summary>
-    public static void Cargar(string codigo)
+    public static void Load(string codigo)
     {
         _respaldo.Clear();
         _actual.Clear();
 
-        var (_, textosRef) = LeerArchivo(Referencia);
+        var (_, textosRef) = LeerArchivo(Reference);
 
         foreach (var (k, v) in textosRef)
             _respaldo[k] = v;
 
-        if (string.Equals(codigo, Referencia, System.StringComparison.Ordinal))
+        if (string.Equals(codigo, Reference, System.StringComparison.Ordinal))
         {
-            Codigo = Referencia;
-            GD.Print($"Idioma: {Referencia} · {_respaldo.Count} textos");
+            Code = Reference;
+            GD.Print($"Idioma: {Reference} · {_respaldo.Count} textos");
             return;
         }
 
@@ -97,15 +97,15 @@ public static class Loc
 
         if (textos.Count == 0)
         {
-            GD.PushWarning($"El idioma «{codigo}» no se pudo leer. Se usa «{Referencia}».");
-            Codigo = Referencia;
+            GD.PushWarning($"El idioma «{codigo}» no se pudo leer. Se usa «{Reference}».");
+            Code = Reference;
             return;
         }
 
         foreach (var (k, v) in textos)
             _actual[k] = v;
 
-        Codigo = codigo;
+        Code = codigo;
 
         // Cuántas claves le faltan al idioma respecto del de referencia. Sale por
         // consola y no como error: jugar con la mitad traducida es válido, pero
@@ -120,7 +120,7 @@ public static class Loc
 
         GD.Print(
             $"Idioma: {nombre} ({codigo}) · {_actual.Count} textos" +
-            (faltan > 0 ? $" · {faltan} sin traducir, se ven en {Referencia}" : ""));
+            (faltan > 0 ? $" · {faltan} sin traducir, se ven en {Reference}" : ""));
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public static class Loc
     //  que pega 10,4 no puede decir «1040 de daño» en pantalla.
     //
     //  Estos tres traducen. Van acá y no en `Ints` porque necesitan el separador
-    //  decimal del idioma, y `Simulacion\` no sabe en qué idioma se juega.
+    //  decimal del idioma, y `Simulation\` no sabe en qué idioma se juega.
 
     /// <summary>Puntos enteros de un valor interno en centésimas. Para el HP.</summary>
     /// <remarks>
@@ -164,7 +164,7 @@ public static class Loc
     /// así que la centésima no aporta nada y solo agrega ruido a la barra.
     /// </remarks>
     public static string Points(int centesimas)
-        => Simulacion.Ints.ToPoints(centesimas)
+        => Simulation.Ints.ToPoints(centesimas)
             .ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Daño con un decimal: <c>1040</c> se lee «10,4».</summary>
@@ -223,11 +223,11 @@ public static class Loc
     /// </summary>
     /// <remarks>
     /// Se arma acá y no en el generador porque es texto: el generador vive en
-    /// <c>Simulacion\</c>, corre igual en el servidor y no sabe de idiomas. Lo
+    /// <c>Simulation\</c>, corre igual en el servidor y no sabe de idiomas. Lo
     /// que guarda el arma son las tres cosas de las que sale el nombre —qué
     /// número quedó más alto, la rareza y la habilidad—, no una cadena.
     /// </remarks>
-    public static string Weapon(Simulacion.Weapon arma)
+    public static string Weapon(Simulation.Weapon arma)
     {
         string baseNombre = Get($"weapon.base.{arma.BaseKind}");
 

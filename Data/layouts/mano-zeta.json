@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "legend": "E entrada · # ruta · . colocable · X bloqueado · T la Torre",
+  "note": "Lo escribe el editor de layouts (Scenes/LayoutEditor.tscn). Se puede corregir a mano, pero conviene volver a pasarlo por el editor para que revalide.",
+  "width": 20,
+  "height": 11,
+  "routeLength": 27,
+  "valid": true,
+  "rows": [
+    "XXXXXXXXXXXXXXXXXXXX",
+    "XXXXXXXXXXX......XXX",
+    "XXXX........#####TXX",
+    "XXXX.########....XXX",
+    "XXXX.#........XXXXXX",
+    "XXXX.#.XXXXXXXXXXXXX",
+    "XXXX.#..XXXXXXXXXXXX",
+    "XXXX.##.......XXXXXX",
+    "XXXX..#######.XXXXXX",
+    "XXXXX.......EXXXXXXX",
+    "XXXXXXXXXXXXXXXXXXXX"
+  ]
+}

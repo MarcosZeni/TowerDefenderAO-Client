@@ -45,10 +45,10 @@ public static class UiLayout
     private const float SpecH = 868f;
 
     /// <summary>Cuánto se estira el diseño a lo ancho: 1920 / 1108.</summary>
-    public const float ScaleX = Escala.LienzoAncho / SpecW;
+    public const float ScaleX = Canvas.CanvasWidth / SpecW;
 
     /// <summary>Cuánto se estira el diseño a lo alto: 1080 / 868.</summary>
-    public const float ScaleY = Escala.LienzoAlto / SpecH;
+    public const float ScaleY = Canvas.CanvasHeight / SpecH;
 
     /// <summary>
     /// Un rectángulo del spec, en píxeles del lienzo del juego.
@@ -246,7 +246,7 @@ public static class UiLayout
         R(538, 883, 1098, 37).Position,
         new Vector2(
             R(538, 883, 1098, 37).Size.X,
-            Escala.LienzoAlto - R(538, 883, 1098, 37).Position.Y - 4f));
+            Canvas.CanvasHeight - R(538, 883, 1098, 37).Position.Y - 4f));
 
     public static readonly Rect2 FooterTip = R(555, 888, 558, 26);
     public static readonly Rect2 FooterLegend = R(1115, 888, 500, 26);
@@ -383,25 +383,25 @@ public static class UiLayout
     /// deformados.</para>
     /// </remarks>
     public static readonly float WorldScale = Mathf.Min(
-        WorldViewport.Size.X / (Escala.CeldasAncho * (float)Escala.LadoCelda),
-        WorldViewport.Size.Y / (Escala.CeldasAlto * (float)Escala.LadoCelda));
+        WorldViewport.Size.X / (Canvas.CellsWide * (float)Canvas.CellSide),
+        WorldViewport.Size.Y / (Canvas.CellsHigh * (float)Canvas.CellSide));
 
     /// <summary>La esquina de la celda (0,0) en pantalla. El mundo va centrado en el hueco.</summary>
     public static readonly Vector2 WorldOrigin = new(
         WorldViewport.Position.X
-            + ((WorldViewport.Size.X - (Escala.CeldasAncho * Escala.LadoCelda * WorldScale)) / 2f),
+            + ((WorldViewport.Size.X - (Canvas.CellsWide * Canvas.CellSide * WorldScale)) / 2f),
         WorldViewport.Position.Y
-            + ((WorldViewport.Size.Y - (Escala.CeldasAlto * Escala.LadoCelda * WorldScale)) / 2f));
+            + ((WorldViewport.Size.Y - (Canvas.CellsHigh * Canvas.CellSide * WorldScale)) / 2f));
 
     /// <summary>El mundo dibujado, ya escalado y centrado. Es lo que tapa el bisel.</summary>
     public static readonly Rect2 WorldOnScreen = new(
         WorldOrigin,
         new Vector2(
-            Escala.CeldasAncho * Escala.LadoCelda * WorldScale,
-            Escala.CeldasAlto * Escala.LadoCelda * WorldScale));
+            Canvas.CellsWide * Canvas.CellSide * WorldScale,
+            Canvas.CellsHigh * Canvas.CellSide * WorldScale));
 
     /// <summary>Cuánto mide una celda en pantalla. Solo para dibujar; la celda sigue siendo 96.</summary>
-    public static float CellOnScreen => Escala.LadoCelda * WorldScale;
+    public static float CellOnScreen => Canvas.CellSide * WorldScale;
 
     /// <summary>De coordenadas del mundo a píxeles de pantalla.</summary>
     public static Vector2 ToScreen(Vector2 mundo) => WorldOrigin + (mundo * WorldScale);

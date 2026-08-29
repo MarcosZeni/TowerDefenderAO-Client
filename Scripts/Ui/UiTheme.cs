@@ -27,9 +27,9 @@ public static class UiTheme
     private static Theme? _tema;
 
     /// <summary>El tema, armado una sola vez.</summary>
-    public static Theme Actual => _tema ??= Armar();
+    public static Theme Current => _tema ??= Build();
 
-    private static Theme Armar()
+    private static Theme Build()
     {
         var tema = new Theme();
 

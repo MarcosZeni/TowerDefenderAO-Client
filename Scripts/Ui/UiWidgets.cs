@@ -1,5 +1,5 @@
 using Godot;
-using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Simulation;
 
 namespace TowerOfArgentum.Ui;
 
@@ -51,11 +51,11 @@ public static class UiWidgets
         // El arte propio sigue primero porque es por PERK y esto es por EFECTO:
         // dos perks del mismo efecto comparten dibujo, que alcanza para
         // reconocerlos pero no para distinguirlos.
-        if (!CargadorIconos.Dibujar(ci, perk.Key, hueco.Position.X, hueco.Position.Y, hueco.Size.X))
+        if (!IconLoader.Draw(ci, perk.Key, hueco.Position.X, hueco.Position.Y, hueco.Size.X))
         {
             if (UiStyle.Icons is not null)
             {
-                ci.Icon(hueco, IconoDe(perk.Effect), color);
+                ci.Icon(hueco, IconFor(perk.Effect), color);
             }
             else
             {
@@ -66,7 +66,7 @@ public static class UiWidgets
             }
         }
 
-        UiTooltip.Sobre(r, $"{Loc.Perk(perk)} · {Loc.Effect(perk.Effect)} {perk.Magnitude}%");
+        UiTooltip.Over(r, $"{Loc.Perk(perk)} · {Loc.Effect(perk.Effect)} {perk.Magnitude}%");
 
         if (nivel > 0)
         {
@@ -93,7 +93,7 @@ public static class UiWidgets
     /// <para>El comentario de cada línea es la clase CSS de RPG Awesome, que es
     /// como se busca un reemplazo en la hoja de referencia.</para>
     /// </remarks>
-    public static UiStyle.Icono IconoDe(PerkEffect efecto) => efecto switch
+    public static UiStyle.Icono IconFor(PerkEffect efecto) => efecto switch
     {
         // --- Bronce y plata: los tres números ---------------------------------
         PerkEffect.Damage => UiStyle.Icono.Damage,
@@ -150,7 +150,7 @@ public static class UiWidgets
         float lado = Mathf.Min(r.Size.Y, 18f);
         var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
 
-        ci.Icon(caja, IconoDe(perk.Effect), color);
+        ci.Icon(caja, IconFor(perk.Effect), color);
 
         int tamano = (int)Mathf.Min(15f, r.Size.Y * 0.78f);
 
@@ -311,7 +311,7 @@ public static class UiWidgets
     /// El muñeco de una clase, quieto y mirando al sur, encajado en un marco.
     /// </summary>
     /// <remarks>
-    /// Cuerpo y cabeza con el mismo anclaje que usa el mundo —los dos apoyados
+    /// Body y cabeza con el mismo anclaje que usa el mundo —los dos apoyados
     /// abajo, la cabeza corrida por su offset— pero a la escala del marco. El
     /// arma no va: a este tamaño es ruido. Si falta el arte, queda el hueco con
     /// su fondo, igual que el mundo cae a la primitiva.
@@ -356,10 +356,10 @@ public static class UiWidgets
     /// negativo, restarlo suma: <c>altoCabeza − offset</c> es «hasta dónde llega
     /// la cabeza por encima del piso».
     /// </remarks>
-    private static Vector2 Extensiones(Texture2D cuerpo, Apariencia apariencia)
+    private static Vector2 Extensiones(Texture2D cuerpo, Appearance apariencia)
     {
         var c = cuerpo.GetSize();
-        var cabeza = CargadorGraficos.Textura($"{apariencia.Head}.sur");
+        var cabeza = GraphicsLoader.Texture($"{apariencia.Head}.sur");
 
         if (cabeza is null)
             return c;
@@ -372,22 +372,22 @@ public static class UiWidgets
     }
 
     /// <summary>El cuerpo al sur de una clase, con su apariencia. Compartido.</summary>
-    public static Texture2D? BodyOf(RosterClass ficha, out Apariencia? apariencia)
+    public static Texture2D? BodyOf(RosterClass ficha, out Appearance? apariencia)
     {
-        apariencia = CargadorApariencia.De(ficha.DefenderClass, ficha.VisualTier);
+        apariencia = AppearanceLoader.De(ficha.DefenderClass, ficha.VisualTier);
 
         if (apariencia is null || apariencia.Body.Length == 0)
             return null;
 
-        return CargadorGraficos.Textura($"{apariencia.Body}.sur");
+        return GraphicsLoader.Texture($"{apariencia.Body}.sur");
     }
 
     /// <summary>
-    /// Cuerpo + cabeza apoyados en <paramref name="pie"/>, a escala
+    /// Body + cabeza apoyados en <paramref name="pie"/>, a escala
     /// <paramref name="s"/>. Mismo anclaje que usa el mundo.
     /// </summary>
     public static void Doll(
-        this CanvasItem ci, Texture2D cuerpo, Apariencia apariencia, float s, Vector2 pie, Color tinte)
+        this CanvasItem ci, Texture2D cuerpo, Appearance apariencia, float s, Vector2 pie, Color tinte)
     {
         var tamanoCuerpo = cuerpo.GetSize() * s;
 
@@ -396,7 +396,7 @@ public static class UiWidgets
                 tamanoCuerpo.X, tamanoCuerpo.Y),
             tile: false, tinte);
 
-        var cabeza = CargadorGraficos.Textura($"{apariencia.Head}.sur");
+        var cabeza = GraphicsLoader.Texture($"{apariencia.Head}.sur");
 
         if (cabeza is null)
             return;

@@ -1,5 +1,5 @@
 using Godot;
-using TowerOfArgentum.Simulacion;
+using TowerOfArgentum.Simulation;
 
 namespace TowerOfArgentum.Ui;
 

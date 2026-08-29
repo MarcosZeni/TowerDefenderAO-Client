@@ -30,19 +30,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- ⚠ Los intermedios de TowerOfArgentum.Simulacion.csproj quedan afuera.
+    <!-- ⚠ Los intermedios de TowerOfArgentum.Simulation.csproj quedan afuera.
 
-         Ese proyecto vive en Simulacion\ y empaqueta la simulación para que la
+         Ese proyecto vive en Simulation\ y empaqueta la simulación para que la
          consuma el servidor. Su obj\ contiene un AssemblyInfo.cs generado, y como
          este csproj barre TODO Client\, lo compilaba también: ocho errores
          CS0579 por atributos de ensamblado duplicados.
 
          Los .cs de la simulación SÍ se siguen compilando acá, que es lo que
          corresponde — el cliente los usa directo, sin pasar por el paquete. -->
-    <Compile Remove="Simulacion\obj\**" />
-    <Compile Remove="Simulacion\bin\**" />
-    <None Remove="Simulacion\obj\**" />
-    <None Remove="Simulacion\bin\**" />
+    <Compile Remove="Simulation\obj\**" />
+    <Compile Remove="Simulation\bin\**" />
+    <None Remove="Simulation\obj\**" />
+    <None Remove="Simulation\bin\**" />
   </ItemGroup>
 
   <!-- ==========================================================================
@@ -58,7 +58,7 @@
        Por eso se chequea acá y el build FALLA. Es más barato que descubrirlo
        tarde, y es la única forma de que la regla se sostenga sola.
 
-       Lo que está prohibido adentro de Simulacion\ y por qué:
+       Lo que está prohibido adentro de Simulation\ y por qué:
 
          · using Godot   — la simulación no puede depender del motor
          · float/double  — la aritmética de punto flotante acumula deriva a lo
@@ -70,7 +70,7 @@
        ========================================================================== -->
   <Target Name="VerificarSimulacionPura" BeforeTargets="CoreCompile">
 
-    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;Herramientas\verificar-simulacion.ps1&quot;"
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;Tools\verify-simulation.ps1&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
           ContinueOnError="false" />
 
