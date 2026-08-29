@@ -305,6 +305,8 @@
     "ui.mercado.cerrar": "close",
     "ui.mercado.esc_para_cerrar": "Esc to go back to the board · the market stays open until you launch the wave",
     "ui.mercado.ya_reclutada": "already yours",
+    "ui.mercado.pasar": "skip",
+    "ui.mercado.elegi_o_pasa": "pay for one or skip — what you leave is gone",
     "ui.tienda.titulo": "SHOP",
     "ui.tienda.no_se_repone": "no restock: whatever you buy leaves an empty slot",
     "ui.tienda.vendido": "sold",

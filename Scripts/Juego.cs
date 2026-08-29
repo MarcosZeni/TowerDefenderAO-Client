@@ -487,6 +487,17 @@ public partial class Juego : Node2D
     }
 
     /// <summary>
+    /// Saltea la elección sin llevarse nada.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Existe porque la elección dejó de ser gratis: con las tres opciones
+    /// cobrando, un jugador sin oro quedaría trabado en un modal que no se cierra
+    /// y con el reloj congelado.
+    /// </remarks>
+    public void SaltearEleccion()
+        => Encolar(t => new PlayerAction(t, ActionType.SkipChoice, 0, 0, 0));
+
+    /// <summary>
     /// Vende una ficha puesta. Devuelve el <c>defenderSellPercent</c> del costo.
     /// </summary>
     /// <remarks>

@@ -724,7 +724,7 @@ public static class CorredorHeadless
             // arma antes de abrirla y las dos banderas están prendidas a la vez.
             if (partida.WaitingForChoice)
             {
-                log.Agregar(PlayerAction.Choose(partida.TickDeAccion, MejorOpcion(partida, Politica.Normal)));
+                Resolver(partida, log, Politica.Normal);
                 partida.Advance();
                 continue;
             }
@@ -911,10 +911,7 @@ public static class CorredorHeadless
             if (partida.WaitingForChoice)
             {
                 if (!HacerLugarParaElOro(partida, log))
-                {
-                    log.Agregar(PlayerAction.Choose(
-                        partida.TickDeAccion, MejorOpcion(partida, politica)));
-                }
+                    Resolver(partida, log, politica);
 
                 partida.Advance();
                 continue;
@@ -1079,6 +1076,23 @@ public static class CorredorHeadless
     /// pero es lo que haría cualquiera mirando la pantalla, que es exactamente lo
     /// que tiene que medir esto.</para>
     /// </remarks>
+    /// <summary>
+    /// Resuelve la elección: elige la mejor que se pueda pagar, o la saltea.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Saltear no es un caso raro. Desde que la elección se cobra, un bot pobre
+    /// se queda sin ninguna opción alcanzable, y elegir igual la haría rebotar sin
+    /// cerrar la pantalla: con el reloj congelado, la corrida no terminaría nunca.
+    /// </remarks>
+    private static void Resolver(Run partida, ActionLog log, Politica politica)
+    {
+        int i = MejorOpcion(partida, politica);
+
+        log.Agregar(i >= 0
+            ? PlayerAction.Choose(partida.TickDeAccion, i)
+            : new PlayerAction(partida.TickDeAccion, ActionType.SkipChoice, 0, 0, 0));
+    }
+
     private static int MejorOpcion(Run partida, Politica politica)
     {
         var opciones = partida.OpenChoices;
@@ -1109,6 +1123,13 @@ public static class CorredorHeadless
                 continue;
             }
 
+            // ⚠ Lo que no se puede pagar no se elige. Desde que la elección se
+            // cobra, insistir con una opción impagable la hace rebotar SIN cerrar
+            // la pantalla, y el bot la reintentaría para siempre con el reloj
+            // congelado: la corrida no terminaría nunca.
+            if (opciones[i].Price > partida.Gold)
+                continue;
+
             var stats = CargadorDatos.Actual.StatsOf(opciones[i].DefenderClass);
 
             // Daño por cien ticks, para que la cadencia pese tanto como el golpe.
@@ -1130,7 +1151,13 @@ public static class CorredorHeadless
 
         // Una pantalla trae SOLO ofertas de Oro o SOLO clases, nunca mezcladas,
         // así que si hubo alguna de perk esa es la respuesta.
-        return mejorPerk >= 0 ? mejorPerk : mejor;
+        //
+        // ⚠ -1 quiere decir «ninguna se puede pagar»: quien llama tiene que
+        // SALTEAR la elección, no elegir igual.
+        if (mejorPerk >= 0)
+            return mejorPerk;
+
+        return mejorPuntaje == int.MinValue ? -1 : mejor;
     }
 
     /// <summary>

@@ -29,11 +29,22 @@ public enum ChoiceType
 /// que la pantalla pueda decir a quién le sirve.
 /// </param>
 /// <param name="PerkId">El perk ofrecido, o <c>-1</c> si la opción no es de perk.</param>
+/// <param name="Price">
+/// Cuánto cuesta quedarse con esta opción. <c>0</c> = gratis.
+/// </param>
+/// <remarks>
+/// ⚠ <b>El precio va en la opción y no se recalcula al elegir.</b> Lo fija
+/// <see cref="ChoiceBuilder"/> cuando arma la pantalla, y el servidor lo vuelve a
+/// derivar de la seed al revalidar. Recalcularlo en <c>Choose</c> lo ataría a la
+/// oleada del momento en que el jugador aprieta, y como la elección no tiene
+/// límite de tiempo, esperar cambiaría el precio de algo que ya estaba ofrecido.
+/// </remarks>
 public readonly record struct Choice(
     ChoiceType Kind,
     DefenderClass DefenderClass,
     int ResultingLevel,
-    int PerkId = -1);
+    int PerkId = -1,
+    int Price = 0);
 
 /// <summary>
 /// Arma las 3 opciones de la pantalla de elección.
@@ -135,24 +146,55 @@ public static class ChoiceBuilder
     /// la regala la pantalla inicial y la segunda llega en la primera elección.
     /// Con una sola, una corrida que arranca con clérigo o bardo no tiene con qué
     /// defenderse y se pierde sin que el jugador haya hecho nada mal.</para>
+    ///
+    /// <para>⚠ <b>Pasadas las gratis, TODO se cobra</b>, con el descuento de
+    /// <c>choiceDiscountPercent</c> sobre lo que sale por el otro camino. Un nivel
+    /// regalado es el power-up más grande del juego sin perder nada: abre un slot
+    /// de perk, sube los stats de todas las fichas de esa clase que ya estén
+    /// puestas, y no cuesta una moneda. Cada tres oleadas, gratis, eso vaciaba de
+    /// sentido al sumidero de oro — comprar el nivel 4 sale 4.800 y la elección lo
+    /// regalaba.</para>
+    ///
+    /// <para>Y con las opciones pagas <b>vuelve a ofrecerse contratar</b>: si todo
+    /// cuesta, no hay razón para que la pantalla esconda la mitad de la decisión.
+    /// La diferencia con la tienda es que acá <b>no se elige qué sale</b>, y ese
+    /// es exactamente el precio del descuento.</para>
     /// </remarks>
-    public static Choice[] Next(Roster roster, Rng rng, BalanceData datos)
+    public static Choice[] Next(Roster roster, Rng rng, BalanceData datos, int oleada)
     {
         var candidatas = new List<Choice>();
 
+        // ⚠ El cupo gratis se mide con el roster de AHORA. Mientras entra una
+        // clase gratis la pantalla no cobra nada; en cuanto el roster llega al
+        // cupo, la siguiente elección ya viene con precio.
+        bool gratis = roster.Classes.Count < datos.Curves.RunCurve.FreeClasses;
+        int descuento = datos.Curves.RunCurve.ChoiceDiscountPercent;
+
         foreach (var c in roster.Classes)
         {
-            if (c.Level < datos.Classes.PerkSlotsPerClass)
-                candidatas.Add(new Choice(ChoiceType.LevelUp, c.DefenderClass, c.Level + 1));
+            if (c.Level >= datos.Classes.PerkSlotsPerClass)
+                continue;
+
+            int precio = gratis
+                ? 0
+                : Ints.MultiplyPercent(
+                    datos.Curves.Economy.LevelUpPrice(c.Level + 1), descuento);
+
+            candidatas.Add(new Choice(ChoiceType.LevelUp, c.DefenderClass, c.Level + 1, -1, precio));
         }
 
-        if (roster.Classes.Count < datos.Curves.RunCurve.FreeClasses)
+        foreach (var clase in All)
         {
-            foreach (var clase in All)
-            {
-                if (!roster.Has(clase))
-                    candidatas.Add(new Choice(ChoiceType.Hire, clase, 1));
-            }
+            if (roster.Has(clase))
+                continue;
+
+            int precio = gratis
+                ? 0
+                : Ints.MultiplyPercent(
+                    datos.Curves.Shop.ClassRecruitPrice(oleada, datos.StatsOf(clase).Cost),
+                    descuento);
+
+            candidatas.Add(new Choice(ChoiceType.Hire, clase, 1, -1, precio));
         }
 
         // Con el roster completo y todo en nivel 6 no queda nada que ofrecer. Es

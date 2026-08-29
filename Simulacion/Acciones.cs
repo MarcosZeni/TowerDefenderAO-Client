@@ -140,6 +140,20 @@ public enum ActionType
     /// devolución del 60% ya venía a evitar.</para>
     /// </remarks>
     MoveDefender = 15,
+
+    /// <summary>
+    /// Saltear la elección sin quedarse con ninguna opción.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Existe porque la elección DEJÓ DE SER GRATIS.</b> Mientras
+    /// regalaba, «no se puede cerrar sin elegir» era una regla sana: no había
+    /// motivo para no llevarse algo. Con las tres opciones cobrando, un jugador
+    /// sin oro quedaría trabado en un modal que no se puede cerrar y con el reloj
+    /// congelado — o sea, la corrida muerta sin haber perdido.</para>
+    ///
+    /// <para>Sin parámetros: no hay nada que elegir, y el cuándo ya es el tick.</para>
+    /// </remarks>
+    SkipChoice = 16,
 }
 
 /// <summary>

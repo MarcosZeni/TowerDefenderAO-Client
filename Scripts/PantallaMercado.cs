@@ -282,6 +282,13 @@ public partial class PantallaMercado : Control
                     break;
                 }
 
+                if (HayQuePagar() && RectPasar().HasPoint(posicion))
+                {
+                    _juego.SaltearEleccion();
+                    GetViewport().SetInputAsHandled();
+                    break;
+                }
+
                 var (c, f) = TarjetaEn(posicion);
 
                 if (c >= 0)
@@ -337,11 +344,46 @@ public partial class PantallaMercado : Control
 
     private void Apretar(Ficha ficha)
     {
-        if (ficha.Gratis)
-            _juego.Choose(ficha.Indice);
-        else
+        if (!ficha.Gratis)
+        {
             _juego.Comprar(ficha.Indice);
+            return;
+        }
+
+        // ⚠ Lo que no se puede pagar no se manda. La simulación lo rebota igual
+        // —y sin cerrar la pantalla, a propósito— pero un click que no hace nada
+        // ni dice por qué se lee como que la pantalla está rota.
+        if (_juego.Run!.OpenChoices[ficha.Indice].Price <= _juego.Run.Gold)
+            _juego.Choose(ficha.Indice);
     }
+
+    /// <summary>
+    /// El botón de saltear la elección.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Aparece <b>solo cuando la elección cuesta</b>. Mientras regala no hay
+    /// razón para no llevarse algo, y un botón de pasar ahí sería una trampa; en
+    /// cuanto cobra, no tenerlo dejaría a un jugador sin oro trabado en un modal
+    /// que no se cierra y con el reloj congelado.
+    /// </remarks>
+    private bool HayQuePagar()
+    {
+        var p = _juego.Run;
+
+        if (p is null || !p.WaitingForChoice)
+            return false;
+
+        foreach (var o in p.OpenChoices)
+        {
+            if (o.Price > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static Rect2 RectPasar()
+        => new(Escala.LienzoAncho - MargenX - 200f, 92f, 200f, 44f);
 
     // =====================================================================
     // Dibujo
@@ -380,7 +422,7 @@ public partial class PantallaMercado : Control
 
         this.Label(titulo.Row(50f, 26f),
             HayEleccion
-                ? Loc.Get("ui.eleccion.no_se_puede_cerrar")
+                ? Loc.Get(HayQuePagar() ? "ui.mercado.elegi_o_pasa" : "ui.eleccion.no_se_puede_cerrar")
                 : Loc.Get("ui.mercado.esc_para_cerrar"),
             18, HayEleccion ? Palette.Warning : Palette.TextMuted, HorizontalAlignment.Center);
 
@@ -391,6 +433,11 @@ public partial class PantallaMercado : Control
         if (!HayEleccion)
         {
             this.Button(RectCerrar(), Loc.Get("ui.mercado.cerrar"), Palette.BorderNormal,
+                relleno: false);
+        }
+        else if (HayQuePagar())
+        {
+            this.Button(RectPasar(), Loc.Get("ui.mercado.pasar"), Palette.Danger,
                 relleno: false);
         }
     }
@@ -563,13 +610,15 @@ public partial class PantallaMercado : Control
             : contrata ? Palette.Info
             : Palette.Warning;
 
-        this.Slot(r, acento, elegido: true);
-        this.Glow(r, acento, encima ? 3f : 1.5f);
+        bool alcanza = opcion.Price <= p.Gold;
+
+        this.Slot(r, alcanza ? acento : Palette.TextDisabled, elegido: alcanza);
+        this.Glow(r, acento, encima && alcanza ? 3f : 1.5f);
 
         var (icono, titulo, nombre, cuerpo) = Partes(r);
 
         this.Label(titulo,
-            $"{Loc.Get("ui.mercado.gratis")} · " +
+            (opcion.Price > 0 ? "" : Loc.Get("ui.mercado.gratis") + " · ") +
             Loc.Get(esPerk ? "ui.eleccion.elegi_una"
                 : contrata ? "ui.eleccion.contratar"
                 : "ui.eleccion.subir_de_nivel").ToUpperInvariant(),
@@ -588,11 +637,17 @@ public partial class PantallaMercado : Control
             DibujarQueAbre(p, opcion, contrata, cuerpo);
         }
 
-        // Donde las de la tienda llevan el precio, estas llevan GRATIS. Es la
-        // comparación entera de la pantalla, dicha en una palabra.
-        this.Label(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
-            Loc.Get("ui.mercado.gratis").ToUpperInvariant(), 18, Palette.Success,
-            HorizontalAlignment.Right);
+        // ⚠ El precio va en el MISMO lugar que en las tarjetas de la tienda, y
+        // dice GRATIS solo cuando de verdad lo es. Mientras el roster no llega a
+        // «freeClasses» la elección regala; pasado eso cobra, con descuento, y
+        // esta es la línea donde eso se ve.
+        var pie = new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f);
+
+        if (opcion.Price > 0)
+            this.Price(pie, opcion.Price, alcanza, HorizontalAlignment.Right);
+        else
+            this.Label(pie, Loc.Get("ui.mercado.gratis").ToUpperInvariant(), 18,
+                Palette.Success, HorizontalAlignment.Right);
 
         // El número de la tecla, abajo a la izquierda del icono.
         var tecla = new Rect2(icono.Position.X, r.End.Y - 30f, 28f, 24f);

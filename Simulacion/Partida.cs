@@ -594,6 +594,12 @@ public sealed class Run
                 MoveDefender(accion.A, new Cell(accion.B, accion.C));
                 break;
 
+            case ActionType.SkipChoice:
+                // Se cierra sin entregar nada. La oferta se pierde: es una
+                // decisión, y por eso está en el log.
+                OpenChoices = [];
+                break;
+
             case ActionType.SetTargeting:
                 SetTargeting(accion.A, (TargetingMode)accion.B);
                 break;
@@ -776,6 +782,24 @@ public sealed class Run
 
             OpenChoices = [];
             return;
+        }
+
+        // ⚠ Se cobra ANTES de entregar, y si no alcanza la elección NO se cierra.
+        //
+        // Dejarla abierta es lo correcto: la pantalla se puede saltear con
+        // `SkipChoice`, así que un jugador sin oro no queda trabado, pero tampoco
+        // pierde la oferta por haber apretado la que no podía pagar.
+        if (opcion.Price > Gold)
+            return;
+
+        if (opcion.Price > 0)
+        {
+            Gold -= opcion.Price;
+
+            if (opcion.Kind == ChoiceType.Hire)
+                Metrics.GoldSpentClasses += opcion.Price;
+            else
+                Metrics.GoldSpentLevels += opcion.Price;
         }
 
         bool primeraClase = Roster.Classes.Count == 0;
@@ -3559,7 +3583,7 @@ public sealed class Run
 
         if (Wave - _oleadaUltimaEleccion >= _datos.Curves.RunCurve.WavesBetweenChoices)
         {
-            var opciones = ChoiceBuilder.Next(Roster, _rng, _datos);
+            var opciones = ChoiceBuilder.Next(Roster, _rng, _datos, Wave);
             _oleadaUltimaEleccion = Wave;
 
             // Sin opciones —roster completo y todo en nivel 6— se sigue de largo.

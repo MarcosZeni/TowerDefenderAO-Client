@@ -73,7 +73,29 @@
     //
     // Subirlo afloja la economía; bajarlo a 1 vuelve al arranque frágil. En 9 se
     // vuelve al comportamiento viejo, con todo el roster gratis.
-    "freeClasses": 2
+    "freeClasses": 2,
+
+    // ⚠ PASADAS LAS GRATIS, LA ELECCIÓN SE COBRA — con este descuento sobre el
+    // precio de comprar lo mismo por el otro camino.
+    //
+    // Un nivel regalado es el power-up más grande del juego sin perder nada: abre
+    // un slot de perk, sube los stats de TODAS las fichas de esa clase que ya
+    // estén puestas, y no cuesta una moneda. Cada tres oleadas, gratis, eso
+    // vaciaba de sentido al sumidero de oro: comprar el nivel 4 sale 4.800 y la
+    // elección lo regalaba.
+    //
+    // Descuento y no precio lleno porque la elección igual es peor que la tienda
+    // en una cosa concreta: NO SE ELIGE QUÉ SALE. La tienda ofrece cuatro cosas
+    // de seis categorías y esto tres al azar, así que pagar lo mismo por menos
+    // agencia sería un mal negocio y el jugador aprendería a saltearla siempre.
+    //
+    // 60 es el mismo número que la devolución al vender: pagás el 60% de lo que
+    // sale por afuera, y el 40% que ahorrás es lo que compra el sorteo.
+    //
+    // En 100 la elección deja de tener ventaja y se vuelve una tienda peor; en 0
+    // vuelve a ser gratis y con ella el problema. La oferta de Oro de un jefe NO
+    // pasa por acá: es un drop, no una compra.
+    "choiceDiscountPercent": 60
   },
 
   // --- Defensores ------------------------------------------------------------
