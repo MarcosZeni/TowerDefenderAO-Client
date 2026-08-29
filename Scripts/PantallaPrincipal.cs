@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
+using TowerOfArgentum.Simulacion;
 using TowerOfArgentum.Ui;
 
 namespace TowerOfArgentum;
@@ -26,6 +28,48 @@ public partial class PantallaPrincipal : Control
 
     private string[] _planos = [];
     private long _oro;
+
+    /// <summary>Qué se está mostrando en el panel de contenido.</summary>
+    /// <remarks>
+    /// ⚠ <b>El ranking es de nodos y la tienda es dibujada.</b> No es inconsistencia
+    /// por descuido: el ranking son veinte renglones de texto monoespaciado que un
+    /// <c>VBoxContainer</c> resuelve solo, y la tienda son nueve tarjetas con
+    /// icono, receta y precio, que es exactamente lo que <see cref="UiStyle"/>
+    /// sabe dibujar y un <c>Label</c> no. Lo que sí importa es que <b>nunca se
+    /// vean las dos</b>, y de eso se ocupa esto.
+    /// </remarks>
+    private enum Modo { Nada, Ranking, Planos }
+
+    private Modo _modo = Modo.Nada;
+
+    /// <summary>
+    /// Los precios, tal como los mandó el servidor. Vacío = todavía no llegaron.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>El precio no puede vivir en el cliente.</b> <c>Datos\planos.json</c>
+    /// entra al hash de <c>/run/start</c>, así que corregir un precio ahí
+    /// invalidaría la temporada del ranking. Se piden una vez por sesión a
+    /// <c>GET /tienda/planos</c> y se guardan acá.
+    /// </remarks>
+    private readonly Dictionary<string, int> _precios = new(System.StringComparer.Ordinal);
+
+    /// <summary>La tarjeta bajo el cursor, o -1.</summary>
+    private int _bajoElCursor = -1;
+
+    /// <summary>
+    /// El plano cuyo botón ya se apretó una vez y espera la confirmación.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Dos clics, como vender un defensor.</b> Esto gasta oro de la
+    /// <b>billetera</b>, que es progresión permanente y tarda corridas enteras en
+    /// juntarse; un click de más sobre la tarjeta equivocada no se puede deshacer
+    /// —un plano comprado no se vende— así que el segundo click no es una molestia,
+    /// es lo único que hay entre el jugador y un error irreversible.
+    /// </remarks>
+    private string? _armado;
+
+    /// <summary>Hay una compra en vuelo: no se aceptan más clics.</summary>
+    private bool _comprando;
 
     /// <summary>Se dispara al empezar una corrida, con el id y la seed del servidor.</summary>
     public event System.Action<long, ulong>? EmpezarCorrida;
@@ -149,6 +193,9 @@ public partial class PantallaPrincipal : Control
 
         this.Panel(PanelDeContenido(), opacidad: 1f);
 
+        if (_modo == Modo.Planos)
+            DibujarTienda();
+
         this.Panel(UiLayout.FooterBar, opacidad: 1f);
         this.RarityLegend(UiLayout.FooterLegend);
     }
@@ -220,6 +267,13 @@ public partial class PantallaPrincipal : Control
     private async Task MostrarRankingAsync()
     {
         Limpiar();
+
+        // La tienda es dibujada y el ranking es de nodos: apagar el modo es lo
+        // que evita que la grilla de tarjetas quede pintada atrás de la tabla.
+        _modo = Modo.Ranking;
+        _armado = null;
+        QueueRedraw();
+
         _mensaje.Text = Loc.Get("ui.principal.cargando_ranking");
 
         var (ok, datos, error) = await Red.ApiCliente.RankingAsync(20);
@@ -258,70 +312,444 @@ public partial class PantallaPrincipal : Control
             _panel.AddChild(new Label { Text = Loc.Get("ui.principal.sin_corridas") });
     }
 
+    // =====================================================================
+    // La tienda de planos
+    // =====================================================================
+
+    /// <summary>
+    /// Abre la tienda: pide el perfil y, la primera vez, los precios.
+    /// </summary>
+    /// <remarks>
+    /// Los precios se piden <b>una sola vez por sesión</b>: no dependen de la
+    /// cuenta ni del oro, y volver a pedirlos en cada compra sería un viaje de red
+    /// para recibir lo mismo. Lo que sí se recarga en cada compra es el perfil,
+    /// que es lo que cambió.
+    /// </remarks>
     private async Task MostrarTiendaAsync()
     {
         Limpiar();
+
+        _modo = Modo.Planos;
+        _armado = null;
+        _bajoElCursor = -1;
+        QueueRedraw();
+
         await RefrescarAsync();
 
-        _panel.AddChild(Titulo(Loc.Get("ui.principal.tienda")));
-
-        _panel.AddChild(new Label
+        if (_precios.Count == 0)
         {
-            Text = Loc.Get("ui.principal.tienda_ayuda"),
-        });
+            var (ok, lista, error) = await Red.ApiCliente.PlanosAsync();
 
-        _panel.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
-
-        foreach (var plano in CargadorDatos.Actual.Blueprints.All)
-        {
-            // ⚠ La identidad que viaja a la API es la KEY, no el nombre: el nombre
-            // ahora vive en los archivos de idioma y cambia con el idioma, así que
-            // un jugador en inglés compraría un plano que el servidor no conoce.
-            // El planos.json DEL SERVIDOR tiene que listar estas mismas keys.
-            bool aprendido = System.Array.IndexOf(_planos, plano.Key) >= 0;
-            string nombreVisible = Loc.Get($"perk.{plano.Key}.name");
-
-            // El inicial se muestra igual, marcado: sirve para que el jugador
-            // entienda que la fusión existe antes de gastar un peso.
-            if (plano.Initial)
+            if (ok && lista?.Planos is not null)
             {
-                _panel.AddChild(new Label { Text = $"  {nombreVisible} {Loc.Get("ui.principal.plano_inicial")}" });
-                continue;
+                foreach (var fila in lista.Planos)
+                    _precios[fila.Key] = fila.Price;
             }
-
-            if (aprendido)
+            else
             {
-                _panel.AddChild(new Label { Text = $"  {nombreVisible} {Loc.Get("ui.principal.plano_aprendido")}" });
-                continue;
+                // Sin precios las tarjetas se dibujan igual, apagadas y sin botón:
+                // saber qué planos existen y de qué son las recetas sirve aunque
+                // hoy no se pueda comprar ninguno.
+                _mensaje.Text = error ?? Loc.Get("ui.principal.error_precios");
             }
-
-            var fila = new HBoxContainer();
-            fila.AddThemeConstantOverride("separation", 12);
-
-            fila.AddChild(new Label { Text = $"  {nombreVisible}" });
-
-            string clave = plano.Key;
-            var comprar = new Button { Text = Loc.Get("ui.principal.comprar"), CustomMinimumSize = new Vector2(140, 40) };
-            comprar.Pressed += () => _ = ComprarAsync(clave);
-            fila.AddChild(comprar);
-
-            _panel.AddChild(fila);
         }
+
+        QueueRedraw();
+    }
+
+    /// <summary>En qué situación está un plano para esta cuenta.</summary>
+    private enum EstadoPlano
+    {
+        /// <summary>Se sabe de arranque. No se vende.</summary>
+        Inicial,
+
+        /// <summary>Ya comprado, para siempre.</summary>
+        Aprendido,
+
+        /// <summary>Se puede comprar: el servidor le puso precio.</summary>
+        EnVenta,
+
+        /// <summary>
+        /// El cliente lo conoce pero el servidor no lo vende. Se dibuja apagado y
+        /// <b>no se esconde</b>: un plano que desaparece de la lista se lee como
+        /// un plano que no existe, y lo que pasa en realidad es que falta un
+        /// precio del otro lado.
+        /// </summary>
+        SinPrecio,
+    }
+
+    private EstadoPlano EstadoDe(Blueprint plano)
+    {
+        if (plano.Initial)
+            return EstadoPlano.Inicial;
+
+        // ⚠ La identidad que viaja a la API es la KEY, no el nombre: el nombre
+        // vive en los archivos de idioma y cambia con el idioma, así que un
+        // jugador en inglés compraría un plano que el servidor no conoce.
+        if (System.Array.IndexOf(_planos, plano.Key) >= 0)
+            return EstadoPlano.Aprendido;
+
+        return _precios.ContainsKey(plano.Key) ? EstadoPlano.EnVenta : EstadoPlano.SinPrecio;
+    }
+
+    private int PrecioDe(string key) => _precios.TryGetValue(key, out int precio) ? precio : 0;
+
+    // ---------------------------------------------------------------------
+    // Geometría
+    // ---------------------------------------------------------------------
+
+    private const int ColumnasPlanos = 3;
+    private const float HuecoPlanos = 16f;
+
+    /// <summary>
+    /// Cuántas filas tiene la grilla como mínimo.
+    /// </summary>
+    /// <remarks>
+    /// El alto de la tarjeta sale del <b>máximo</b> entre esto y lo que haya, igual
+    /// que en el mercado: con cuatro planos, dividir el panel por dos daría
+    /// tarjetas del doble de alto que las de la pantalla de al lado.
+    /// </remarks>
+    private const int FilasMinimas = 3;
+
+    /// <summary>El rectángulo útil: el panel de contenido menos el margen.</summary>
+    private static Rect2 CajaPlanos() => PanelDeContenido().Inset(20f);
+
+    private static Rect2 TarjetaPlano(int i, int total)
+    {
+        var caja = CajaPlanos();
+
+        // 56 = el título de la sección más el renglón de ayuda.
+        float y0 = caja.Position.Y + 56f;
+        float disponible = caja.End.Y - y0;
+
+        int filas = Mathf.Max(FilasMinimas, (total + ColumnasPlanos - 1) / ColumnasPlanos);
+
+        float ancho = (caja.Size.X - (HuecoPlanos * (ColumnasPlanos - 1))) / ColumnasPlanos;
+        float alto = (disponible - (HuecoPlanos * (filas - 1))) / filas;
+
+        return new Rect2(
+            caja.Position.X + ((i % ColumnasPlanos) * (ancho + HuecoPlanos)),
+            y0 + ((i / ColumnasPlanos) * (alto + HuecoPlanos)),
+            ancho, alto);
+    }
+
+    /// <summary>
+    /// Las cuatro partes de una tarjeta apaisada. <b>Las mismas que el mercado.</b>
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El icono se topea en 96 px de lado y no ocupa todo el alto de la tarjeta.
+    /// Con el cuadrado grande, la columna de texto quedaba en 287 px y un nombre
+    /// como «Terrible Hambre de Igôr» entraba recortado con puntos suspensivos —
+    /// que en una tienda es exactamente el dato que no se puede recortar.
+    /// </remarks>
+    private static (Rect2 Icono, Rect2 Titulo, Rect2 Nombre, Rect2 Cuerpo) PartesPlano(Rect2 r)
+    {
+        float lado = Mathf.Min(r.Size.Y - 20f, 96f);
+
+        var icono = new Rect2(r.Position.X + 10f,
+            r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
+
+        float x = icono.End.X + 14f;
+        float ancho = r.End.X - x - 12f;
+
+        return (
+            icono,
+            new Rect2(x, r.Position.Y + 8f, ancho, 18f),
+            new Rect2(x, r.Position.Y + 26f, ancho, 28f),
+            new Rect2(x, r.Position.Y + 58f, ancho, r.Size.Y - 96f));
+    }
+
+    /// <summary>El botón de comprar de una tarjeta. Abajo a la izquierda del texto.</summary>
+    private static Rect2 RectComprar(Rect2 r)
+    {
+        var (_, _, nombre, _) = PartesPlano(r);
+
+        return new Rect2(nombre.Position.X, r.End.Y - 38f, 150f, 30f);
+    }
+
+    // ---------------------------------------------------------------------
+    // Dibujo
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// La tienda entera: título, ayuda y la grilla de tarjetas.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Comprados y sin comprar en la MISMA grilla</b>, y el estado se
+    /// dice con el marco y con el pie, no sacando la tarjeta de la lista. Antes
+    /// eran tres formatos distintos —una línea suelta para el inicial, otra para
+    /// el aprendido y una fila con botón para el resto—, así que la lista cambiaba
+    /// de forma según lo que el jugador ya tuviera y no se podía comparar nada
+    /// contra nada.</para>
+    ///
+    /// <para>Y la receta va <b>en la tarjeta</b>: un plano no da poder hoy, lo que
+    /// se compra es la posibilidad de cerrar una fusión más adelante. Sin los dos
+    /// componentes a la vista, elegir cuál de nueve comprar con la plata de tres
+    /// corridas es adivinar.</para>
+    /// </remarks>
+    private void DibujarTienda()
+    {
+        var caja = CajaPlanos();
+        var todos = CargadorDatos.Actual.Blueprints.All;
+
+        UiTooltip.Comenzar(GetGlobalMousePosition());
+
+        this.SectionTitle(caja.Row(0f, 30f), Loc.Get("ui.principal.tienda"), Palette.Unique);
+        this.Label(caja.Row(32f, 20f), Loc.Get("ui.principal.tienda_ayuda"), 14, Palette.TextMuted);
+
+        for (int i = 0; i < todos.Count; i++)
+            DibujarPlano(todos[i], TarjetaPlano(i, todos.Count).Inset(4f), i == _bajoElCursor);
+
+        // Último de todo: el cartel tiene que quedar encima de las tarjetas.
+        UiTooltip.Dibujar(this);
+    }
+
+    /// <summary>
+    /// Una tarjeta: icono del Único, nombre, qué hace, la receta y el precio.
+    /// </summary>
+    /// <remarks>
+    /// El color dice el estado antes de leer una palabra: <b>verde</b> con tilde
+    /// es «ya lo tenés», <b>violeta</b> es «se puede comprar», <b>gris con el
+    /// precio en rojo</b> es «no te alcanza». Y la tarjeta se ve entera en los
+    /// tres casos — saber que existe un plano que hoy no se puede pagar es lo que
+    /// hace que juntar oro sea una decisión.
+    /// </remarks>
+    private void DibujarPlano(Blueprint plano, Rect2 r, bool encima)
+    {
+        var datos = CargadorDatos.Actual;
+        var unico = datos.Perks.Get(plano.ResultingUnique);
+
+        var estado = EstadoDe(plano);
+        bool tiene = estado is EstadoPlano.Inicial or EstadoPlano.Aprendido;
+
+        int precio = PrecioDe(plano.Key);
+        bool alcanza = precio > 0 && _oro >= precio;
+        bool comprable = estado == EstadoPlano.EnVenta && alcanza && !_comprando;
+
+        var acento =
+            tiene ? Palette.Success
+            : estado == EstadoPlano.EnVenta && alcanza ? Palette.Unique
+            : Palette.TextDisabled;
+
+        // ⚠ «elegido» solo para lo que ya se tiene: esa marca incluye un tilde, y
+        // ponérsela también al hover diría «comprado» sobre algo que no lo está.
+        // Lo de abajo del cursor se ilumina con el resplandor, que no afirma nada.
+        this.Slot(r, acento, elegido: tiene);
+
+        if (encima && comprable)
+            this.Glow(r, Palette.Unique, 2.4f);
+
+        var (icono, titulo, nombre, cuerpo) = PartesPlano(r);
+
+        // El icono conserva el violeta de Único siempre: es la identidad del ítem,
+        // y teñirlo de verde al comprarlo lo haría irreconocible contra la mochila.
+        this.Slot(icono, Palette.Unique);
+
+        if (!CargadorIconos.Dibujar(this, unico.Key,
+                icono.Position.X + 8f, icono.Position.Y + 8f, icono.Size.X - 16f))
+        {
+            this.Label(icono, Loc.Perk(unico)[..1].ToUpperInvariant(),
+                (int)(icono.Size.X * 0.5f), Palette.Unique, HorizontalAlignment.Center);
+        }
+
+        this.Label(titulo, Loc.Tier(PerkTier.Unique).ToUpperInvariant(), 13, Palette.Unique);
+        this.Label(nombre, Loc.Perk(unico).ToUpperInvariant(), 20, Palette.TextPrimary);
+
+        this.EffectRow(cuerpo.Row(0f, 20f), unico, tiene ? Palette.Success : Palette.Unique);
+
+        this.Label(cuerpo.Row(23f, 16f), Loc.Get("ui.principal.receta"), 12, Palette.TextMuted);
+
+        Componente(cuerpo.Row(40f, 19f), datos.Perks.Get(plano.GoldA));
+        Componente(cuerpo.Row(60f, 19f), datos.Perks.Get(plano.GoldB));
+
+        Pie(plano, r, nombre, estado, precio, alcanza, comprable, encima);
+    }
+
+    /// <summary>
+    /// Un componente de la receta: icono del efecto y nombre, en color de Oro.
+    /// </summary>
+    /// <remarks>
+    /// En color de Oro y no en gris porque eso <b>es</b> el dato: los dos
+    /// componentes son perks de Oro, que caen de los jefes y salen carísimos en la
+    /// tienda de la corrida. El color dice de dónde hay que sacarlos.
+    /// </remarks>
+    private void Componente(Rect2 r, PerkDefinition def)
+    {
+        float lado = Mathf.Min(r.Size.Y, 16f);
+        var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
+
+        this.Icon(caja, UiWidgets.IconoDe(def.Effect), Palette.Legendary);
+
+        this.Label(new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
+            Loc.Perk(def), 13, Palette.TextSecondary);
+
+        UiTooltip.Sobre(r, $"{Loc.Perk(def)} · {Loc.Tier(PerkTier.Gold)} · {Loc.Effect(def.Effect)}");
+    }
+
+    /// <summary>
+    /// El pie de la tarjeta: el botón a la izquierda y el estado a la derecha.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El precio va <b>siempre en el mismo lugar</b> en las nueve tarjetas, como
+    /// en el mercado: es lo que permite compararlos de un vistazo en vez de
+    /// buscarlos.
+    /// </remarks>
+    private void Pie(
+        Blueprint plano, Rect2 r, Rect2 nombre, EstadoPlano estado,
+        int precio, bool alcanza, bool comprable, bool encima)
+    {
+        var pie = new Rect2(nombre.Position.X, r.End.Y - 36f, nombre.Size.X, 26f);
+
+        switch (estado)
+        {
+            case EstadoPlano.Inicial:
+                this.Label(pie, Loc.Get("ui.principal.plano_inicial"), 15, Palette.Success,
+                    HorizontalAlignment.Right);
+                return;
+
+            case EstadoPlano.Aprendido:
+                this.Label(pie, Loc.Get("ui.principal.plano_aprendido"), 16, Palette.Success,
+                    HorizontalAlignment.Right);
+                return;
+
+            case EstadoPlano.SinPrecio:
+                this.Label(pie, Loc.Get("ui.principal.sin_precio"), 13, Palette.TextDisabled,
+                    HorizontalAlignment.Right);
+                return;
+        }
+
+        this.Price(pie, precio, alcanza, HorizontalAlignment.Right);
+
+        if (!alcanza)
+            return;
+
+        // ⚠ Armado = ya se apretó una vez. El segundo click compra. Es el mismo
+        // gesto de dos pasos que vender un defensor, y por el mismo motivo: lo que
+        // está del otro lado no se puede deshacer.
+        bool armado = _armado == plano.Key;
+
+        this.Button(RectComprar(r),
+            Loc.Get(armado ? "ui.principal.confirmar_compra" : "ui.principal.comprar"),
+            armado ? Palette.Danger : Palette.Unique,
+            habilitado: comprable,
+            relleno: armado,
+            encima: encima && comprable);
+    }
+
+    // ---------------------------------------------------------------------
+    // Entrada
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// El hover y los clics de la tienda.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <c>_Input</c> y no <c>_GuiInput</c>, por la cicatriz de
+    /// <see cref="PantallaMercado"/>: con el hook de GUI el control queda sordo
+    /// porque nunca toma el foco, y la posición del evento viene en píxeles de
+    /// ventana, que con <c>stretch = keep</c> no coincide con el lienzo.</para>
+    ///
+    /// <para>⚠ <b>Solo se marca atendido el click que cae en un botón de tarjeta.</b>
+    /// Los botones de la columna izquierda son nodos <c>Button</c> de verdad, y
+    /// <c>_Input</c> corre <i>antes</i> que el reparto de GUI: comerse todo click
+    /// dejaría el menú entero sin funcionar.</para>
+    /// </remarks>
+    public override void _Input(InputEvent evento)
+    {
+        // El panel de opciones es modal y se dibuja encima. Que además esté
+        // registrado como último hijo no alcanza: ahí se decide quién atiende
+        // primero, no quién puede ignorar el evento.
+        if (_modo != Modo.Planos || _opciones.Visible)
+            return;
+
+        switch (evento)
+        {
+            case InputEventMouseMotion:
+                _bajoElCursor = PlanoEn(GetGlobalMousePosition());
+                QueueRedraw();
+                break;
+
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
+                Apretar(GetGlobalMousePosition());
+                break;
+        }
+    }
+
+    private static int PlanoEn(Vector2 posicion)
+    {
+        int total = CargadorDatos.Actual.Blueprints.All.Count;
+
+        for (int i = 0; i < total; i++)
+        {
+            if (TarjetaPlano(i, total).Inset(4f).HasPoint(posicion))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void Apretar(Vector2 posicion)
+    {
+        var todos = CargadorDatos.Actual.Blueprints.All;
+
+        for (int i = 0; i < todos.Count; i++)
+        {
+            var r = TarjetaPlano(i, todos.Count).Inset(4f);
+
+            if (!RectComprar(r).HasPoint(posicion))
+                continue;
+
+            int precio = PrecioDe(todos[i].Key);
+
+            if (_comprando || EstadoDe(todos[i]) != EstadoPlano.EnVenta || _oro < precio)
+                break;
+
+            if (_armado == todos[i].Key)
+            {
+                _armado = null;
+                _ = ComprarAsync(todos[i].Key);
+            }
+            else
+            {
+                _armado = todos[i].Key;
+            }
+
+            QueueRedraw();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // Cualquier otro click desarma: apuntar a otra tarjeta y arrepentirse
+        // tiene que ser gratis, y un botón que queda armado a la espera es una
+        // trampa esperando el próximo click distraído.
+        if (_armado is null)
+            return;
+
+        _armado = null;
+        QueueRedraw();
     }
 
     private async Task ComprarAsync(string plano)
     {
+        _comprando = true;
         _mensaje.Text = Loc.Get("ui.principal.comprando");
+        QueueRedraw();
 
-        // ⚠ Se manda SOLO el nombre. El precio sale de la lista del servidor: si
-        // lo mandara el cliente, se compraría todo a un peso.
+        // ⚠ Se manda SOLO la key. El precio sale de la lista del servidor: si lo
+        // mandara el cliente, se compraría todo a un peso.
         var (ok, _, error) = await Red.ApiCliente.ComprarPlanoAsync(plano);
 
+        _comprando = false;
+
+        // Recarga el perfil y no la tienda: lo que cambió es el oro y la lista de
+        // planos de la cuenta. Los precios son los mismos.
+        await RefrescarAsync();
+
         _mensaje.Text = ok
-            ? $"{Loc.Get("ui.principal.aprendiste")} {plano}"
+            ? $"{Loc.Get("ui.principal.aprendiste")} {Loc.Get($"perk.{plano}.name")}"
             : error ?? Loc.Get("ui.principal.error_comprar");
 
-        await MostrarTiendaAsync();
+        QueueRedraw();
     }
 
     private async Task SalirAsync()

@@ -50,6 +50,17 @@ public sealed record Profile(
     [property: JsonPropertyName("oro")] long Gold,
     [property: JsonPropertyName("planos")] string[] Blueprints);
 
+/// <summary>Un plano a la venta, con su precio.</summary>
+/// <remarks>
+/// ⚠ <b>El precio NO vive en el cliente.</b> Lo manda el servidor, que es el
+/// único que puede: si viviera en <c>Datos\planos.json</c> entraría al hash de
+/// <c>/run/start</c> y corregir un precio invalidaría la temporada del ranking.
+/// Lo que sí es del cliente es la <b>key</b>, que es la misma en los dos lados.
+/// </remarks>
+public sealed record BlueprintPrice(
+    [property: JsonPropertyName("plano")] string Key,
+    [property: JsonPropertyName("precio")] int Price);
+
 public sealed record RankingRow(
     [property: JsonPropertyName("puesto")] int Position,
     [property: JsonPropertyName("nick")] string Nick,
@@ -246,6 +257,19 @@ public static class ApiCliente
         => GetAsync<RespuestaRanking>($"/ranking?limite={limite}");
 
     /// <summary>
+    /// Los precios de la tienda de planos.
+    /// </summary>
+    /// <remarks>
+    /// <para>Devuelve <b>solo lo que se vende</b>: el plano inicial no viene. Qué
+    /// planos tiene la cuenta lo dice <c>/perfil/me</c>, y la pantalla cruza las
+    /// dos listas contra su propio <c>planos.json</c>.</para>
+    ///
+    /// <para>Se puede pedir sin token, como el ranking: un precio no es de nadie.</para>
+    /// </remarks>
+    public static Task<(bool Ok, RespuestaPlanos? Datos, string? Error)> PlanosAsync()
+        => GetAsync<RespuestaPlanos>("/tienda/planos");
+
+    /// <summary>
     /// Compra un plano de fusión con la billetera.
     /// </summary>
     /// <remarks>
@@ -256,6 +280,8 @@ public static class ApiCliente
         => PostAsync<object>("/tienda/plano", new { plano });
 
     public sealed record RespuestaRanking(int Version, RankingRow[] Filas);
+
+    public sealed record RespuestaPlanos(BlueprintPrice[] Planos);
 
     // -------------------------------------------------------------------------
     //  Plomería
