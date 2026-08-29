@@ -209,6 +209,13 @@ public partial class Main : Node2D
         capaModal.AddChild(mercado);
         juego.Market = mercado;
 
+        // ⚠ EL DROP DEL JEFE va DESPUÉS del mercado, y por eso está acá y no
+        // arriba: es la única pantalla del juego que frena la corrida y no se
+        // puede cerrar, así que tiene que quedar por encima de todo lo que sí se
+        // cierra. Antes vivía adentro del mercado como una tarjeta más, al lado
+        // de las ofertas de bronce.
+        capaModal.AddChild(new BossDropScreen(juego) { Name = "DropDelJefe" });
+
         // El menú de ESC, arriba de todo menos del mercado en la práctica: su
         // _Input cede el ESC cuando la elección o la mochila están abiertas.
         //

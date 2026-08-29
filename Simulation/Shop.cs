@@ -55,6 +55,30 @@ public enum ShopKind
     /// hacen falta sus dos Oro. Por eso cuesta un tercio de un Oro.</para>
     /// </remarks>
     Blueprint = 3,
+
+    /// <summary>
+    /// Subir de nivel una clase que ya está en el roster.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Esto era la pantalla de elección.</b> Cada tres oleadas se abría
+    /// un modal con tres opciones —contratar o levelear—, se tomaba UNA y las
+    /// otras dos <b>desaparecían</b>. Al lado, la tienda ofrecía cuatro cosas de
+    /// las que solo se consumía la comprada. Dos ventanas con dos reglas opuestas
+    /// pegadas en la misma pantalla: elegir un nivel borraba las otras opciones y
+    /// se leía como un bug de la tienda, porque para el jugador era la misma
+    /// tienda.</para>
+    ///
+    /// <para>Ahora es una oferta más. Comprar una no toca a las otras, que es la
+    /// regla que la tienda ya tenía.</para>
+    ///
+    /// <para>⚠ <b>Al mismo precio que la mochila</b> —<c>300 × nivel²</c>—, sin
+    /// descuento. La elección los regalaba, y un nivel gratis cada tres oleadas
+    /// vaciaba de sentido al sumidero de oro de la corrida: abre un slot de perk,
+    /// sube los stats de todas las fichas de esa clase que ya estén puestas, y no
+    /// costaba una moneda. Lo que la tienda aporta no es un descuento, es que el
+    /// nivel compita <b>de frente</b> contra un Oro y contra el tablero.</para>
+    /// </remarks>
+    Level = 4,
 }
 
 /// <summary>Algo que se vende en la tienda de la corrida.</summary>
@@ -63,7 +87,22 @@ public enum ShopKind
 /// el valor de <see cref="DefenderClass"/>, o el índice del plano en
 /// <c>planos.json</c>.
 /// </param>
-public readonly record struct ShopOffer(ShopKind Kind, int Id, int Price, bool Sold);
+/// <param name="Free">
+/// Se lleva sin pagar. <see cref="Price"/> sigue siendo el precio real.
+/// </param>
+/// <remarks>
+/// <para>⚠ <b><paramref name="Free"/> no es «precio cero».</b> El precio real se
+/// conserva porque las ofertas gratis <b>no desaparecen al usarse el cupo</b>:
+/// pasan a costar lo que valen. Esa es toda la diferencia con la pantalla de
+/// elección que esto reemplazó — ahí tomar una borraba las otras, acá siguen
+/// estando y ahora hay que pagarlas.</para>
+/// </remarks>
+public readonly record struct ShopOffer(
+    ShopKind Kind, int Id, int Price, bool Sold, bool Free = false)
+{
+    /// <summary>Lo que sale de verdad quedarse con esto, hoy.</summary>
+    public int Cost => Free ? 0 : Price;
+}
 
 /// <summary>
 /// La tienda rotativa que aparece dentro de la corrida.
@@ -137,14 +176,21 @@ public sealed class Shop
         StockWave = oleada;
 
         var clases = roster.Available();
-
-        // Sin roster no hay con qué filtrar: todo perk sería un drop muerto y el
-        // generador de armas no sabría para quién generar. Solo pasa antes de la
-        // primera elección.
-        if (clases.Count == 0)
-            return;
-
         var cfg = datos.Curves.Shop;
+
+        // ⚠ CON EL ROSTER VACÍO LA TIENDA IGUAL TIENE QUE ABRIR, y antes se
+        // rendía acá.
+        //
+        // Esto pasaba una sola vez —antes de la pantalla de elección inicial— y
+        // ahora es el arranque de toda corrida: la elección desapareció y la
+        // primera clase sale de la primera tienda. Sin roster no se puede filtrar
+        // un perk ni generar un arma —serían cartas muertas—, así que la tienda
+        // del arranque es solo de clases, y una viene gratis.
+        if (clases.Count == 0)
+        {
+            ArmarTiendaInicial(oleada, cfg, rng, datos);
+            return;
+        }
 
         int oroPuestos = 0;
         int planosPuestos = 0;
@@ -161,7 +207,7 @@ public sealed class Shop
             for (int intento = 0; intento < 6; intento++)
             {
                 var cat = SortearCategoria(
-                    oleada, clases, cfg, descartadas, oroPuestos, planosPuestos, rng);
+                    oleada, cfg, descartadas, oroPuestos, planosPuestos, rng);
 
                 if (cat is null)
                     break;
@@ -189,6 +235,96 @@ public sealed class Shop
         GarantizarUtiles(oleada, roster, clases, rng, datos);
     }
 
+    /// <summary>
+    /// La tienda del arranque: solo clases, y una gratis.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Al menos una ofensiva, garantizado</b>, y es la que sale gratis.
+    /// No es una concesión: con el reparto libre, un arranque de clérigo + bardo +
+    /// druida es una corrida perdida en la oleada 1 sin que el jugador haya hecho
+    /// nada mal. Medido con el corredor headless: dos de diez seeds terminaban
+    /// así. Perder por una decisión propia es el juego; perder por el sorteo de la
+    /// primera pantalla, antes de tocar nada, es un bug de diseño.</para>
+    ///
+    /// <para>⚠ <b>Las otras NO son «las que no elegiste».</b> Quedan a su precio y
+    /// se compran con el oro inicial que entrega la primera clase. Esa es la
+    /// diferencia con la pantalla de elección: ahí tomar una borraba el resto.</para>
+    ///
+    /// <para>Solo clases porque sin roster no hay con qué filtrar un perk ni para
+    /// quién generar un arma: cualquier otra cosa sería una carta muerta.</para>
+    /// </remarks>
+    private void ArmarTiendaInicial(int oleada, ShopData cfg, Rng rng, BalanceData datos)
+    {
+        var ofensivas = datos.Classes.Offensive();
+
+        // La garantizada sale primero, para que el resto se sortee sin ella.
+        var garantizada = ofensivas[rng.Index(ofensivas.Length)];
+
+        var pozo = new List<DefenderClass>(ChoiceBuilder.All);
+        pozo.Remove(garantizada);
+
+        int cuantas = System.Math.Min(cfg.Slots, ChoiceBuilder.All.Length);
+        var salida = new List<DefenderClass>(cuantas) { garantizada };
+
+        for (int i = 1; i < cuantas; i++)
+        {
+            int j = rng.Index(pozo.Count);
+            salida.Add(pozo[j]);
+            pozo.RemoveAt(j);
+        }
+
+        // ⚠ La gratis se sortea entre las ofensivas de la lista, no es «la
+        // primera». Si fuera fija, el jugador aprendería que la de arriba es la
+        // buena y la garantía se volvería visible como un truco.
+        var candidatasGratis = new List<int>();
+
+        for (int i = 0; i < salida.Count; i++)
+        {
+            if (System.Array.IndexOf(ofensivas, salida[i]) >= 0)
+                candidatasGratis.Add(i);
+        }
+
+        int gratis = candidatasGratis.Count == 0
+            ? 0
+            : candidatasGratis[rng.Index(candidatasGratis.Count)];
+
+        for (int i = 0; i < salida.Count; i++)
+        {
+            _stock.Add(new ShopOffer(
+                ShopKind.Class,
+                (int)salida[i],
+                cfg.ClassRecruitPrice(oleada, datos.StatsOf(salida[i]).Cost),
+                false,
+                i == gratis));
+        }
+    }
+
+    // ⚠ ACÁ VIVÍA `RepartirGratis`, que marcaba una oferta sin cobrar en CADA
+    // tienda. Era un invento: la tienda no regala nada. Lo único gratis de toda
+    // la corrida es la clase del arranque, que la marca ArmarTiendaInicial y
+    // reemplaza a la pantalla de elección inicial.
+
+    /// <summary>
+    /// Se tomó la clase del arranque: las otras de esa tienda pasan a costar.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No se retiran.</b> Es la regla entera de por qué la elección se
+    /// fusionó con la tienda: comprar una cosa no puede hacer desaparecer a las
+    /// otras. La oferta sigue en la pantalla, con su precio, y el jugador decide
+    /// si además la paga con el oro inicial que acaba de entrar.</para>
+    ///
+    /// <para>Solo tiene efecto en la tienda del arranque: es la única que marca
+    /// ofertas gratis. <b>La tienda no regala nada más en toda la corrida.</b></para>
+    /// </remarks>
+    public void ConsumeFree()
+    {
+        for (int i = 0; i < _stock.Count; i++)
+        {
+            if (_stock[i].Free)
+                _stock[i] = _stock[i] with { Free = false };
+        }
+    }
+
     // =========================================================================
     //  Paso 1 — la categoría
     // =========================================================================
@@ -203,23 +339,16 @@ public sealed class Shop
     /// desaparecerían, y agregar un perk nuevo cambiaría en silencio la
     /// probabilidad de todas las demás categorías.</para>
     ///
-    /// <para>⚠ <b>Cuando no quedan clases por reclutar, su peso se reparte solo
-    /// entre Bronce y Plata.</b> Volcarlo a Oro y Planos haría que el late game
-    /// vomite rarezas justo cuando el jugador ya tiene oro de sobra, y la rareza
-    /// de los habilitadores de build tiene que ser estable toda la corrida.</para>
+    /// <para>⚠ <b>El peso de clase ya no se apaga ni se reparte.</b> Antes, con
+    /// el roster completo, la categoría se quedaba sin candidatas y su peso se
+    /// volcaba a Bronce y Plata. Hoy esa ranura tiene siempre algo que ofrecer:
+    /// reclutar si la clase falta, subirla si está, bloqueada si llegó al tope.
+    /// Es la misma razón por la que no existe una categoría «nivel» aparte.</para>
     /// </remarks>
     private static Categoria? SortearCategoria(
-        int oleada, IReadOnlyList<DefenderClass> clases, ShopData cfg,
+        int oleada, ShopData cfg,
         List<Categoria> descartadas, int oroPuestos, int planosPuestos, Rng rng)
     {
-        bool quedanClases = clases.Count < ChoiceBuilder.All.Length;
-
-        // El peso de clase, repartido entre Bronce y Plata cuando ya no queda
-        // ninguna por reclutar. La división entera puede perder un punto y no
-        // importa: los pesos son relativos, no porcentajes.
-        int aBronce = quedanClases ? 0 : cfg.ClassWeight / 2;
-        int aPlata = quedanClases ? 0 : cfg.ClassWeight - aBronce;
-
         // ⚠ Los mínimos por oleada existen porque un Oro en la oleada 3 es
         // económicamente imposible y el jugador todavía no tiene con qué armar una
         // build alrededor. Coinciden con el primer jefe (oleada 12): es cuando el
@@ -230,9 +359,9 @@ public sealed class Shop
 
         var pesos = new (Categoria Cat, int Peso)[]
         {
-            (Categoria.Clase, quedanClases ? cfg.ClassWeight : 0),
-            (Categoria.Bronce, cfg.BronzeWeight + aBronce + (hayPlata ? 0 : aPlata)),
-            (Categoria.Plata, hayPlata ? cfg.SilverWeight + aPlata : 0),
+            (Categoria.Clase, cfg.ClassWeight),
+            (Categoria.Bronce, cfg.BronzeWeight + (hayPlata ? 0 : cfg.SilverWeight)),
+            (Categoria.Plata, hayPlata ? cfg.SilverWeight : 0),
             (Categoria.Gold, hayOro ? cfg.GoldWeight : 0),
             (Categoria.Blueprint, hayPlano ? cfg.BlueprintWeight : 0),
             (Categoria.Arma, cfg.WeaponWeight),
@@ -274,7 +403,7 @@ public sealed class Shop
         Backpack mochila, IReadOnlySet<string> planosConocidos, Rng rng, BalanceData datos)
         => cat switch
         {
-            Categoria.Clase => ArmarClase(oleada, clases, rng, datos),
+            Categoria.Clase => ArmarClase(oleada, roster, rng, datos),
             Categoria.Bronce => ArmarPerk(PerkTier.Bronze, oleada, roster, planosConocidos, mochila, rng, datos),
             Categoria.Plata => ArmarPerk(PerkTier.Silver, oleada, roster, planosConocidos, mochila, rng, datos),
             Categoria.Gold => ArmarPerk(PerkTier.Gold, oleada, roster, planosConocidos, mochila, rng, datos),
@@ -282,17 +411,40 @@ public sealed class Shop
             _ => ArmarArma(oleada, clases, mochila, rng, datos),
         };
 
-    /// <summary>Recluta una clase que todavía no esté en el roster.</summary>
+    /// <summary>
+    /// La ranura de clase: <b>reclutarla si no la tenés, subirla si la tenés</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es UNA categoría con dos caras, no dos categorías.</b> Lo que
+    /// rota es la <b>clase</b>; qué te ofrece de ella lo decide tu roster en el
+    /// momento de armar la tienda:</para>
+    ///
+    /// <list type="bullet">
+    /// <item>no está en el roster → <c>ShopKind.Class</c>, el precio de reclutar;</item>
+    /// <item>está y puede subir → <c>ShopKind.Level</c>, <c>300 × nivelDestino²</c>;</item>
+    /// <item>está y llegó al tope → <c>ShopKind.Level</c> igual, y la ranura
+    /// aparece <b>bloqueada</b>. No se retira: el jugador tiene que poder ver que
+    /// esa clase ya no tiene adónde subir, que es información de su roster, no un
+    /// hueco.</item>
+    /// </list>
+    ///
+    /// <para>El bloqueado no se deriva de un campo guardado sino del roster de
+    /// ahora: si el jugador sube esa clase desde la mochila con la tienda abierta,
+    /// la ranura se bloquea sola. Un <c>bool</c> en la oferta se habría quedado
+    /// viejo justo en ese caso.</para>
+    ///
+    /// <para>Regla 3: nada repetido dentro de la misma tienda. Se mira contra las
+    /// <b>dos</b> caras, o la misma clase podría salir como reclutar y como nivel
+    /// en la misma pantalla.</para>
+    /// </remarks>
     private ShopOffer? ArmarClase(
-        int oleada, IReadOnlyList<DefenderClass> clases, Rng rng, BalanceData datos)
+        int oleada, Roster roster, Rng rng, BalanceData datos)
     {
         var candidatas = new List<DefenderClass>();
 
         foreach (var c in ChoiceBuilder.All)
         {
-            // Regla 4: nada imposible de usar. Una clase ya reclutada es una carta
-            // muerta, y regla 3: nada repetido dentro de la misma tienda.
-            if (clases.Contains(c) || YaOfrecida(ShopKind.Class, (int)c))
+            if (YaOfrecida(ShopKind.Class, (int)c) || YaOfrecida(ShopKind.Level, (int)c))
                 continue;
 
             candidatas.Add(c);
@@ -302,11 +454,26 @@ public sealed class Shop
             return null;
 
         var elegida = candidatas[rng.Index(candidatas.Count)];
+        var ficha = roster.Find(elegida);
 
+        if (ficha is null)
+        {
+            return new ShopOffer(
+                ShopKind.Class,
+                (int)elegida,
+                datos.Curves.Shop.ClassRecruitPrice(oleada, datos.StatsOf(elegida).Cost),
+                false);
+        }
+
+        // ⚠ El precio se congela con el nivel de AHORA. Si el jugador sube esa
+        // clase desde la mochila mientras la tienda está abierta, la oferta queda
+        // vieja: Run.Buy la rechaza comparando el nivel y no cobra nada.
+        // Recalcularlo al apretar lo ataría al momento del click, y la tienda no
+        // tiene límite de tiempo.
         return new ShopOffer(
-            ShopKind.Class,
+            ShopKind.Level,
             (int)elegida,
-            datos.Curves.Shop.ClassRecruitPrice(oleada, datos.StatsOf(elegida).Cost),
+            datos.Curves.Economy.LevelUpPrice(ficha.Level + 1),
             false);
     }
 

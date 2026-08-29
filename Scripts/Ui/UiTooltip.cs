@@ -80,9 +80,24 @@ public static class UiTooltip
 
         const int Tamano = 14;
         const float Pad = 10f;
+        const float Renglon = 19f;
 
-        float ancho = UiStyle.Width(_texto, Tamano) + (Pad * 2f);
-        float alto = Tamano + (Pad * 1.4f);
+        // ⚠ MULTILÍNEA, partiendo por el salto de línea.
+        //
+        // Antes era una sola línea, y alcanzaba mientras el cartel explicara un
+        // icono —«daño», «cadencia»—. No alcanza para lo que trae encima un
+        // bicho: ahí el cartel es una lista de dos o tres cosas distintas, y en
+        // un renglón único quedaba una tira de 600 px que se sale de la ventana
+        // y que además hay que leer buscando los separadores.
+        string[] lineas = _texto.Split('\n');
+
+        float anchoTexto = 0f;
+
+        foreach (string linea in lineas)
+            anchoTexto = Mathf.Max(anchoTexto, UiStyle.Width(linea, Tamano));
+
+        float ancho = anchoTexto + (Pad * 2f);
+        float alto = (lineas.Length * Renglon) + (Pad * 0.9f);
 
         float x = _ancla.Position.X + (_ancla.Size.X / 2f) - (ancho / 2f);
         float y = _ancla.Position.Y - alto - 6f;
@@ -92,12 +107,29 @@ public static class UiTooltip
 
         x = Mathf.Clamp(x, 4f, Canvas.CanvasWidth - ancho - 4f);
 
+        // Y también contra el borde de abajo: un cartel de cuatro renglones
+        // colgado de algo que está en la última fila se sale por abajo, que es
+        // donde el jugador no puede ni arrastrar la ventana para verlo.
+        y = Mathf.Clamp(y, 4f, Canvas.CanvasHeight - alto - 4f);
+
         var caja = new Rect2(x, y, ancho, alto);
 
         ci.DrawRect(caja, Palette.BackgroundMain.Alpha(0.97f));
         ci.DrawRect(caja, Palette.BorderLight, filled: false, width: 1.5f);
         ci.Corners(caja, Palette.BorderLight.Alpha(0.9f), 1.5f);
 
-        ci.Label(caja, _texto, Tamano, Palette.TextPrimary, HorizontalAlignment.Center);
+        // Una línea sigue yendo centrada; varias van a la izquierda, porque una
+        // lista centrada no tiene margen contra el que alinear la vista.
+        var alineacion = lineas.Length == 1
+            ? HorizontalAlignment.Center
+            : HorizontalAlignment.Left;
+
+        for (int i = 0; i < lineas.Length; i++)
+        {
+            ci.Label(
+                new Rect2(caja.Position.X + Pad, caja.Position.Y + (Pad * 0.45f) + (i * Renglon),
+                    caja.Size.X - (Pad * 2f), Renglon),
+                lineas[i], Tamano, Palette.TextPrimary, alineacion);
+        }
     }
 }

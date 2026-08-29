@@ -891,7 +891,7 @@ public partial class Game : Node2D
     }
 
     /// <summary>Los cuatro sufijos de dirección, en el orden de <see cref="Ruta.Direction"/>.</summary>
-    private static readonly string[] Direcciones = ["norte", "este", "oeste", "sur"];
+    private static readonly string[] Direcciones = ["norte", "este", "sur", "oeste"];
 
     /// <summary>
     /// Dibuja un defensor: cuerpo, cabeza y arma, en el tier que le da su nivel.
@@ -919,9 +919,9 @@ public partial class Game : Node2D
         if (apariencia is null || apariencia.Body.Length == 0)
             return false;
 
-        // La orientación sale de DONDE SE VA A PARAR, no de dónde está: mientras
-        // se arrastra, el muñeco ya mira el camino de su destino.
-        string direccion = Direcciones[MirandoHacia(donde)];
+        // Mira a lo que le está pegando. Mientras se arrastra no tiene objetivo
+        // —el fantasma todavía no dispara—, así que sale de frente.
+        string direccion = Direcciones[MirandoHacia(d, donde)];
 
         var centro = new Vector2(
             (donde.X + 0.5f) * celda,
@@ -952,136 +952,58 @@ public partial class Game : Node2D
         return true;
     }
 
-    /// <summary>
-    /// Las cuatro vecinas, en el orden en que ganan un empate.
-    /// </summary>
+    /// <summary>Norte, este, sur y oeste como índices de <see cref="Direcciones"/>.</summary>
     /// <remarks>
-    /// ⚠ <b>El sur va primero a propósito.</b> Con camino arriba y abajo, las dos
-    /// direcciones son igual de correctas y hay que elegir una: gana la que
-    /// muestra la cara del muñeco. Es la misma que la de reserva, así que un
-    /// defensor nunca cambia de postura por un detalle del layout que el jugador
-    /// no ve.
+    /// Es el <c>eHeading</c> de AO corrido a base cero: NORTH=1, EAST=2,
+    /// SOUTH=3, WEST=4.
     /// </remarks>
-    private static readonly (int Dx, int Dy, int Direction)[] Vecinas =
-    [
-        (0, 1, 3),    // sur
-        (1, 0, 1),    // este
-        (-1, 0, 2),   // oeste
-        (0, -1, 0),   // norte
-    ];
+    private const int Norte = 0;
+    private const int Este = 1;
+    private const int Sur = 2;
+    private const int Oeste = 3;
 
     /// <summary>
-    /// La orientación cacheada por celda, y el mapa del que salió.
+    /// Hacia dónde mira un defensor: <b>al enemigo al que le está pegando</b>.
     /// </summary>
     /// <remarks>
-    /// La ruta no cambia durante una corrida, así que la orientación de una celda
-    /// tampoco: se calcula una vez y se guarda. El mapa se guarda al lado para
-    /// tirar el caché cuando arranca otra corrida — sin eso, la segunda corrida
-    /// orientaría a sus defensores con el camino de la primera.
-    /// </remarks>
-    private readonly System.Collections.Generic.Dictionary<Cell, int> _miradas = [];
-
-    private Map? _mapaDeLasMiradas;
-
-    /// <summary>
-    /// Hacia dónde mira un defensor: <b>al camino</b>.
-    /// </summary>
-    /// <remarks>
-    /// <para>⚠ <b>Mira al camino, no al enemigo.</b> Antes seguía al bicho vivo
-    /// más cercano, y eso hacía que una fila de defensores girara en bloque
-    /// mientras pasaba la oleada; peor, entre oleadas —sin enemigos— todos caían
-    /// al sur de golpe. Orientar al camino da una postura que <b>no cambia
-    /// nunca</b>, que es lo que hace que el tablero se lea como una defensa
-    /// plantada.</para>
+    /// <para>⚠ <b>Esto reemplazó a «mirar al camino».</b> La versión anterior
+    /// orientaba el muñeco hacia la celda de ruta más cercana y no cambiaba
+    /// nunca, porque una fila de defensores girando en bloque se veía mal. El
+    /// problema es que una postura fija no dice <b>nada</b>: con dos bichos a
+    /// tiro y un targeting configurable, ver a quién le apunta cada uno es la
+    /// única forma de leer en el tablero qué está haciendo el modo elegido.</para>
     ///
-    /// <para>Las tres reglas, en orden:</para>
+    /// <para>Quién es el objetivo lo decide <c>ElegirObjetivo</c> adentro del
+    /// tick y queda en <see cref="Defender.AimedAt"/>. <b>No se recalcula
+    /// acá</b>: repetir los cuatro modos de targeting en el renderer es
+    /// garantizar que las dos copias se separen en la primera corrección.</para>
     ///
-    /// <list type="number">
-    /// <item>Una vecina con camino: mira ahí. Empate, gana el sur.</item>
-    /// <item>Sin camino pegado: mira hacia la celda de ruta más cercana, por el
-    /// eje que más se recorre.</item>
-    /// <item>Nada: <b>sur</b> —el heading 3 de AO—.</item>
-    /// </list>
+    /// <para>Sin nadie a tiro —entre oleadas, o un defensor en una esquina
+    /// muerta— mira al <b>sur</b>, que es la postura de frente y la misma que
+    /// usan los retratos y las previsualizaciones.</para>
     ///
-    /// <para>El caso «rodeado por camino» —las cuatro vecinas son ruta— cae
-    /// también en el sur: no queda ningún lado libre al que mirar, así que la
-    /// regla del lado sin camino no tiene con qué cumplirse.</para>
+    /// <para>El diagonal no existe en este arte, así que gana el eje que más se
+    /// recorre; empatados, el vertical, que es el que más se distingue en un
+    /// top-down.</para>
     ///
     /// <para>Es render puro: la simulación no consulta esto y el tick no cambia.</para>
     /// </remarks>
-    private int MirandoHacia(Cell celda)
+    private static int MirandoHacia(Defender d, Cell donde)
     {
-        if (!ReferenceEquals(_mapaDeLasMiradas, Run.Map))
-        {
-            _miradas.Clear();
-            _mapaDeLasMiradas = Run.Map;
-        }
+        if (d.AimedAt is not { } objetivo)
+            return Sur;
 
-        if (_miradas.TryGetValue(celda, out int guardada))
-            return guardada;
+        int dx = objetivo.X - donde.X;
+        int dy = objetivo.Y - donde.Y;
 
-        int direccion = CalcularMirada(celda);
-        _miradas[celda] = direccion;
+        if (System.Math.Abs(dx) > System.Math.Abs(dy))
+            return dx > 0 ? Este : Oeste;
 
-        return direccion;
-    }
+        if (dy != 0)
+            return dy > 0 ? Sur : Norte;
 
-    private int CalcularMirada(Cell celda)
-    {
-        var mapa = Run.Map;
-        int conCamino = 0;
-        int pegada = -1;
-
-        foreach (var (dx, dy, dir) in Vecinas)
-        {
-            if (!mapa.IsRoute(new Cell(celda.X + dx, celda.Y + dy)))
-                continue;
-
-            conCamino++;
-
-            if (pegada < 0)
-                pegada = dir;
-        }
-
-        // Rodeado: no hay lado sin camino al que mirar, así que sur.
-        if (conCamino == 4)
-            return 3;
-
-        if (pegada >= 0)
-            return pegada;
-
-        // Sin camino pegado —una colocable que quedó a dos celdas del borde de la
-        // ruta— igual tiene que mirar al camino: gana la celda de ruta más
-        // cercana. Sin esto, un defensor con el camino justo arriba miraría al sur
-        // solo porque no lo tiene tocando.
-        long mejor = long.MaxValue;
-        int elegida = 3;
-
-        for (int y = 0; y < mapa.Height; y++)
-        {
-            for (int x = 0; x < mapa.Width; x++)
-            {
-                if (!mapa.IsRoute(new Cell(x, y)))
-                    continue;
-
-                long dx = x - celda.X;
-                long dy = y - celda.Y;
-                long distancia = (dx * dx) + (dy * dy);
-
-                if (distancia >= mejor)
-                    continue;
-
-                mejor = distancia;
-
-                // Gana el eje que más se recorre; empatados, el vertical, que es
-                // el que más se distingue en un top-down.
-                elegida = System.Math.Abs(dx) > System.Math.Abs(dy)
-                    ? (dx > 0 ? 1 : 2)
-                    : (dy > 0 ? 3 : 0);
-            }
-        }
-
-        return elegida;
+        // Justo encima: no hay a dónde girar, así que de frente.
+        return Sur;
     }
 
     /// <summary>

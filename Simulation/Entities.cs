@@ -464,6 +464,25 @@ public sealed class Defender
     public TargetingMode Targeting { get; set; } = TargetingMode.First;
 
     /// <summary>
+    /// La celda del último enemigo al que le apuntó. <b>Solo para el render.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La simulación NO lee esto.</b> Se escribe cuando el defensor
+    /// elige objetivo y no entra en ninguna cuenta del tick, así que no toca el
+    /// determinismo — lo confirma <c>--determinismo</c>, que da los mismos
+    /// números con y sin esto.</para>
+    ///
+    /// <para>Existe porque el defensor tiene que <b>mirar a lo que le está
+    /// pegando</b>, y quién es eso lo decide <c>ElegirObjetivo</c> adentro del
+    /// tick. Recalcularlo en el renderer sería duplicar los cuatro modos de
+    /// targeting y que las dos copias se separen en la primera corrección.</para>
+    ///
+    /// <para><c>null</c> = no tiene a nadie a tiro. Ahí el muñeco mira al sur, el
+    /// heading 3 de AO, que es la postura de frente.</para>
+    /// </remarks>
+    public Cell? AimedAt { get; set; }
+
+    /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la
     /// devolución al venderlo.
     /// </summary>

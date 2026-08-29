@@ -391,13 +391,41 @@ public sealed class WavePreview
     // quien lo muestre lo pasa por `Loc.Points`.
 
     /// <summary>Vida base, en centésimas de punto.</summary>
+    /// <remarks>
+    /// ⚠ <b>En centésimas, no en los puntos del bestiario.</b> Acá se llenaba con
+    /// <c>EnemyData.Hp</c> crudo —que está en puntos, porque los JSON de datos se
+    /// escriben en puntos— y la tarjeta lo pasaba por <c>Loc.Points</c>, que
+    /// divide por cien: una rata de 60 de vida mostraba <b>0</b>. La ventana de
+    /// «lo que viene» decía vida cero y daño cero para todos los bichos.
+    /// </remarks>
     public int Hp { get; set; }
 
-    /// <summary>Daño máximo por golpe, en centésimas de punto.</summary>
-    public int MaxDamage { get; set; }
+    /// <summary>
+    /// Lo que pega de verdad por golpe, en centésimas de punto.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Es el <b>promedio</b> de min y max, no el máximo, y sale de la
+    /// misma cuenta que usa el spawn: el enemigo no tira daño por golpe —una
+    /// tirada por golpe gastaría un número del RNG por cada ataque y haría que
+    /// agregar un defensor corriera la secuencia de la corrida entera—, así que
+    /// pega siempre este número.</para>
+    ///
+    /// <para>Antes decía <c>MaxDamage</c> y mostraba el máximo del bestiario, que
+    /// es un número que el jugador no ve nunca en el tablero.</para>
+    /// </remarks>
+    public int Damage { get; set; }
 
     /// <summary>Cuánto camina por tick, en milésimas de celda.</summary>
     public int Speed { get; set; }
+
+    /// <summary>Cuánto oro suelta cada uno al morir, en oro entero.</summary>
+    /// <remarks>
+    /// Va en la tarjeta porque es la otra mitad de la decisión: una oleada de
+    /// treinta bichos baratos y una de tres caros pueden valer parecido, y saber
+    /// cuál es cuál <b>antes</b> de gastar es lo que hace que la preparación sea
+    /// una decisión y no una apuesta.
+    /// </remarks>
+    public int Gold { get; set; }
 
     /// <summary>Cuántos de esos vienen buffeados. Tiene que verse.</summary>
     public int WithPerk { get; set; }
@@ -407,6 +435,18 @@ public sealed class WavePreview
 
     /// <summary>Cuántos traen más velocidad.</summary>
     public int WithSpeed { get; set; }
+
+    /// <summary>El mayor porcentaje de vida extra de este tipo. 0 = ninguno.</summary>
+    /// <remarks>
+    /// Los perks de NPC se apilan por pasos, así que dos lobos buffeados no
+    /// traen lo mismo. «2 con más vida» no dice si es un +20% o un +80%, y son
+    /// dos oleadas distintas: el tope es el número que decide si alcanza el daño
+    /// que ya está puesto en el tablero.
+    /// </remarks>
+    public int MaxHealthPerk { get; set; }
+
+    /// <summary>El mayor porcentaje de velocidad extra de este tipo. 0 = ninguno.</summary>
+    public int MaxSpeedPerk { get; set; }
 
     /// <summary>Cuántos son impulsivos: entran antes de lo que les toca.</summary>
     public int Impulsive { get; set; }

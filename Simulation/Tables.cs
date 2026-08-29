@@ -179,6 +179,7 @@ public sealed record ShopData(
     int GoldWeight,
     int BlueprintWeight,
     int WeaponWeight,
+    int MaxLevelOnSale,
     int MaxGoldOffers,
     int MaxBlueprintOffers,
     int MinUsableOffers,
@@ -233,17 +234,34 @@ public sealed record ShopData(
 /// ⚠ <b>El jefe ofrece varios y el jugador elige uno</b> (Drops_v2). Con un solo
 /// Oro al azar por jefe y ocho jefes por corrida, ver los <b>dos</b> componentes
 /// de una receta concreta era cuestión de suerte y los Únicos eran una lotería.
-/// Ofrecer tres y dejar elegir da agencia <b>sin regalar poder</b>: sigue saliendo
-/// un solo Oro por jefe.
+/// Ofrecer varios y dejar elegir da agencia <b>sin regalar poder</b>.
+///
+/// ⚠ <b>Desde <see cref="BossGoldLateArea"/> el jugador se lleva DOS</b>, y ahí
+/// sí sube el poder total de la corrida. Es a propósito: en el área 5 la mochila
+/// ya está llena de Oro que no se puede equipar —la ranura de comportamiento es
+/// una— y el jefe entregaba una carta más para una pila que no entraba. Dos
+/// permiten cerrar una receta en un solo jefe.
 /// </remarks>
 public sealed record DropData(
     int CommonChance,
     int BronzeChance,
     int BossGoldOptions,
+    int BossGoldLateArea,
+    int BossGoldOptionsLate,
+    int BossGoldPicksLate,
     int SynergyWeight,
     int GoldPoolSize,
     int GoldPoolPerNewClass,
-    bool FinalBossDrops);
+    bool FinalBossDrops)
+{
+    /// <summary>Cuántos Oro se le ofrecen al jefe de este área.</summary>
+    public int OptionsForArea(int area)
+        => area >= BossGoldLateArea ? BossGoldOptionsLate : BossGoldOptions;
+
+    /// <summary>Cuántos de esos se puede quedar el jugador.</summary>
+    public int PicksForArea(int area)
+        => area >= BossGoldLateArea ? BossGoldPicksLate : 1;
+}
 
 /// <summary>
 /// Cuántos perks de un tier hacen uno del tier de arriba. Ver
@@ -1430,6 +1448,7 @@ public static class TableReader
                 Int(tienda, "goldWeight", archivo),
                 Int(tienda, "blueprintWeight", archivo),
                 Int(tienda, "weaponWeight", archivo),
+                Int(tienda, "maxLevelOnSale", archivo),
                 Int(tienda, "maxGoldOffers", archivo),
                 Int(tienda, "maxBlueprintOffers", archivo),
                 Int(tienda, "minUsableOffers", archivo),
@@ -1448,6 +1467,9 @@ public static class TableReader
                 Int(drops, "commonChance", archivo),
                 Int(drops, "bronzeChance", archivo),
                 Int(drops, "bossGoldOptions", archivo),
+                Int(drops, "bossGoldLateArea", archivo),
+                Int(drops, "bossGoldOptionsLate", archivo),
+                Int(drops, "bossGoldPicksLate", archivo),
                 Int(drops, "synergyWeight", archivo),
                 Int(drops, "goldPoolSize", archivo),
                 Int(drops, "goldPoolPerNewClass", archivo),
@@ -1557,6 +1579,17 @@ public static class TableReader
         if (curvas.Drops.BossGoldOptions < 1)
             throw new InvalidBalanceDataException($"{archivo}: «bossGoldOptions» tiene que ser 1 o más");
 
+        // ⚠ Llevarse tantos como se ofrecen no es una elección, es un reparto: la
+        // pantalla del jefe pediría elegir y no habría nada que decidir.
+        if (curvas.Drops.BossGoldPicksLate >= curvas.Drops.BossGoldOptionsLate)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «bossGoldPicksLate» tiene que ser menor que «bossGoldOptionsLate»");
+        }
+
+        if (curvas.Drops.BossGoldPicksLate < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «bossGoldPicksLate» tiene que ser 1 o más");
+
         if (curvas.Drops.GoldPoolSize < 1)
             throw new InvalidBalanceDataException($"{archivo}: «goldPoolSize» tiene que ser 1 o más");
 
@@ -1619,6 +1652,12 @@ public static class TableReader
         // corridas — que es todo lo que un ranking global mide.
         if (curvas.Shop.MaxGoldOffers < 0 || curvas.Shop.MaxBlueprintOffers < 0)
             throw new InvalidBalanceDataException($"{archivo}: los topes de «shop» no pueden ser negativos");
+
+        // ⚠ Con el tope en 0 la ranura de clase saldría siempre bloqueada para
+        // todo lo que ya esté en el roster, y eso saca de la corrida la mitad de
+        // lo que era la pantalla de elección: «ancho o profundo» sin el profundo.
+        if (curvas.Shop.MaxLevelOnSale < 1)
+            throw new InvalidBalanceDataException($"{archivo}: «shop.maxLevelOnSale» tiene que ser 1 o más");
 
         if (curvas.Shop.MinUsableOffers > curvas.Shop.Slots)
         {

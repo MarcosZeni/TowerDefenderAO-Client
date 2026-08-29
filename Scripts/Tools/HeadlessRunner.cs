@@ -957,8 +957,22 @@ public static class HeadlessRunner
                 bool mejoro = !puso && !fusiono && avanzado
                               && MejorarSiPuede(partida, log, politica);
 
-                bool compro = !puso && !fusiono && !mejoro && avanzado
-                              && ComprarLoQuePueda(partida, log, politica);
+                // ⚠ EL PISO TAMBIÉN COMPRA LO GRATIS, y antes no compraba nada.
+                //
+                // «No usar la tienda» dejó de ser una política jugable el día que
+                // la pantalla de elección se fusionó con la tienda: la primera
+                // clase de la corrida sale de ahí, así que un bot que no compra
+                // arranca con el roster vacío y no lo llena nunca. Medido: las
+                // doce seeds del piso muertas en la oleada 7, todas iguales.
+                //
+                // Lo que el piso sigue sin hacer es GASTAR: toma el cupo gratis y
+                // nada más. Eso conserva lo que la cota de abajo mide —un jugador
+                // que pone fichas y no administra oro— sin pedirle que adivine una
+                // mecánica que el juego ya no tiene.
+                bool compro = !puso && !fusiono && !mejoro
+                              && (avanzado
+                                  ? ComprarLoQuePueda(partida, log, politica)
+                                  : ComprarSoloLoGratis(partida, log));
 
                 // Con la mochila trabada la compra rebota: hacer un lugar es lo que
                 // deja que el oro siga teniendo adónde ir.
@@ -1080,9 +1094,9 @@ public static class HeadlessRunner
     /// Resuelve la elección: elige la mejor que se pueda pagar, o la saltea.
     /// </summary>
     /// <remarks>
-    /// ⚠ Saltear no es un caso raro. Desde que la elección se cobra, un bot pobre
-    /// se queda sin ninguna opción alcanzable, y elegir igual la haría rebotar sin
-    /// cerrar la pantalla: con el reloj congelado, la corrida no terminaría nunca.
+    /// ⚠ Lo único que abre esto es <b>el Oro del jefe</b>. La pantalla de elección
+    /// —contratar o subir de nivel— se fusionó con la tienda, así que esas dos
+    /// decisiones pasan por <c>ComprarLoQuePueda</c> como cualquier otra oferta.
     /// </remarks>
     private static void Resolve(Run partida, ActionLog log, Policy politica)
     {
@@ -1093,71 +1107,37 @@ public static class HeadlessRunner
             : new PlayerAction(partida.ActionTick, ActionType.SkipChoice, 0, 0, 0));
     }
 
+    /// <summary>
+    /// Cuál de los Oro que ofrece el jefe se lleva. <c>-1</c> = ninguno sirve.
+    /// </summary>
+    /// <remarks>
+    /// Piso y normal se quedan con el primero: no intentan valuar comportamientos,
+    /// y es a propósito, porque elegir bien los Oro mide el <b>techo</b> del juego
+    /// y esas dos políticas miden otra cosa.
+    ///
+    /// El techo sí compone: prefiere el Oro que <b>completa</b> una receta que ya
+    /// tiene a medias. Es la mitad de lo que hace que los Únicos sean un objetivo
+    /// de build y no una lotería —la otra mitad es el peso de sinergia del sorteo,
+    /// que ya vive en la simulación—.
+    /// </remarks>
     private static int MejorOpcion(Run partida, Policy politica)
     {
         var opciones = partida.OpenChoices;
-        int mejor = 0;
-        int mejorPuntaje = int.MinValue;
-        int mejorPerk = -1;
+        int mejor = -1;
 
         for (int i = 0; i < opciones.Length; i++)
         {
-            // ⚠ La oferta de Oro del jefe también entra por acá (Drops_v2).
-            //
-            // Piso y normal se quedan con el primero: no intentan valuar
-            // comportamientos, y es a propósito, porque elegir bien los Oro mide
-            // el techo del juego y esas dos políticas miden otra cosa.
-            //
-            // El techo sí compone: prefiere el Oro que COMPLETA una receta que ya
-            // tiene a medias. Es la mitad de lo que hace que los Únicos sean un
-            // objetivo de build y no una lotería —la otra mitad es el peso ×3 del
-            // sorteo, que ya vive en la simulación—.
-            if (opciones[i].Kind == ChoiceType.Perk)
-            {
-                if (mejorPerk < 0)
-                    mejorPerk = i;
-
-                if (politica == Policy.Techo && CompletaUnPlano(partida, opciones[i].PerkId))
-                    mejorPerk = i;
-
-                continue;
-            }
-
-            // ⚠ Lo que no se puede pagar no se elige. Desde que la elección se
-            // cobra, insistir con una opción impagable la hace rebotar SIN cerrar
-            // la pantalla, y el bot la reintentaría para siempre con el reloj
-            // congelado: la corrida no terminaría nunca.
-            if (opciones[i].Price > partida.Gold)
+            if (opciones[i].Kind != ChoiceType.Perk)
                 continue;
 
-            var stats = DataLoader.Current.StatsOf(opciones[i].DefenderClass);
-
-            // Daño por cien ticks, para que la cadencia pese tanto como el golpe.
-            int puntaje = stats.Damage * 100 / System.Math.Max(1, stats.CadenceTicks);
-
-            // El alcance multiplica: un defensor con más alcance dispara a más
-            // enemigos durante más tiempo.
-            puntaje = puntaje * (100 + (stats.RangeCells * 15)) / 100;
-
-            if (opciones[i].Kind == ChoiceType.LevelUp)
-                puntaje = puntaje * 130 / 100;
-
-            if (puntaje > mejorPuntaje)
-            {
-                mejorPuntaje = puntaje;
+            if (mejor < 0)
                 mejor = i;
-            }
+
+            if (politica == Policy.Techo && CompletaUnPlano(partida, opciones[i].PerkId))
+                mejor = i;
         }
 
-        // Una pantalla trae SOLO ofertas de Oro o SOLO clases, nunca mezcladas,
-        // así que si hubo alguna de perk esa es la respuesta.
-        //
-        // ⚠ -1 quiere decir «ninguna se puede pagar»: quien llama tiene que
-        // SALTEAR la elección, no elegir igual.
-        if (mejorPerk >= 0)
-            return mejorPerk;
-
-        return mejorPuntaje == int.MinValue ? -1 : mejor;
+        return mejor;
     }
 
     /// <summary>
@@ -1854,6 +1834,51 @@ public static class HeadlessRunner
     /// eso se puede agregar a la política sin correr la secuencia y sin invalidar
     /// nada de lo que la revalidación reproduce.</para>
     /// </remarks>
+    /// <summary>
+    /// La compra del piso: solo lo que no cuesta oro.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Sin esto el piso no tiene forma de conseguir su primera clase, porque la
+    /// pantalla de elección que se la regalaba ya no existe. No es «el piso ahora
+    /// compra»: es que tomar el cupo gratis dejó de ser una compra y pasó a ser el
+    /// arranque de la corrida.
+    /// </remarks>
+    private static bool ComprarSoloLoGratis(Run partida, ActionLog log)
+    {
+        var stock = partida.Shop.Stock;
+        bool mochilaLlena = partida.Backpack.Used >= DataLoader.Current.Curves.Defenders.BackpackSlots;
+
+        for (int i = 0; i < stock.Count; i++)
+        {
+            if (stock[i].Sold || !stock[i].Free)
+                continue;
+
+            // Las mismas guardas que la compra normal: una acción que rebota no
+            // marca la oferta como vendida, y el bucle de preparación —con el
+            // reloj congelado— la volvería a encolar para siempre.
+            if (stock[i].Kind is ShopKind.Perk or ShopKind.Weapon && mochilaLlena)
+                continue;
+
+            if (stock[i].Kind == ShopKind.Class && partida.Roster.Has((DefenderClass)stock[i].Id))
+                continue;
+
+            if (stock[i].Kind == ShopKind.Blueprint && partida.KnowsBlueprint(stock[i].Id))
+                continue;
+
+            if (stock[i].Kind == ShopKind.Level
+                && partida.Roster.Find((DefenderClass)stock[i].Id) is { } f
+                && f.Level >= DataLoader.Current.Curves.Shop.MaxLevelOnSale)
+            {
+                continue;
+            }
+
+            log.Add(new PlayerAction(partida.ActionTick, ActionType.Buy, i, 0, 0));
+            return true;
+        }
+
+        return false;
+    }
+
     private static bool ComprarLoQuePueda(Run partida, ActionLog log, Policy politica)
     {
         var stock = partida.Shop.Stock;
@@ -1875,7 +1900,12 @@ public static class HeadlessRunner
 
         for (int i = 0; i < stock.Count; i++)
         {
-            if (stock[i].Sold || stock[i].Price > partida.Gold)
+            // ⚠ Cost y NO Price. Con el cupo gratis, `Price` sigue siendo el
+            // precio real de la oferta y `Cost` es lo que sale hoy. Comparar
+            // contra Price descartaba la oferta gratis del arranque —el jugador
+            // arranca con cero oro— y el bot moría en la oleada 7 con el roster
+            // vacío, en las cinco seeds.
+            if (stock[i].Sold || stock[i].Cost > partida.Gold)
                 continue;
 
             // ⚠ Solo dos de las cuatro categorías necesitan lugar de mochila.
@@ -1906,6 +1936,16 @@ public static class HeadlessRunner
 
             if (stock[i].Kind == ShopKind.Class && partida.Roster.Has((DefenderClass)stock[i].Id))
                 continue;
+
+            // Un nivel que ya se compró desde la mochila: la oferta quedó vieja y
+            // la simulación la retira sin cobrar. Saltearla acá evita gastar una
+            // acción del log en algo que no hace nada.
+            if (stock[i].Kind == ShopKind.Level
+                && partida.Roster.Find((DefenderClass)stock[i].Id) is { } f
+                && f.Level >= DataLoader.Current.Curves.Shop.MaxLevelOnSale)
+            {
+                continue;
+            }
 
             // ⚠ Un plano cuyas DOS piezas faltan es oro tirado, y encima distorsiona
             // la medición: el bot compraba el 90% de los planos ofrecidos contra un
@@ -1948,6 +1988,14 @@ public static class HeadlessRunner
         // puerta para una clase nueva, y dejarla debajo de un perk de Plata
         // medía un jugador que se queda con dos clases toda la corrida.
         ShopKind.Class => 30,
+
+        // ⚠ Sin este caso, un ShopKind.Level caía en el `_ =>` de abajo y buscaba
+        // un PERK con el id de una CLASE: Perks.Get(3) por «Asesino». Subir de
+        // nivel es la mitad de lo que era la pantalla de elección —«ancho o
+        // profundo»— y vale como una clase nueva: abre un slot de perk y engorda
+        // todas las fichas de esa clase que ya estén puestas.
+        ShopKind.Level => 28,
+
         ShopKind.Weapon => 10,
         _ => DataLoader.Current.Perks.Get(oferta.Id).Tier switch
         {

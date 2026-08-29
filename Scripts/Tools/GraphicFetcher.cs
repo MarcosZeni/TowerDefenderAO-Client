@@ -1186,13 +1186,20 @@ public static class GraphicFetcher
     /// cuatro cuesta lo mismo en disco que traer una, y solo agrega tres entradas
     /// al índice.</para>
     ///
-    /// <para>Direcciones: 1 = norte, 2 = este, 3 = oeste, 4 = sur.</para>
+    /// <para>Direcciones: 1 = norte, 2 = este, 3 = sur, 4 = oeste. Es el
+    /// <c>eHeading</c> de AO, no un orden nuestro.</para>
     /// </remarks>
     private static int TraerCuatroDirecciones(
         JsonObject graficos, string prefijo, int[] grhPorDireccion,
         Dictionary<int, GrhEntry> indice, string origenBase)
     {
-        string[] nombresDireccion = ["norte", "este", "oeste", "sur"];
+        // ⚠ EL ORDEN ES EL eHEADING DE AO: NORTH=1, EAST=2, SOUTH=3, WEST=4
+        // (Constants.cs del server de Austral). Acá decía
+        // ["norte", "este", "oeste", "sur"] y las dos últimas estaban dadas
+        // vuelta, así que todo lo que el índice llamaba «.sur» era la banda
+        // del oeste: los muñecos de las previsualizaciones salían mirando a
+        // la izquierda.
+        string[] nombresDireccion = ["norte", "este", "sur", "oeste"];
         int traidos = 0;
 
         for (int d = 0; d < 4; d++)

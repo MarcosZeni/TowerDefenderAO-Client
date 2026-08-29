@@ -1,12 +1,26 @@
 namespace TowerOfArgentum.Simulation;
 
-/// <summary>Qué se está ofreciendo en la pantalla de elección.</summary>
+/// <summary>
+/// Qué se está ofreciendo en la pantalla de elección.
+/// </summary>
+/// <remarks>
+/// ⚠ <b>Solo queda <see cref="Perk"/>.</b> <c>Hire</c> y <c>LevelUp</c> abrían una
+/// pantalla de tres opciones donde se tomaba UNA y las otras dos desaparecían,
+/// pegada al lado de una tienda de cuatro donde solo se consumía la comprada. Dos
+/// reglas opuestas en la misma pantalla: para el jugador era una sola tienda, así
+/// que comprar un nivel y ver evaporarse otras dos ofertas se leía como un bug.
+/// Ahora son <c>ShopKind.Class</c> y <c>ShopKind.Level</c>.
+///
+/// Los dos valores <b>se conservan</b> y no se reciclan: son el formato de
+/// almacenamiento del log, y un log viejo que traiga un <c>Choose</c> apuntando a
+/// una de aquellas tiene que poder leerse sin que el número signifique otra cosa.
+/// </remarks>
 public enum ChoiceType
 {
-    /// <summary>Sumar una clase nueva al roster, en nivel 1.</summary>
+    /// <summary>⚠ Sin uso desde que la elección se fusionó con la tienda.</summary>
     Hire = 0,
 
-    /// <summary>Subir de nivel una que ya está: stats y <b>un slot más</b>.</summary>
+    /// <summary>⚠ Sin uso desde que la elección se fusionó con la tienda.</summary>
     LevelUp = 1,
 
     /// <summary>
@@ -47,12 +61,17 @@ public readonly record struct Choice(
     int Price = 0);
 
 /// <summary>
-/// Arma las 3 opciones de la pantalla de elección.
+/// El universo de clases del juego.
 /// </summary>
 /// <remarks>
-/// <para>Las clases <b>tocan al azar</b>: 1 de 3 al empezar, y después, cada
-/// <c>oleadasEntreElecciones</c> oleadas (<c>curvas.json</c>), elegir entre levelear
-/// una que ya se tiene o contratar otra.</para>
+/// <para>⚠ <b>Antes armaba la pantalla de elección</b> —tres opciones, se tomaba
+/// una, las otras dos desaparecían— y de eso ya no queda nada: contratar y subir
+/// de nivel son ofertas de la tienda (<c>ShopKind.Class</c> y
+/// <c>ShopKind.Level</c>). Lo único que sobrevivió es esta lista, que la usan la
+/// tienda, los drops y las pantallas.</para>
+///
+/// <para>Se conserva el nombre a propósito: está escrito en una docena de
+/// archivos y renombrarlo no gana una línea de código.</para>
 ///
 /// <para>⚠ <b>Las trabajadoras quedan afuera</b> —leñador, minero, pescador,
 /// herrero, carpintero, sastre—. Este juego es pelear, y ellas no pelean.</para>
@@ -65,155 +84,4 @@ public static class ChoiceBuilder
         DefenderClass.Mage, DefenderClass.Cleric, DefenderClass.Warrior, DefenderClass.Assassin, DefenderClass.Thief,
         DefenderClass.Bard, DefenderClass.Druid, DefenderClass.Paladin, DefenderClass.Hunter,
     ];
-
-    /// <summary>
-    /// Las 3 opciones del arranque: siempre contratar, porque el roster está
-    /// vacío.
-    /// </summary>
-    /// <remarks>
-    /// <para>⚠ <b>Al menos una de las tres es ofensiva, garantizado.</b> No es
-    /// una concesión: con el reparto libre, un arranque de clérigo + bardo +
-    /// druida es una corrida perdida en la oleada 1 sin que el jugador haya hecho
-    /// nada mal. Medido con el corredor headless: dos de diez seeds terminaban
-    /// así.</para>
-    ///
-    /// <para>Perder por una decisión propia es el juego; perder por el sorteo de
-    /// la pantalla inicial, antes de tocar nada, es un bug de diseño.</para>
-    /// </remarks>
-    public static Choice[] Initial(Rng rng, BalanceData datos)
-    {
-        var salida = new Choice[3];
-
-        // ⚠ Las ofensivas —las que no están marcadas «soporte» en clases.json—
-        // son las que pegan lo suficiente para sostener solas una defensa.
-        // Clérigo, bardo y druida pegan poco a propósito: su valor está en lo que
-        // le hacen al resto del equipo. Hasta que exista el sistema de soporte no
-        // tienen con qué compensar, pero incluso después van a seguir siendo malas
-        // SOLAS, que es la situación del arranque.
-        var ofensivas = datos.Classes.Offensive();
-
-        // La garantizada sale primero, para que el resto se sortee sin ella.
-        var garantizada = ofensivas[rng.Index(ofensivas.Length)];
-        salida[0] = new Choice(ChoiceType.Hire, garantizada, 1);
-
-        var pozo = new List<DefenderClass>(All);
-        pozo.Remove(garantizada);
-
-        for (int i = 1; i < 3; i++)
-        {
-            int j = rng.Index(pozo.Count);
-            salida[i] = new Choice(ChoiceType.Hire, pozo[j], 1);
-
-            // Se saca del pozo para que no salgan dos veces la misma clase: tres
-            // opciones donde dos son iguales es una elección de dos.
-            pozo.RemoveAt(j);
-        }
-
-        // Se mezclan para que la ofensiva no quede siempre en la primera
-        // posición: si estuviera fija, la elección se volvería un reflejo y la
-        // garantía sería visible como "la de arriba es la buena".
-        for (int i = salida.Length - 1; i > 0; i--)
-        {
-            int j = rng.Between(0, i + 1);
-            (salida[i], salida[j]) = (salida[j], salida[i]);
-        }
-
-        return salida;
-    }
-
-    /// <summary>
-    /// Las 3 opciones de una elección de mitad de corrida.
-    /// </summary>
-    /// <remarks>
-    /// <para>Se mezclan las dos cosas a propósito, y el jugador ve las dos en la
-    /// misma pantalla: esa es la decisión "ancho o profundo". Las dos dan
-    /// <b>+1 slot</b>, así que se diferencian en lo demás — contratar trae un rol
-    /// nuevo pero arranca en cero; levelear engorda algo que ya funciona.</para>
-    ///
-    /// <para>Una clase que ya llegó al nivel 6 no vuelve a ofrecerse para
-    /// levelear: del 7 en adelante ya no abre slots, así que sería una opción
-    /// visiblemente peor que las otras dos y elegir dejaría de tener sentido.</para>
-    ///
-    /// <para>⚠ <b>Contratar solo se ofrece hasta <c>freeClasses</c>.</b> Pasado
-    /// ese número la elección ofrece <b>únicamente subir de nivel</b>, y la única
-    /// puerta para una clase nueva es la tienda del mercado. El motivo es que
-    /// «ancho» era gratis y «profundo» también, así que la elección no tenía
-    /// costo de oportunidad real: contratar siempre agregaba algo que antes no
-    /// estaba. Con el ancho pago, el oro compite contra el tablero y contra los
-    /// niveles.</para>
-    ///
-    /// <para>El <c>2</c> de fábrica es el arranque garantizado: la primera clase
-    /// la regala la pantalla inicial y la segunda llega en la primera elección.
-    /// Con una sola, una corrida que arranca con clérigo o bardo no tiene con qué
-    /// defenderse y se pierde sin que el jugador haya hecho nada mal.</para>
-    ///
-    /// <para>⚠ <b>Pasadas las gratis, TODO se cobra</b>, con el descuento de
-    /// <c>choiceDiscountPercent</c> sobre lo que sale por el otro camino. Un nivel
-    /// regalado es el power-up más grande del juego sin perder nada: abre un slot
-    /// de perk, sube los stats de todas las fichas de esa clase que ya estén
-    /// puestas, y no cuesta una moneda. Cada tres oleadas, gratis, eso vaciaba de
-    /// sentido al sumidero de oro — comprar el nivel 4 sale 4.800 y la elección lo
-    /// regalaba.</para>
-    ///
-    /// <para>Y con las opciones pagas <b>vuelve a ofrecerse contratar</b>: si todo
-    /// cuesta, no hay razón para que la pantalla esconda la mitad de la decisión.
-    /// La diferencia con la tienda es que acá <b>no se elige qué sale</b>, y ese
-    /// es exactamente el precio del descuento.</para>
-    /// </remarks>
-    public static Choice[] Next(Roster roster, Rng rng, BalanceData datos, int oleada)
-    {
-        var candidatas = new List<Choice>();
-
-        // ⚠ El cupo gratis se mide con el roster de AHORA. Mientras entra una
-        // clase gratis la pantalla no cobra nada; en cuanto el roster llega al
-        // cupo, la siguiente elección ya viene con precio.
-        bool gratis = roster.Classes.Count < datos.Curves.RunCurve.FreeClasses;
-        int descuento = datos.Curves.RunCurve.ChoiceDiscountPercent;
-
-        foreach (var c in roster.Classes)
-        {
-            if (c.Level >= datos.Classes.PerkSlotsPerClass)
-                continue;
-
-            int precio = gratis
-                ? 0
-                : Ints.MultiplyPercent(
-                    datos.Curves.Economy.LevelUpPrice(c.Level + 1), descuento);
-
-            candidatas.Add(new Choice(ChoiceType.LevelUp, c.DefenderClass, c.Level + 1, -1, precio));
-        }
-
-        foreach (var clase in All)
-        {
-            if (roster.Has(clase))
-                continue;
-
-            int precio = gratis
-                ? 0
-                : Ints.MultiplyPercent(
-                    datos.Curves.Shop.ClassRecruitPrice(oleada, datos.StatsOf(clase).Cost),
-                    descuento);
-
-            candidatas.Add(new Choice(ChoiceType.Hire, clase, 1, -1, precio));
-        }
-
-        // Con el roster completo y todo en nivel 6 no queda nada que ofrecer. Es
-        // un final de progresión legítimo, no un error: el jugador ya tiene todo
-        // lo que el sistema puede darle, y de ahí en más el poder viene de los
-        // drops.
-        if (candidatas.Count == 0)
-            return [];
-
-        int cuantas = System.Math.Min(3, candidatas.Count);
-        var salida = new Choice[cuantas];
-
-        for (int i = 0; i < cuantas; i++)
-        {
-            int j = rng.Index(candidatas.Count);
-            salida[i] = candidatas[j];
-            candidatas.RemoveAt(j);
-        }
-
-        return salida;
-    }
 }

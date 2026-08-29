@@ -140,16 +140,23 @@ public sealed class Route
     {
         var (a, b, _, largoTramo) = LocateSegment(distancia);
 
+        // ⚠ 0 = norte, 1 = este, 2 = SUR, 3 = OESTE. Es el eHeading de AO
+        // (NORTH=1, EAST=2, SOUTH=3, WEST=4), corrido a base cero.
+        //
+        // Acá decía sur = 3 y oeste = 2, que era el orden con el que el
+        // importador venía nombrando mal las bandas del índice. Con el índice
+        // arreglado, dejar esto como estaba habría hecho caminar a los bichos
+        // mirando al oeste cuando bajan.
         if (largoTramo == 0)
-            return 3;
+            return 2;
 
         int dx = b.X - a.X;
         int dy = b.Y - a.Y;
 
         if (System.Math.Abs(dx) > System.Math.Abs(dy))
-            return dx > 0 ? 1 : 2;
+            return dx > 0 ? 1 : 3;
 
-        return dy > 0 ? 3 : 0;
+        return dy > 0 ? 2 : 0;
     }
 
     /// <summary>

@@ -196,6 +196,22 @@ public sealed class Run
     /// </remarks>
     public Choice[] OpenChoices { get; private set; } = [];
 
+    /// <summary>
+    /// Cuántos Oro del jefe le quedan por elegir al jugador. 0 = ninguno abierto.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No siempre es uno.</b> Desde el área <c>bossGoldLateArea</c> el
+    /// jefe deja llevarse dos de tres: en ese tramo la mochila ya está llena de
+    /// Oro que no se puede equipar —la ranura de comportamiento es una— y una
+    /// carta más no cambiaba nada, mientras que dos permiten cerrar una receta en
+    /// un solo jefe.</para>
+    ///
+    /// <para>Es estado de la corrida y no de la pantalla: la elección del jefe no
+    /// tiene límite de tiempo y el log solo guarda cuál se eligió, así que quién
+    /// lleva la cuenta tiene que ser lo que el servidor también re-simula.</para>
+    /// </remarks>
+    public int BossPicksLeft { get; private set; }
+
     public bool WaitingForChoice => OpenChoices.Length > 0;
 
     /// <summary>
@@ -261,15 +277,27 @@ public sealed class Run
             {
                 var dato = _datos.Get(compra.TypeId);
 
+                // ⚠ SE ESCALA ACÁ, y antes no se escalaba.
+                //
+                // `EnemyData` está en las unidades de los DATOS —puntos y no
+                // centésimas—, porque los JSON del bestiario se escriben en
+                // puntos. La tarjeta pasa el valor por `Loc.Points`, que divide
+                // por cien: sin escalar, una rata de 60 de vida mostraba 0 y un
+                // bicho de 2 de daño mostraba 0,0. Toda la ventana decía cero.
+                //
+                // La conversión va de este lado y no en la pantalla porque el
+                // doc de `WavePreview` ya prometía centésimas: el contrato estaba
+                // bien escrito y lo que estaba mal era quién lo cumplía.
                 fila = new WavePreview
                 {
                     TypeId = compra.TypeId,
                     Name = dato?.Name ?? "?",
                     Graphic = dato?.Graphic ?? "",
                     IsBoss = compra.IsBoss,
-                    Hp = dato?.Hp ?? 0,
-                    MaxDamage = dato?.MaxDamage ?? 0,
+                    Hp = dato is null ? 0 : Ints.ToHundredths(dato.Hp),
+                    Damage = dato is null ? 0 : DanoDeEnemigo(dato),
                     Speed = dato?.Speed ?? 0,
+                    Gold = dato?.Gold ?? 0,
                 };
 
                 porTipo[compra.TypeId] = fila;
@@ -289,10 +317,19 @@ public sealed class Run
             // conviene concentrar fuego en él; contra un impulsivo, tener algo
             // listo antes de tiempo. Son dos respuestas distintas.
             if (compra.HealthPerk > 0)
+            {
                 fila.WithHealth++;
 
+                // El tope, no la suma: los perks de NPC se apilan por pasos y
+                // «2 con más vida» no distingue un +20% de un +80%.
+                fila.MaxHealthPerk = System.Math.Max(fila.MaxHealthPerk, compra.HealthPerk);
+            }
+
             if (compra.SpeedPerk > 0)
+            {
                 fila.WithSpeed++;
+                fila.MaxSpeedPerk = System.Math.Max(fila.MaxSpeedPerk, compra.SpeedPerk);
+            }
 
             // Los rasgos también tienen que verse: un líder que se ve igual que
             // un lobo normal es una mecánica invisible, y el jugador que pierde
@@ -318,6 +355,29 @@ public sealed class Run
     }
 
     /// <summary>
+    /// Cuánto pega un enemigo por golpe, en centésimas de punto.
+    /// </summary>
+    /// <remarks>
+    /// <para>El daño sale del <b>promedio</b> de min y max, no de una tirada por
+    /// golpe: una tirada acá gastaría un número del RNG por cada golpe de cada
+    /// enemigo, y eso hace que agregar un defensor corra toda la secuencia
+    /// posterior y cambie los drops de la corrida entera.</para>
+    ///
+    /// <para>⚠ Se escala <b>antes</b> de promediar. Al revés, un bicho de 3-4
+    /// pegaría 3 y no 3,5: sería exactamente el truncamiento que la escala vino a
+    /// sacar, dejado en pie a un renglón de distancia del arreglo.</para>
+    ///
+    /// <para>⚠ Es un método y no dos copias de la cuenta porque la pantalla de
+    /// preparación muestra este número: con la fórmula escrita en dos lugares, el
+    /// día que cambie el divisor la tarjeta va a anunciar un daño que el bicho no
+    /// pega, y eso no falla en ningún lado —solo miente—.</para>
+    /// </remarks>
+    private int DanoDeEnemigo(EnemyData b)
+        => System.Math.Max(
+            Ints.ToHundredths(_datos.Combat.Enemy.MinimumDamage),
+            Ints.ToHundredths(b.MinDamage + b.MaxDamage) / _datos.Combat.Enemy.DamageAverageDivisor);
+
+    /// <summary>
     /// En qué tick entra una acción que el jugador toma <b>ahora</b>.
     /// </summary>
     /// <remarks>
@@ -339,7 +399,6 @@ public sealed class Run
 
     private int _proximoIdSpawn;
     private int _proximaColocacion;
-    private int _oleadaUltimaEleccion;
     private int _cursorLog;
     private int _ticksParaProximoSpawn;
 
@@ -594,10 +653,13 @@ public sealed class Run
                 MoveDefender(accion.A, new Cell(accion.B, accion.C));
                 break;
 
+            // ⚠ Saltear apaga también los picks del jefe: sin esto, la próxima
+            // oferta arrancaría con el contador de la anterior.
             case ActionType.SkipChoice:
                 // Se cierra sin entregar nada. La oferta se pierde: es una
                 // decisión, y por eso está en el log.
                 OpenChoices = [];
+                BossPicksLeft = 0;
                 break;
 
             case ActionType.SetTargeting:
@@ -780,54 +842,43 @@ public sealed class Run
             if (_datos.Perks.Get(opcion.PerkId).Tier == PerkTier.Gold)
                 Metrics.GoldPerksObtained++;
 
-            OpenChoices = [];
+            // ⚠ La oferta del jefe NO se cierra sola al primer click: desde el
+            // área tardía el jugador se lleva dos, y cerrarla acá le comía el
+            // segundo sin decir nada. La elegida sale de la lista —para que no se
+            // pueda tomar la misma dos veces— y la pantalla sigue abierta hasta
+            // que se agoten los picks o las opciones.
+            BossPicksLeft--;
+
+            if (BossPicksLeft <= 0 || OpenChoices.Length <= 1)
+            {
+                OpenChoices = [];
+                BossPicksLeft = 0;
+                return;
+            }
+
+            var quedan = new Choice[OpenChoices.Length - 1];
+
+            for (int i = 0, j = 0; i < OpenChoices.Length; i++)
+            {
+                if (i != indice)
+                    quedan[j++] = OpenChoices[i];
+            }
+
+            OpenChoices = quedan;
             return;
         }
 
-        // ⚠ Se cobra ANTES de entregar, y si no alcanza la elección NO se cierra.
+        // ⚠ ACÁ SE RESOLVÍAN «CONTRATAR» Y «SUBIR DE NIVEL», y ya no llegan.
         //
-        // Dejarla abierta es lo correcto: la pantalla se puede saltear con
-        // `SkipChoice`, así que un jugador sin oro no queda trabado, pero tampoco
-        // pierde la oferta por haber apretado la que no podía pagar.
-        if (opcion.Price > Gold)
-            return;
-
-        if (opcion.Price > 0)
-        {
-            Gold -= opcion.Price;
-
-            if (opcion.Kind == ChoiceType.Hire)
-                Metrics.GoldSpentClasses += opcion.Price;
-            else
-                Metrics.GoldSpentLevels += opcion.Price;
-        }
-
-        bool primeraClase = Roster.Classes.Count == 0;
-
-        if (opcion.Kind == ChoiceType.Hire)
-        {
-            Roster.Hire(opcion.DefenderClass);
-
-            // ⚠ La tienda se arma ANTES de la elección para que las dos se vean
-            // juntas, así que puede estar ofreciendo la misma clase que esto acaba
-            // de regalar. Se retira: pagar por algo que ya se tiene es tirar oro,
-            // y dejarla comprable cuelga al bot que reintenta.
-            Shop.WithdrawClass(opcion.DefenderClass);
-
-            // Contratar una clase nueva ABRE Oro nuevo (Drops_v2): sin esto, un
-            // roster que crece no cambia lo que el jefe puede ofrecer y contratar
-            // tarde deja a la clase nueva sin comportamiento propio para siempre.
-            AmpliarPoolDeOro(opcion.DefenderClass);
-        }
-        else
-        {
-            Roster.LevelUp(opcion.DefenderClass);
-        }
-
-        if (primeraClase)
-            Gold = _datos.Curves.Economy.StartingGoldTokens * _datos.StatsOf(opcion.DefenderClass).Cost;
-
-        OpenChoices = [];
+        // Las dos son ofertas de la tienda —ShopKind.Class y ShopKind.Level— y se
+        // resuelven en Buy(). Lo único que abre OpenChoices hoy es el Oro del
+        // jefe, que sale por el camino de arriba.
+        //
+        // Un log VIEJO sí puede traer una acción `Choose` apuntando a una de
+        // aquellas: se ignora en silencio y no se rompe, que es la misma regla que
+        // usa el switch de acciones. Re-simular un log de la temporada anterior ya
+        // no da el mismo resultado —el hash de datos cambió— y eso es lo que la
+        // temporada separa.
     }
 
     /// <summary>Equipa un perk de la mochila en una clase.</summary>
@@ -1298,7 +1349,12 @@ public sealed class Run
 
         var oferta = stock[indice];
 
-        if (oferta.Sold || Gold < oferta.Price)
+        // ⚠ Se cobra el precio EFECTIVO, que con el cupo gratis es cero. El
+        // `Price` sigue siendo el real: lo necesita la pantalla, y lo necesita la
+        // oferta el día que el cupo se consuma y ella siga ahí.
+        int precio = oferta.Cost;
+
+        if (oferta.Sold || Gold < precio)
             return;
 
         // ⚠ Cada categoría se entrega en un lugar distinto, y solo dos de las
@@ -1315,7 +1371,7 @@ public sealed class Run
                 if (!Backpack.Store(new StoredItem(ItemType.Perk, oferta.Id)))
                     return;
 
-                Metrics.CountPurchase(_datos.Perks.Get(oferta.Id).Tier, oferta.Price);
+                Metrics.CountPurchase(_datos.Perks.Get(oferta.Id).Tier, precio);
                 break;
 
             case ShopKind.Weapon:
@@ -1323,7 +1379,7 @@ public sealed class Run
                     return;
 
                 Metrics.BoughtWeapon++;
-                Metrics.GoldSpentWeapons += oferta.Price;
+                Metrics.GoldSpentWeapons += precio;
                 break;
 
             case ShopKind.Class:
@@ -1340,15 +1396,52 @@ public sealed class Run
                     return;
                 }
 
+                bool primeraClase = Roster.Classes.Count == 0;
+
                 Roster.Hire(clase);
 
-                // Contratar abre Oro nuevo, igual que contratar por elección: sin
-                // esto, reclutar en la tienda dejaría a la clase nueva sin
-                // comportamiento propio para siempre.
+                // Contratar abre Oro nuevo: sin esto, reclutar dejaría a la clase
+                // nueva sin comportamiento propio para siempre.
                 AmpliarPoolDeOro(clase);
 
                 Metrics.BoughtClass++;
-                Metrics.GoldSpentClasses += oferta.Price;
+                Metrics.GoldSpentClasses += precio;
+
+                // ⚠ EL ORO INICIAL SE ENTREGA ACÁ, y antes lo entregaba la
+                // pantalla de elección al tomar la primera clase. Depende de QUÉ
+                // clase tocó: dos fichas de esa clase, la misma cantidad para
+                // todos. Con un número fijo el arranque era una lotería —200 eran
+                // cinco ladrones o dos cazadores, y las corridas de clase cara se
+                // estancaban en la oleada 1—.
+                if (primeraClase)
+                    Gold = _datos.Curves.Economy.StartingGoldTokens * _datos.StatsOf(clase).Cost;
+
+                break;
+            }
+
+            case ShopKind.Level:
+            {
+                var clase = (DefenderClass)oferta.Id;
+                var ficha = Roster.Find(clase);
+
+                // ⚠ LA RANURA AL TOPE SE RECHAZA PERO NO SE RETIRA.
+                //
+                // Una clase que ya llegó al nivel máximo sigue mostrándose, y
+                // bloqueada: que esa clase no tenga adónde subir es información
+                // del roster del jugador, no un hueco. Venderla la convertiría en
+                // un «VENDIDO» que nadie vendió.
+                //
+                // Rebota sin cobrar. Es seguro porque nadie la reintenta: la
+                // pantalla no la deja armar y el bot headless la saltea en las dos
+                // políticas que compran. Sin esas dos guardas, un bot que insiste
+                // con el reloj congelado no termina nunca — medido: 24 corridas
+                // sin terminar en 30 minutos.
+                if (ficha is null || ficha.Level >= _datos.Curves.Shop.MaxLevelOnSale)
+                    return;
+
+                Roster.LevelUp(clase);
+
+                Metrics.GoldSpentLevels += precio;
                 break;
             }
 
@@ -1371,13 +1464,19 @@ public sealed class Run
                 _planosAprendidos.Add(plano.Key);
 
                 Metrics.BoughtBlueprint++;
-                Metrics.GoldSpentBlueprints += oferta.Price;
+                Metrics.GoldSpentBlueprints += precio;
                 break;
             }
         }
 
-        Gold -= oferta.Price;
+        Gold -= precio;
         Shop.Sell(indice);
+
+        // ⚠ Usar el cupo gratis NO retira las otras ofertas: pasan a costar lo que
+        // valen. Es la regla entera de por qué la elección se fusionó con la
+        // tienda — comprar una cosa no puede hacer desaparecer a las demás.
+        if (oferta.Free)
+            Shop.ConsumeFree();
     }
 
     /// <summary>Los planos que la cuenta tiene aprendidos. Los manda el servidor.</summary>
@@ -1447,17 +1546,7 @@ public sealed class Run
         // olvidar.
         int hpMaximo = Ints.ToHundredths(Ints.WithPercents(b.Hp, compra.HealthPerk));
 
-        // El daño sale del promedio de min y max, no de una tirada por golpe: una
-        // tirada acá gastaría un número del RNG por cada golpe de cada enemigo, y
-        // eso hace que agregar un defensor corra toda la secuencia posterior y
-        // cambie los drops de la corrida entera.
-        //
-        // ⚠ Se escala ANTES de promediar. Al revés, un bicho de 3-4 pegaría 3 y no
-        // 3,5: sería exactamente el truncamiento que la escala vino a sacar, dejado
-        // en pie a un renglón de distancia del arreglo.
-        int dano = System.Math.Max(
-            Ints.ToHundredths(_datos.Combat.Enemy.MinimumDamage),
-            Ints.ToHundredths(b.MinDamage + b.MaxDamage) / _datos.Combat.Enemy.DamageAverageDivisor);
+        int dano = DanoDeEnemigo(b);
 
         _enemigos.Add(new Enemy
         {
@@ -1867,6 +1956,11 @@ public sealed class Run
             // en la 40 pegan exactamente igual.
             var stats = Roster.StatsOf(d.DefenderClass, Backpack);
             var objetivo = ElegirObjetivo(d, stats.RangeMilli);
+
+            // Para el render, no para la simulación: el muñeco mira a lo que le
+            // está pegando. Se escribe también cuando es null, o el defensor se
+            // quedaría apuntando para siempre al último que mató.
+            d.AimedAt = objetivo is null ? null : _ruta.CellAt(objetivo.DistanceTravelled);
 
             if (objetivo is null)
             {
@@ -3340,7 +3434,12 @@ public sealed class Run
         if (candidatos.Count == 0)
             return;
 
-        int cuantas = System.Math.Min(_datos.Curves.Drops.BossGoldOptions, candidatos.Count);
+        // ⚠ Cuántos se ofrecen y cuántos se lleva salen del ÁREA, no de un
+        // número fijo. Ver DropData.OptionsForArea.
+        var drops = _datos.Curves.Drops;
+        int area = _datos.Areas.OfWave(Wave);
+
+        int cuantas = System.Math.Min(drops.OptionsForArea(area), candidatos.Count);
         var opciones = new Choice[cuantas];
 
         for (int i = 0; i < cuantas; i++)
@@ -3356,6 +3455,10 @@ public sealed class Run
         }
 
         OpenChoices = opciones;
+
+        // Nunca más picks que opciones: con un pool chico el jefe puede llegar a
+        // ofrecer una sola, y pedir dos dejaría la pantalla abierta para siempre.
+        BossPicksLeft = System.Math.Min(drops.PicksForArea(area), cuantas);
     }
 
     /// <summary>
@@ -3579,18 +3682,20 @@ public sealed class Run
         // ⚠ Cambia el ORDEN DE CONSUMO DEL RNG —antes elección, después oleada y
         // tienda; ahora al revés— así que las corridas guardadas con el orden
         // viejo no se re-simulan igual. Es temporada nueva.
+        // ⚠ ACÁ SE ABRÍA LA PANTALLA DE ELECCIÓN, cada «wavesBetweenChoices»
+        // oleadas, y ya no existe.
+        //
+        // Ofrecía tres cosas —contratar o levelear—, se tomaba UNA y las otras dos
+        // desaparecían, mientras la tienda de al lado ofrecía cuatro de las que
+        // solo se consumía la comprada. Dos ventanas con reglas opuestas pegadas
+        // en la misma pantalla; para el jugador era una sola tienda de siete
+        // cartas, así que comprar un nivel y ver evaporarse otras dos ofertas se
+        // leía como un bug —y nada en la pantalla decía lo contrario—.
+        //
+        // Contratar y levelear son ahora ShopKind.Class y ShopKind.Level, y la
+        // tienda pasó de 4 ranuras a 7. Lo gratis se conserva como CUPO: ver
+        // «cupoGratis» más abajo.
         ArmarProximaOleada();
-
-        if (Wave - _oleadaUltimaEleccion >= _datos.Curves.RunCurve.WavesBetweenChoices)
-        {
-            var opciones = ChoiceBuilder.Next(Roster, _rng, _datos, Wave);
-            _oleadaUltimaEleccion = Wave;
-
-            // Sin opciones —roster completo y todo en nivel 6— se sigue de largo.
-            // Es un final de progresión legítimo, no un error.
-            if (opciones.Length > 0)
-                OpenChoices = opciones;
-        }
     }
 
     // =========================================================================
@@ -3666,12 +3771,20 @@ public sealed class Run
         // podía sobrevivir a que el jugador ya tuviera Cazador. Comprarla rebota
         // sin marcarse vendida, y un bot que reintenta con el reloj congelado
         // se cuelga para siempre. Medido: `--balance 24` sin terminar en 30 minutos.
-        _tiendaAbierta = _datos.Curves.Shop.OpensAt(Wave);
+        // ⚠ La oleada 0 —el arranque— TAMBIÉN abre tienda, y antes no.
+        //
+        // Con la pantalla de elección fuera, la primera clase sale de la primera
+        // tienda: sin esto la corrida empezaría con el roster vacío, sin nada que
+        // poner y sin oro para comprarlo, y no se destrabaría hasta la oleada 3.
+        _tiendaAbierta = Wave == 0 || _datos.Curves.Shop.OpensAt(Wave);
 
         if (_tiendaAbierta)
         {
             Metrics.GoldBeforeShopTotal += Gold;
 
+            // ⚠ La tienda NO REGALA. Lo único gratis de la corrida es la clase
+            // del arranque, y la marca la propia tienda inicial —ver
+            // Shop.ArmarTiendaInicial—, no un cupo que se reparta por oleada.
             Shop.Refresh(Wave + 1, Roster, Backpack, _planosAprendidos, _rng, _datos);
             Metrics.CountOffers(Shop.Stock, _datos);
 
@@ -3681,7 +3794,7 @@ public sealed class Run
                 // operativa de «la tienda ofreció algo». Si este número se despega
                 // de ShopsVisited, la pantalla está frenando la corrida sin dar
                 // nada — que es peor que no abrirla.
-                if (oferta.Price <= Gold)
+                if (oferta.Cost <= Gold)
                 {
                     Metrics.ShopsWithSomethingUsable++;
                     break;
@@ -3756,13 +3869,16 @@ public sealed class Run
     public void Start()
     {
         // ⚠ Acá NO se entrega oro: el inicial son dos fichas de la clase que
-        // toque, y eso se sabe recién al elegirla. Ver Elegir().
+        // toque, y eso se sabe recién al comprarla. Ver Buy(), caso Class.
         Gold = 0;
 
-        // 1 de 3 al empezar. La corrida arranca con la pantalla de elección
-        // abierta y el roster vacío: no se puede poner nada hasta elegir.
-        OpenChoices = ChoiceBuilder.Initial(_rng, _datos);
-
+        // ⚠ Y acá YA NO SE ABRE NINGUNA PANTALLA DE ELECCIÓN.
+        //
+        // La corrida arrancaba con un modal de tres clases donde se tomaba una y
+        // las otras dos desaparecían. Ahora arranca con la PRIMERA TIENDA, que
+        // ofrece clases y trae una gratis —ver Shop.ArmarTiendaInicial—. La
+        // diferencia es que las que no se toman siguen ahí, a su precio, y el oro
+        // inicial que entrega la primera clase alcanza para alguna.
         LaunchNextWave();
     }
 }

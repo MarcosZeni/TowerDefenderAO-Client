@@ -297,6 +297,15 @@
     "ui.eleccion.rol_nuevo": "Rol nuevo, nivel 1.",
     "ui.eleccion.arranca_con_slot": "Arranca con 1 slot de perk.",
     "ui.eleccion.level": "Nivel",
+
+    "ui.jefe.titulo": "El jefe cayó",
+    "ui.jefe.elegi": "quedate con",
+    "ui.jefe.de": "de",
+    "ui.jefe.se_pierde": "lo que no elijas se pierde · el jefe no vuelve",
+    "ui.jefe.le_sirve": "le sirve a",
+    "ui.jefe.completa": "completa la receta",
+    "ui.jefe.mochila": "lugares libres en la mochila:",
+    "ui.jefe.mochila_llena": "mochila llena · lo que tomes se pierde",
     "ui.eleccion.abre_slot": "Abre el slot de perk",
     "ui.eleccion.de": "de",
     "ui.eleccion.slots_completos": "Ya tiene los 6 slots abiertos.",
@@ -319,7 +328,9 @@
     // contra un impulsivo tener algo listo antes de tiempo. Son dos respuestas
     // distintas, y la pantalla obligaba a prepararse para las dos.
     "ui.preparacion.ver_oleada": "ver la oleada",
-    "ui.preparacion.mas_tipos": "tipos más que no entran acá",
+    "ui.preparacion.tipos": "tipos",
+    "ui.preparacion.tipos_anteriores": "los tipos anteriores",
+    "ui.preparacion.tipos_siguientes": "el resto de la oleada",
     "ui.preparacion.con_vida": "con más vida",
     "ui.preparacion.con_velocidad": "más rápidos",
     "ui.preparacion.impulsivos": "impulsivo: entra antes",
@@ -328,6 +339,10 @@
     "ui.preparacion.stat_vida": "vida de cada uno",
     "ui.preparacion.stat_dano": "cuánto le saca a la Torre por golpe",
     "ui.preparacion.stat_velocidad": "celdas por segundo",
+    "ui.preparacion.stat_oro": "oro que suelta este tipo entero",
+    "ui.preparacion.buffs": "Buffs",
+    "ui.preparacion.rasgos": "Rasgos",
+    "ui.preparacion.hasta": "hasta",
 
     // --- La tienda rotativa de la corrida ------------------------------------
     //
@@ -351,6 +366,7 @@
     // llevan esto. Es la comparación entera de la pantalla, en una palabra.
     "ui.mercado.gratis": "gratis",
     "ui.mercado.cerrar": "cerrar",
+    "ui.mercado.confirmar": "click de nuevo para confirmar",
     "ui.mercado.esc_para_cerrar": "Esc para volver al tablero · el mercado sigue abierto hasta que lances la oleada",
     "ui.mercado.ya_reclutada": "ya la tenés",
     // ⚠ Aparecen cuando la elección DEJA DE SER GRATIS. Con las tres opciones
@@ -362,6 +378,10 @@
     "ui.tienda.no_se_repone": "no se repone: lo que compres deja el lugar vacío",
     "ui.tienda.vendido": "vendido",
     "ui.tienda.reclutar": "RECLUTAR",
+    "ui.tienda.levelear": "SUBIR DE NIVEL",
+    "ui.tienda.nivel_maximo": "ya está al máximo",
+    "ui.tienda.gratis": "gratis",
+    "ui.tienda.en_el_tablero": "en el tablero ahora",
     "ui.tienda.plano": "PLANO",
     "ui.tienda.arma": "ARMA",
     "ui.tienda.dano": "daño",

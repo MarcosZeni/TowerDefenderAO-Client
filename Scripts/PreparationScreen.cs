@@ -70,6 +70,23 @@ public partial class PreparationScreen : Control
 
     private int _oleadaVista = -1;
 
+    /// <summary>
+    /// Qué página de tipos se está mirando. 0 es la primera.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Antes no había páginas: había un corte.</b> La ventana dibujaba
+    /// los primeros ocho tipos y abajo decía «+1 tipos más que no entran acá»,
+    /// que es un aviso honesto y perfectamente inútil — el jugador se enteraba de
+    /// que existía algo que no iba a poder ver. Y el que sobraba no era el menos
+    /// importante: el orden es de aparición, así que lo que quedaba afuera era el
+    /// final de la oleada, que es cuando el tablero ya está gastado.</para>
+    ///
+    /// <para>Vuelve a cero en cada oleada, con la misma cuenta que reabre la
+    /// ventana: quedarse en la página 3 de la oleada anterior mostraría una
+    /// página vacía sin explicar por qué.</para>
+    /// </remarks>
+    private int _pagina;
+
     public PreparationScreen(Game juego)
     {
         _juego = juego;
@@ -133,6 +150,7 @@ public partial class PreparationScreen : Control
         {
             _oleadaVista = _juego.Run.NextWave;
             _ventanaAbierta = true;
+            _pagina = 0;
         }
 
         // ⚠ La preparación NO tiene límite de tiempo, y es a propósito.
@@ -202,7 +220,7 @@ public partial class PreparationScreen : Control
     /// seis, se achican hasta que entren — una oleada rara con ocho tipos tiene
     /// que verse igual, aunque apretada.
     /// </remarks>
-    private static Rect2 TarjetaRect(int i, int cuantas)
+    private static Rect2 TarjetaRect(int i, int cuantas, bool conFlechas)
     {
         var v = Ventana();
 
@@ -210,7 +228,10 @@ public partial class PreparationScreen : Control
         const float Hueco = 12f;
         const float Techo = 210f;
 
-        float disponible = v.Size.X - (Margen * 2f);
+        // Con flechas el ancho útil se achica: las flechas viven adentro de la
+        // ventana, no colgando de los bordes, para que el cursor no tenga que
+        // salirse de lo que está mirando.
+        float disponible = v.Size.X - (Margen * 2f) - (conFlechas ? AnchoFlecha * 2f : 0f);
         float ancho = Mathf.Min(Techo, (disponible - (Hueco * (cuantas - 1))) / cuantas);
 
         // Centradas: con tres tarjetas de 210 sobra media ventana, y pegarlas a
@@ -218,7 +239,35 @@ public partial class PreparationScreen : Control
         float total = (ancho * cuantas) + (Hueco * (cuantas - 1));
         float x0 = v.Position.X + ((v.Size.X - total) / 2f);
 
-        return new Rect2(x0 + (i * (ancho + Hueco)), v.Position.Y + 62f, ancho, 330f);
+        return new Rect2(x0 + (i * (ancho + Hueco)), v.Position.Y + 62f, ancho, AltoTarjeta);
+    }
+
+    // --- La paginación de tipos ----------------------------------------------
+
+    /// <summary>Cuántos tipos entran en una página.</summary>
+    /// <remarks>
+    /// Seis y no ocho. Con ocho las tarjetas bajan a 133 px de ancho y el nombre
+    /// del bicho —«Murcielago», «Escorpion»— empieza a cortarse; con seis quedan
+    /// en el techo de 210 y entra todo lo que la tarjeta tiene que decir. Lo que
+    /// no entra ahora tiene adónde ir, que es la diferencia.
+    /// </remarks>
+    private const int PorPagina = 6;
+
+    private const float AnchoFlecha = 40f;
+    private const float AltoTarjeta = 330f;
+
+    private static int Paginas(int tipos)
+        => System.Math.Max(1, ((tipos - 1) / PorPagina) + 1);
+
+    private static Rect2 Flecha(bool izquierda)
+    {
+        var v = Ventana();
+
+        float y = v.Position.Y + 62f + ((AltoTarjeta - 72f) / 2f);
+
+        return izquierda
+            ? new Rect2(v.Position.X + 10f, y, AnchoFlecha - 6f, 72f)
+            : new Rect2(v.End.X - AnchoFlecha - 4f, y, AnchoFlecha - 6f, 72f);
     }
 
     // --- La barra de abajo, que queda con lo mínimo ---------------------------
@@ -289,6 +338,15 @@ public partial class PreparationScreen : Control
                 return;
             }
 
+            // Las flechas pasan de página, igual que los botones. Con la ventana
+            // cerrada no hacen nada: no hay lista que mover.
+            if (VentanaVisible && tecla.Keycode is Key.Left or Key.Right)
+            {
+                Pasar(tecla.Keycode == Key.Right ? 1 : -1);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (tecla.Keycode is Key.Space or Key.Enter)
                 Arrancar();
         }
@@ -318,6 +376,22 @@ public partial class PreparationScreen : Control
                 return true;
             }
 
+            // Las flechas, antes que el catch-all de la ventana.
+            if (HayPaginas())
+            {
+                if (Flecha(izquierda: true).HasPoint(posicion))
+                {
+                    Pasar(-1);
+                    return true;
+                }
+
+                if (Flecha(izquierda: false).HasPoint(posicion))
+                {
+                    Pasar(1);
+                    return true;
+                }
+            }
+
             // El resto de la ventana se come el click sin hacer nada: es opaca, y
             // un click que la atraviesa pondría una ficha donde el jugador no ve.
             if (Ventana().HasPoint(posicion))
@@ -342,6 +416,30 @@ public partial class PreparationScreen : Control
         }
 
         return false;
+    }
+
+    /// <summary>Si la oleada trae más tipos de los que entran en una página.</summary>
+    private bool HayPaginas()
+        => _juego.Run is { } p && p.NextWavePreview().Count > PorPagina;
+
+    /// <summary>
+    /// Mueve la lista de tipos una página.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Da la vuelta</b> en vez de frenar en los extremos. Son dos o tres
+    /// páginas: con el tope duro, llegar al final y querer volver al primero
+    /// obliga a hacer el camino de vuelta entero, y no hay ningún dato que se
+    /// pierda por envolver — la lista es corta y el jugador la ve completa.
+    /// </remarks>
+    private void Pasar(int cuanto)
+    {
+        int total = Paginas(_juego.Run?.NextWavePreview().Count ?? 0);
+
+        if (total <= 1)
+            return;
+
+        _pagina = ((_pagina + cuanto) % total + total) % total;
+        QueueRedraw();
     }
 
     private void Arrancar()
@@ -438,22 +536,70 @@ public partial class PreparationScreen : Control
         this.Button(RectCerrarVentana(), Loc.Get("ui.mercado.cerrar"), Palette.BorderNormal,
             relleno: false);
 
-        int cuantas = System.Math.Min(filas.Count, 8);
+        // ⚠ Paginado, no cortado. Antes se dibujaban los primeros ocho y abajo
+        // decía «+1 tipos más que no entran acá»: el jugador se enteraba de que
+        // existía algo que no iba a poder ver, y como el orden es de aparición,
+        // lo que quedaba afuera era el final de la oleada.
+        int paginas = Paginas(filas.Count);
+
+        _pagina = System.Math.Clamp(_pagina, 0, paginas - 1);
+
+        bool conFlechas = paginas > 1;
+
+        int desde = _pagina * PorPagina;
+        int cuantas = System.Math.Min(PorPagina, filas.Count - desde);
 
         for (int i = 0; i < cuantas; i++)
-            DibujarTarjeta(TarjetaRect(i, cuantas), filas[i]);
+            DibujarTarjeta(TarjetaRect(i, cuantas, conFlechas), filas[desde + i]);
 
-        // ⚠ Si la oleada trae más tipos de los que entran, se dice. Un corte
-        // silencioso en la pantalla que existe para avisar qué viene sería el
-        // peor lugar posible para uno.
-        if (filas.Count > cuantas)
-        {
-            this.Label(new Rect2(v.Position.X, v.End.Y - 96f, v.Size.X, 20f),
-                $"+{filas.Count - cuantas} {Loc.Get("ui.preparacion.mas_tipos")}", 14,
-                Palette.TextMuted, HorizontalAlignment.Center);
-        }
+        if (conFlechas)
+            DibujarFlechas(paginas, filas.Count);
 
         DibujarBotonDeVentana();
+    }
+
+    /// <summary>
+    /// Las dos flechas y el contador de páginas.
+    /// </summary>
+    /// <remarks>
+    /// <para>Van <b>a los costados de las tarjetas y a media altura</b>, que es
+    /// donde el cursor ya está: quien quiere ver el resto de la oleada está
+    /// mirando las tarjetas, no el pie de la ventana.</para>
+    ///
+    /// <para>La flecha se dibuja como carácter y no como icono de la fuente de
+    /// RPG Awesome, porque esa fuente no trae flechas y las dos que hay —punta de
+    /// lanza y punta de flecha— son armas, no direcciones.</para>
+    /// </remarks>
+    private void DibujarFlechas(int paginas, int tipos)
+    {
+        var v = Ventana();
+
+        Boton(Flecha(izquierda: true), "‹", "ui.preparacion.tipos_anteriores");
+        Boton(Flecha(izquierda: false), "›", "ui.preparacion.tipos_siguientes");
+
+        // El contador va abajo y dice también cuántos tipos hay en total: sin el
+        // total, «2 de 3» no aclara si lo que falta es un bicho o diez.
+        this.Label(new Rect2(v.Position.X, v.End.Y - 96f, v.Size.X, 20f),
+            $"{_pagina + 1} {Loc.Get("ui.preparacion.de")} {paginas}  ·  " +
+            $"{tipos} {Loc.Get("ui.preparacion.tipos")}",
+            14, Palette.TextMuted, HorizontalAlignment.Center);
+
+        void Boton(Rect2 r, string glifo, string cartel)
+        {
+            bool encima = r.HasPoint(GetGlobalMousePosition());
+
+            DrawRect(r, encima
+                ? Palette.Warning.Alpha(0.22f)
+                : Palette.BackgroundMain.Alpha(0.75f));
+
+            DrawRect(r, encima ? Palette.Warning : Palette.BorderNormal,
+                filled: false, width: 1.5f);
+
+            this.Label(r, glifo, 30, encima ? Palette.Warning : Palette.TextMuted,
+                HorizontalAlignment.Center);
+
+            UiTooltip.Over(r, Loc.Get(cartel));
+        }
     }
 
     /// <summary>
@@ -529,7 +675,7 @@ public partial class PreparationScreen : Control
             Loc.Get("ui.preparacion.stat_vida"));
 
         this.IconRow(new Rect2(r.Position.X + 10f, y + 24f, r.Size.X - 20f, 22f),
-            UiStyle.Icono.Damage, Loc.Damage(fila.MaxDamage), null,
+            UiStyle.Icono.Damage, Loc.Damage(fila.Damage), null,
             Loc.Get("ui.preparacion.stat_dano"));
 
         // La velocidad viene en milésimas de celda por tick; en celdas por
@@ -539,15 +685,32 @@ public partial class PreparationScreen : Control
             UiStyle.Icono.Cadence, Loc.Range(fila.Speed * Ints.TicksPerSecond), null,
             Loc.Get("ui.preparacion.stat_velocidad"));
 
-        this.Rule(r, y + 76f - r.Position.Y);
+        // ⚠ El oro es la otra mitad de la decisión de la fase, y no estaba.
+        //
+        // La preparación es donde se gasta, y el jugador estaba gastando sin
+        // saber cuánto le devuelve la oleada que viene. Va en dorado, como el
+        // resto del oro del juego, y multiplicado por la cantidad: lo que decide
+        // es el total del tipo, no lo que suelta uno.
+        this.IconRow(new Rect2(r.Position.X + 10f, y + 72f, r.Size.X - 20f, 22f),
+            UiStyle.Icono.Gold, $"{fila.Gold * fila.Amount}", Palette.Gold,
+            $"{Loc.Get("ui.preparacion.stat_oro")} — {fila.Gold} × {fila.Amount}");
 
-        // --- Lo que traen encima. Cada uno en su renglón y con su color.
-        float yr = y + 84f;
+        this.Rule(r, y + 100f - r.Position.Y);
 
-        Renglon(ref yr, fila.WithHealth, "ui.preparacion.con_vida", Palette.Warning);
-        Renglon(ref yr, fila.WithSpeed, "ui.preparacion.con_velocidad", Palette.Warning);
-        Renglon(ref yr, fila.Impulsive, "ui.preparacion.impulsivos", Palette.Epic);
-        Renglon(ref yr, fila.Leaders, "ui.preparacion.lideres", Palette.Epic);
+        // --- Lo que traen encima, en DOS renglones con cartel.
+        //
+        // ⚠ Antes era un renglón por modificador, con el texto completo adentro
+        // de una tarjeta de 210 px: «1 impulsivo: e…», «1 LÍDER: buffe…». La
+        // explicación quedaba cortada justo donde empezaba a explicar, así que
+        // el renglón ocupaba lugar sin decir nada.
+        //
+        // Ahora el renglón dice QUÉ hay y CUÁNTOS, que es lo que se lee de un
+        // vistazo, y el detalle vive en el cartel. El cartel se abre con el
+        // mouse encima y se va solo al salir — dura un cuadro, ver UiTooltip.
+        float yr = y + 108f;
+
+        Bullet(ref yr, fila.WithPerk, "ui.preparacion.buffs", Palette.Warning, CartelBuffs(fila));
+        Bullet(ref yr, fila.WithTrait, "ui.preparacion.rasgos", Palette.Epic, CartelRasgos(fila));
 
         if (fila.WithPerk == 0 && fila.WithTrait == 0)
         {
@@ -555,16 +718,74 @@ public partial class PreparationScreen : Control
                 Loc.Get("ui.preparacion.sin_nada"), 12, Palette.TextDisabled);
         }
 
-        void Renglon(ref float py, int cuantos, string clave, Color color)
+        void Bullet(ref float py, int cuantos, string clave, Color color, string cartel)
         {
             if (cuantos == 0)
                 return;
 
-            this.Label(new Rect2(r.Position.X + 10f, py, r.Size.X - 20f, 20f),
-                $"{cuantos} {Loc.Get(clave)}", 12, color);
+            var caja = new Rect2(r.Position.X + 8f, py, r.Size.X - 16f, 22f);
 
-            py += 20f;
+            // Fondo tenue: es lo que dice que el renglón se puede señalar. Sin
+            // él, un texto de color entre otros textos de color no invita a
+            // poner el mouse encima, y el cartel no lo encuentra nadie.
+            bool encima = caja.HasPoint(GetGlobalMousePosition());
+
+            DrawRect(caja, color.Alpha(encima ? 0.28f : 0.12f));
+
+            this.Label(new Rect2(caja.Position.X + 8f, py, caja.Size.X - 40f, 22f),
+                $"• {Loc.Get(clave)}", 13, color);
+
+            this.Label(new Rect2(caja.End.X - 34f, py, 26f, 22f),
+                $"{cuantos}", 13, color, HorizontalAlignment.Right);
+
+            UiTooltip.Over(caja, cartel);
+
+            py += 24f;
         }
+    }
+
+    /// <summary>El detalle de los buffs de un tipo, un renglón por clase.</summary>
+    /// <remarks>
+    /// ⚠ Dice <b>cuánto</b> y no solo cuántos. Los perks de NPC se apilan por
+    /// pasos: «2 con más vida» puede ser un +20% o un +80%, y son dos oleadas
+    /// distintas contra el mismo tablero.
+    /// </remarks>
+    private static string CartelBuffs(WavePreview fila)
+    {
+        var partes = new System.Collections.Generic.List<string>(2);
+
+        if (fila.WithHealth > 0)
+        {
+            partes.Add($"{fila.WithHealth} {Loc.Get("ui.preparacion.con_vida")} " +
+                $"({Loc.Get("ui.preparacion.hasta")} +{fila.MaxHealthPerk}%)");
+        }
+
+        if (fila.WithSpeed > 0)
+        {
+            partes.Add($"{fila.WithSpeed} {Loc.Get("ui.preparacion.con_velocidad")} " +
+                $"({Loc.Get("ui.preparacion.hasta")} +{fila.MaxSpeedPerk}%)");
+        }
+
+        return string.Join("\n", partes);
+    }
+
+    /// <summary>El detalle de los rasgos: impulsivo y líder, separados.</summary>
+    /// <remarks>
+    /// Van separados y no lumpeados porque piden respuestas opuestas: contra un
+    /// líder conviene concentrar fuego en él, contra un impulsivo tener algo
+    /// listo antes de tiempo.
+    /// </remarks>
+    private static string CartelRasgos(WavePreview fila)
+    {
+        var partes = new System.Collections.Generic.List<string>(2);
+
+        if (fila.Impulsive > 0)
+            partes.Add($"{fila.Impulsive} {Loc.Get("ui.preparacion.impulsivos")}");
+
+        if (fila.Leaders > 0)
+            partes.Add($"{fila.Leaders} {Loc.Get("ui.preparacion.lideres")}");
+
+        return string.Join("\n", partes);
     }
 
     private void DibujarBotonDeVentana()

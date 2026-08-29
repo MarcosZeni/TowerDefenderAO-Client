@@ -55,13 +55,39 @@ public partial class MarketScreen : Control
 {
     private readonly Game _juego;
 
-    /// <summary>Qué es una tarjeta: una opción gratis, o una oferta de la tienda.</summary>
-    private readonly record struct Ficha(bool Gratis, int Indice);
+    /// <summary>
+    /// Qué es una tarjeta: el índice de una oferta del stock.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Tenía un <c>bool Gratis</c> para distinguir una opción de la pantalla de
+    /// elección de una oferta de la tienda. La elección se fusionó con la tienda,
+    /// así que las dos cosas son lo mismo y lo gratis es <c>ShopOffer.Free</c>: un
+    /// precio, no otra clase de tarjeta.
+    /// </remarks>
+    private readonly record struct Ficha(int Indice);
 
     /// <summary>Las tres zonas, en el orden en que se dibujan de izquierda a derecha.</summary>
     private readonly List<Ficha>[] _columnas = [[], [], []];
 
     private (int Columna, int Fila) _bajoElCursor = (-1, -1);
+
+    /// <summary>
+    /// La tarjeta que está a un click de comprarse. <c>null</c> = ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Comprar son DOS clicks</b>, igual que vender un defensor o
+    /// comprar un plano con la billetera. Con un solo click, pasar el mouse por
+    /// la ventana mientras se decide y apretar sin querer <b>gasta el oro y
+    /// consume la oferta</b> —la tienda no se repone—, así que el error no se
+    /// puede deshacer ni esperando: esa oferta ya no vuelve en toda la corrida.
+    /// </para>
+    ///
+    /// <para>El primer click arma y el segundo confirma. Se desarma solo al
+    /// apuntar a otra tarjeta, al cerrar la ventana y al cambiar el stock: un
+    /// «armado» que sobrevive a cualquiera de esas tres cosas es exactamente el
+    /// click accidental que esto vino a evitar, con un paso más.</para>
+    /// </remarks>
+    private Ficha? _armado;
 
     /// <summary>
     /// El jugador cerró la ventana a mano y no quiere verla hasta la próxima.
@@ -83,8 +109,14 @@ public partial class MarketScreen : Control
     // Cuándo se ve
     // =====================================================================
 
-    /// <summary>Hay una elección pendiente: no se puede cerrar.</summary>
-    private bool HayEleccion => _juego.Run?.WaitingForChoice ?? false;
+    // ⚠ ACÁ VIVÍA `HayEleccion`, y con él lo único que hacía modal a esta
+    // pantalla. Ya no hay nada que el jugador esté obligado a resolver antes de
+    // seguir: contratar y subir de nivel son ofertas que se compran o se dejan, y
+    // el Oro del jefe —lo único que todavía frena la corrida— tiene pantalla
+    // propia en BossDropScreen.
+    //
+    // Consecuencia directa: el mercado SIEMPRE se puede cerrar con Esc, y con eso
+    // se fueron el botón PASAR y el cartel de «elegí o pasá».
 
     /// <summary>Hay stock de la tienda de esta preparación.</summary>
     private bool HayTienda
@@ -110,7 +142,8 @@ public partial class MarketScreen : Control
     /// </remarks>
     public bool IsOpen
         => _juego.Backpack is not { IsOpen: true }
-           && (HayEleccion || (HayTienda && !_cerrada));
+           && _juego.Run is not { BossPicksLeft: > 0 }
+           && HayTienda && !_cerrada;
 
     /// <summary>La abre el botón MERCADO de la barra de preparación.</summary>
     public void Open() => _cerrada = false;
@@ -132,6 +165,7 @@ public partial class MarketScreen : Control
         {
             _stockVisto = p.Shop.StockWave;
             _cerrada = false;
+            _armado = null;
         }
 
         bool abierta = IsOpen;
@@ -156,21 +190,16 @@ public partial class MarketScreen : Control
     /// <para>Las opciones <b>gratis</b> van primero dentro de su zona: son las que
     /// frenan la corrida y las que hay que resolver sí o sí.</para>
     ///
-    /// <para>El Oro que ofrece un jefe cae en la zona de <b>perks</b> y no en la de
-    /// personajes, aunque venga por el mismo camino que contratar: lo que se elige
-    /// es un perk, y ponerlo entre las clases obligaría a leer el rótulo para
-    /// saber qué es.</para>
+    /// <para>⚠ <b>El Oro del jefe ya no entra acá.</b> Caía en la columna de
+    /// perks, al lado de las ofertas de bronce que se compran con oro, así que el
+    /// premio de matar al jefe —una de las ocho veces en toda la corrida en que
+    /// aparece un comportamiento gratis— se veía igual que cualquier otra carta.
+    /// Ahora tiene pantalla propia: ver <see cref="BossDropScreen"/>.</para>
     /// </remarks>
     private void Repartir(Run p)
     {
         foreach (var c in _columnas)
             c.Clear();
-
-        for (int i = 0; i < p.OpenChoices.Length; i++)
-        {
-            int zona = p.OpenChoices[i].Kind == ChoiceType.Perk ? 1 : 0;
-            _columnas[zona].Add(new Ficha(true, i));
-        }
 
         if (!HayTienda)
             return;
@@ -179,14 +208,17 @@ public partial class MarketScreen : Control
 
         for (int i = 0; i < stock.Count; i++)
         {
+            // Subir de nivel va con los personajes, no con los perks: lo que se
+            // compra es una clase que ya está, y ponerlo entre los perks obligaría
+            // a leer el rótulo para saber qué es.
             int zona = stock[i].Kind switch
             {
-                ShopKind.Class => 0,
+                ShopKind.Class or ShopKind.Level => 0,
                 ShopKind.Weapon => 2,
                 _ => 1,
             };
 
-            _columnas[zona].Add(new Ficha(false, i));
+            _columnas[zona].Add(new Ficha(i));
         }
     }
 
@@ -267,24 +299,29 @@ public partial class MarketScreen : Control
         switch (evento)
         {
             case InputEventMouseMotion:
+            {
+                var antes = _bajoElCursor;
+
                 _bajoElCursor = TarjetaEn(GetGlobalMousePosition());
+
+                // Salir de la tarjeta armada la desarma. Sin esto, el jugador
+                // arma una, se va a mirar otra, vuelve a apretar en cualquier
+                // lado y compra la primera.
+                if (_bajoElCursor != antes)
+                    _armado = null;
+
                 QueueRedraw();
                 break;
+            }
 
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
             {
                 var posicion = GetGlobalMousePosition();
 
-                if (!HayEleccion && RectCerrar().HasPoint(posicion))
+                if (RectCerrar().HasPoint(posicion))
                 {
                     _cerrada = true;
-                    GetViewport().SetInputAsHandled();
-                    break;
-                }
-
-                if (HayQuePagar() && RectPasar().HasPoint(posicion))
-                {
-                    _juego.SkipChoice();
+                    _armado = null;
                     GetViewport().SetInputAsHandled();
                     break;
                 }
@@ -308,82 +345,87 @@ public partial class MarketScreen : Control
     }
 
     /// <summary>
-    /// Las teclas 1-2-3 y el Esc.
+    /// El Esc, que ahora siempre cierra.
     /// </summary>
     /// <remarks>
-    /// ⚠ Los números eligen <b>lo gratis</b>, no la tarjeta N de la pantalla. Con
-    /// una corrida de horas, resolver la elección sin soltar el mouse importa; y
-    /// que el 2 comprara a veces un arma de 900 sería el peor atajo posible.
+    /// ⚠ <b>Y estaban las teclas 1-2-3</b>, que resolvían la elección sin soltar
+    /// el mouse. Se fueron con ella: acá ya no hay nada gratis y fijo a lo que
+    /// apuntar, y un atajo numérico sobre siete ofertas <b>que se compran con
+    /// oro</b> sería el peor atajo posible — el 2 gastaría a veces un arma de 900.
     /// </remarks>
     private void AtenderTecla(Run p, InputEventKey tecla)
     {
-        if (tecla.Keycode == Key.Escape)
-        {
-            if (HayEleccion)
-                return;
-
-            _cerrada = true;
-            GetViewport().SetInputAsHandled();
+        if (tecla.Keycode != Key.Escape)
             return;
-        }
 
-        int i = tecla.Keycode switch
-        {
-            Key.Key1 => 0,
-            Key.Key2 => 1,
-            Key.Key3 => 2,
-            _ => -1,
-        };
-
-        if (i >= 0 && i < p.OpenChoices.Length)
-        {
-            _juego.Choose(i);
-            GetViewport().SetInputAsHandled();
-        }
-    }
-
-    private void Apretar(Ficha ficha)
-    {
-        if (!ficha.Gratis)
-        {
-            _juego.Buy(ficha.Indice);
-            return;
-        }
-
-        // ⚠ Lo que no se puede pagar no se manda. La simulación lo rebota igual
-        // —y sin cerrar la pantalla, a propósito— pero un click que no hace nada
-        // ni dice por qué se lee como que la pantalla está rota.
-        if (_juego.Run!.OpenChoices[ficha.Indice].Price <= _juego.Run.Gold)
-            _juego.Choose(ficha.Indice);
+        _cerrada = true;
+        _armado = null;
+        GetViewport().SetInputAsHandled();
     }
 
     /// <summary>
-    /// El botón de saltear la elección.
+    /// Atiende el click sobre una tarjeta: el primero arma, el segundo compra.
     /// </summary>
     /// <remarks>
-    /// ⚠ Aparece <b>solo cuando la elección cuesta</b>. Mientras regala no hay
-    /// razón para no llevarse algo, y un botón de pasar ahí sería una trampa; en
-    /// cuanto cobra, no tenerlo dejaría a un jugador sin oro trabado en un modal
-    /// que no se cierra y con el reloj congelado.
+    /// ⚠ Lo que <b>no se puede pagar ni siquiera se arma</b>. Antes se mandaba y
+    /// la simulación lo rebotaba —sin cerrar la pantalla, a propósito—, pero un
+    /// click que no hace nada ni dice por qué se lee como que la pantalla está
+    /// rota. Y armar algo impagable dejaría un cartel de «confirmar» sobre una
+    /// compra que nunca va a salir.
     /// </remarks>
-    private bool HayQuePagar()
+    private void Apretar(Ficha ficha)
     {
-        var p = _juego.Run;
+        if (!Alcanza(ficha))
+            return;
 
-        if (p is null || !p.WaitingForChoice)
-            return false;
-
-        foreach (var o in p.OpenChoices)
+        // Primer click: se arma y no se compra nada.
+        if (_armado != ficha)
         {
-            if (o.Price > 0)
-                return true;
+            _armado = ficha;
+            QueueRedraw();
+            return;
         }
 
-        return false;
+        _armado = null;
+        _juego.Buy(ficha.Indice);
     }
 
-    private static Rect2 RectPasar()
-        => new(Canvas.CanvasWidth - MargenX - 200f, 92f, 200f, 44f);
+    /// <summary>Si el jugador puede pagar esta tarjeta.</summary>
+    /// <remarks>
+    /// ⚠ Contra <c>Cost</c> y no contra <c>Price</c>: con el cupo gratis el precio
+    /// real sigue guardado en <c>Price</c>, y comparar contra él haría imposible
+    /// de armar la única oferta que el jugador puede llevarse con cero oro.
+    /// </remarks>
+    private bool Alcanza(Ficha ficha)
+        => _juego.Run!.Shop.Stock[ficha.Indice] is { Sold: false } o
+           && !Bloqueada(_juego.Run, o)
+           && o.Cost <= _juego.Run.Gold;
+
+    /// <summary>
+    /// Una oferta de nivel sobre una clase que <b>ya llegó al tope</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Se dibuja, no desaparece.</b> Que una clase no tenga adónde
+    /// subir es información del roster del jugador, no un hueco: verla bloqueada
+    /// dice «esta ya está terminada», y un hueco no dice nada.</para>
+    ///
+    /// <para>Se deriva del roster de AHORA y no de un campo de la oferta. Así, si
+    /// el jugador sube esa clase desde la mochila con la tienda abierta, la
+    /// ranura se bloquea sola; un <c>bool</c> guardado al armar la tienda se
+    /// habría quedado viejo justo en ese caso.</para>
+    /// </remarks>
+    private static bool Bloqueada(Run p, ShopOffer oferta)
+        => oferta.Kind == ShopKind.Level
+           && p.Roster.Find((DefenderClass)oferta.Id) is { } f
+           && f.Level >= DataLoader.Current.Curves.Shop.MaxLevelOnSale;
+
+    // ⚠ ACÁ VIVÍAN `HayQuePagar` y `RectPasar`, que dibujaban el botón PASAR.
+    //
+    // Existía porque la elección se cobraba y un jugador sin oro se quedaba
+    // trabado en un modal que no se cerraba, con el reloj congelado. Sin elección
+    // no hay a qué saltear: si el jugador no puede pagar nada, cierra la tienda y
+    // sigue jugando. La acción `SkipChoice` del log sobrevive y la sigue usando la
+    // pantalla del jefe.
 
     // =====================================================================
     // Dibujo
@@ -420,26 +462,15 @@ public partial class MarketScreen : Control
         this.Label(titulo, Loc.Get("ui.mercado.titulo"), 40, Palette.TextPrimary,
             HorizontalAlignment.Center);
 
-        this.Label(titulo.Row(50f, 26f),
-            HayEleccion
-                ? Loc.Get(HayQuePagar() ? "ui.mercado.elegi_o_pasa" : "ui.eleccion.no_se_puede_cerrar")
-                : Loc.Get("ui.mercado.esc_para_cerrar"),
-            18, HayEleccion ? Palette.Warning : Palette.TextMuted, HorizontalAlignment.Center);
+        this.Label(titulo.Row(50f, 26f), Loc.Get("ui.mercado.esc_para_cerrar"), 18,
+            Palette.TextMuted, HorizontalAlignment.Center);
 
         // El oro va arriba a la izquierda, del tamaño del título: es el número
         // contra el que se lee cada precio de la pantalla.
         this.Price(new Rect2(MargenX, 92f, 260f, 44f), p.Gold, alcanza: true);
 
-        if (!HayEleccion)
-        {
-            this.Button(RectCerrar(), Loc.Get("ui.mercado.cerrar"), Palette.BorderNormal,
-                relleno: false);
-        }
-        else if (HayQuePagar())
-        {
-            this.Button(RectPasar(), Loc.Get("ui.mercado.pasar"), Palette.Danger,
-                relleno: false);
-        }
+        this.Button(RectCerrar(), Loc.Get("ui.mercado.cerrar"), Palette.BorderNormal,
+            relleno: false);
     }
 
     /// <summary>
@@ -515,12 +546,6 @@ public partial class MarketScreen : Control
     {
         var datos = DataLoader.Current;
 
-        if (ficha.Gratis)
-        {
-            DibujarEleccion(p, r, ficha.Indice, encima, datos);
-            return;
-        }
-
         var oferta = p.Shop.Stock[ficha.Indice];
 
         // ⚠ Vendida se dibuja igual, apagada, en vez de desaparecer. Una clase
@@ -539,7 +564,30 @@ public partial class MarketScreen : Control
             return;
         }
 
-        bool alcanza = p.Gold >= oferta.Price;
+        // ⚠ Contra el precio EFECTIVO. Con el cupo gratis, `Price` es lo que vale
+        // y `Cost` lo que sale hoy: comparar contra Price pintaría de rojo —«no te
+        // alcanza»— la única oferta que el jugador puede llevarse con cero oro.
+        // ⚠ Una ranura de nivel sobre una clase al tope se dibuja BLOQUEADA, no
+        // vendida ni ausente: es la única forma de decir «esta clase ya está
+        // terminada» sin que el jugador tenga que abrir la mochila a contar.
+        if (Bloqueada(p, oferta))
+        {
+            this.EmptySlot(r);
+
+            var (ic, _, nom, _) = Partes(r);
+
+            this.Portrait(ic, p.Roster.Find((DefenderClass)oferta.Id)!);
+
+            this.Label(nom, Loc.Class((DefenderClass)oferta.Id).ToUpperInvariant(), 22,
+                Palette.TextDisabled);
+
+            this.Label(new Rect2(nom.Position.X, r.End.Y - 44f, nom.Size.X, 22f),
+                Loc.Get("ui.tienda.nivel_maximo").ToUpperInvariant(), 15, Palette.TextDisabled);
+
+            return;
+        }
+
+        bool alcanza = p.Gold >= oferta.Cost;
         var acento = AcentoDe(oferta, datos);
 
         this.Slot(r, acento, elegido: encima && alcanza);
@@ -552,6 +600,10 @@ public partial class MarketScreen : Control
         {
             case ShopKind.Class:
                 DibujarClase(p, (DefenderClass)oferta.Id, icono, nombre, cuerpo, datos);
+                break;
+
+            case ShopKind.Level:
+                DibujarNivel(p, (DefenderClass)oferta.Id, icono, nombre, cuerpo, datos);
                 break;
 
             case ShopKind.Blueprint:
@@ -570,8 +622,49 @@ public partial class MarketScreen : Control
         // ⚠ El precio en rojo cuando no alcanza, y la carta igual se ve entera.
         // Saber que existe un Oro que hoy no se puede pagar es lo que hace que
         // guardar oro sea una decisión.
-        this.Price(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
-            oferta.Price, alcanza, HorizontalAlignment.Right);
+        // ⚠ Lo gratis se dice con la palabra, no con un «0». Un cero al lado de
+        // una moneda se lee como «sin precio cargado», que es exactamente lo que
+        // pasaba en la tienda de planos del menú principal.
+        if (oferta.Free)
+        {
+            this.Label(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
+                Loc.Get("ui.tienda.gratis").ToUpperInvariant(), 18, Palette.Success,
+                HorizontalAlignment.Right);
+        }
+        else
+        {
+            this.Price(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
+                oferta.Price, alcanza, HorizontalAlignment.Right);
+        }
+
+        DibujarArmado(r, ficha);
+    }
+
+    /// <summary>
+    /// El aviso de la tarjeta armada: un click más y se compra.
+    /// </summary>
+    /// <remarks>
+    /// <para>Tapa el precio a propósito. El precio ya se leyó —fue lo que hizo
+    /// apretar la primera vez— y lo que hay que leer ahora es que el próximo
+    /// click gasta el oro.</para>
+    ///
+    /// <para>Va en ámbar y con el marco entero encendido, que es el mismo
+    /// vocabulario que usa el juego para «esto está por pasar»: la cuenta
+    /// regresiva de la oleada y el segundo click de vender un defensor.</para>
+    /// </remarks>
+    private void DibujarArmado(Rect2 r, Ficha ficha)
+    {
+        if (_armado != ficha)
+            return;
+
+        DrawRect(r, Palette.Warning, filled: false, width: 2.5f);
+
+        var banda = new Rect2(r.Position.X + 2f, r.End.Y - 32f, r.Size.X - 4f, 30f);
+
+        DrawRect(banda, Palette.Warning.Alpha(0.92f));
+
+        this.Label(banda, Loc.Get("ui.mercado.confirmar").ToUpperInvariant(), 14,
+            Palette.BackgroundMain, HorizontalAlignment.Center);
     }
 
     /// <summary>Las cuatro partes de una tarjeta apaisada.</summary>
@@ -590,107 +683,75 @@ public partial class MarketScreen : Control
             new Rect2(x, r.Position.Y + 58f, ancho, r.Size.Y - 92f));
     }
 
-    /// <summary>
-    /// Una opción de la elección: gratis, y hay que tomar una.
-    /// </summary>
-    /// <remarks>
-    /// ⚠ El marco va <b>siempre iluminado</b>, no solo bajo el cursor: son las
-    /// tarjetas que frenan la corrida, y tienen que separarse de las que se pueden
-    /// ignorar sin leer el rótulo.
-    /// </remarks>
-    private void DibujarEleccion(Run p, Rect2 r, int indice, bool encima, BalanceData datos)
-    {
-        var opcion = p.OpenChoices[indice];
-
-        bool contrata = opcion.Kind == ChoiceType.Hire;
-        bool esPerk = opcion.Kind == ChoiceType.Perk;
-
-        var acento =
-            esPerk ? Palette.Rarity(datos.Perks.Get(opcion.PerkId).Tier)
-            : contrata ? Palette.Info
-            : Palette.Warning;
-
-        bool alcanza = opcion.Price <= p.Gold;
-
-        this.Slot(r, alcanza ? acento : Palette.TextDisabled, elegido: alcanza);
-        this.Glow(r, acento, encima && alcanza ? 3f : 1.5f);
-
-        var (icono, titulo, nombre, cuerpo) = Partes(r);
-
-        this.Label(titulo,
-            (opcion.Price > 0 ? "" : Loc.Get("ui.mercado.gratis") + " · ") +
-            Loc.Get(esPerk ? "ui.eleccion.elegi_una"
-                : contrata ? "ui.eleccion.contratar"
-                : "ui.eleccion.subir_de_nivel").ToUpperInvariant(),
-            13, acento);
-
-        if (esPerk)
-        {
-            DibujarPerk(datos.Perks.Get(opcion.PerkId), icono, nombre, cuerpo, acento);
-        }
-        else
-        {
-            // ⚠ Sin el renglón del costo de colocación: esto es un desbloqueo
-            // gratis, y el cuerpo de la tarjeta lo necesita entero para decir qué
-            // abre —que es la información que hace que la elección sea elección—.
-            DibujarClase(p, opcion.DefenderClass, icono, nombre, cuerpo, datos, conCosto: false);
-            DibujarQueAbre(p, opcion, contrata, cuerpo);
-        }
-
-        // ⚠ El precio va en el MISMO lugar que en las tarjetas de la tienda, y
-        // dice GRATIS solo cuando de verdad lo es. Mientras el roster no llega a
-        // «freeClasses» la elección regala; pasado eso cobra, con descuento, y
-        // esta es la línea donde eso se ve.
-        var pie = new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f);
-
-        if (opcion.Price > 0)
-            this.Price(pie, opcion.Price, alcanza, HorizontalAlignment.Right);
-        else
-            this.Label(pie, Loc.Get("ui.mercado.gratis").ToUpperInvariant(), 18,
-                Palette.Success, HorizontalAlignment.Right);
-
-        // El número de la tecla, abajo a la izquierda del icono.
-        var tecla = new Rect2(icono.Position.X, r.End.Y - 30f, 28f, 24f);
-
-        DrawRect(tecla, Palette.BackgroundMain.Alpha(0.9f));
-        DrawRect(tecla, Palette.BorderSoft, filled: false, width: 1f);
-
-        this.Label(tecla, $"{indice + 1}", 15, Palette.TextMuted, HorizontalAlignment.Center);
-    }
+    // ⚠ ACÁ VIVÍAN `DibujarEleccion` y `DibujarQueAbre`, las tarjetas de la
+    // pantalla de elección. Lo que dibujaban ahora sale por `DibujarClase` y
+    // `DibujarNivel`, que son ofertas de la tienda como cualquier otra.
 
     /// <summary>
-    /// Qué desbloquea la opción. <b>Es lo que hace que la elección sea una elección.</b>
+    /// Una oferta de subir de nivel: el muñeco, del nivel N al N+1, y el slot.
     /// </summary>
     /// <remarks>
-    /// Sin esta línea contratar parece siempre mejor —trae un rol nuevo— y
-    /// levelear parece "solo números". Las dos dan +1 slot de perk, y si eso no se
-    /// ve, la decisión «ancho o profundo» se cae sola.
+    /// <para>⚠ <b>Lo que se compra es el SLOT, no los stats.</b> Los stats suben
+    /// un 8% y eso no decide nada; la ranura de perk sí, porque es la que permite
+    /// equipar lo que la mochila ya tiene esperando. Por eso el renglón del slot
+    /// va en dorado y el trío de stats abajo, en gris.</para>
+    ///
+    /// <para>Y cuando el nivel <b>no</b> abre ranura —del 7 en adelante— se dice.
+    /// La tienda no debería ofrecerlo, pero una oferta que quedó vieja porque el
+    /// jugador subió esa clase desde la mochila sí puede llegar acá.</para>
     /// </remarks>
-    private void DibujarQueAbre(Run p, Choice opcion, bool contrata, Rect2 cuerpo)
+    private void DibujarNivel(
+        Run p, DefenderClass clase, Rect2 icono, Rect2 nombre, Rect2 cuerpo, BalanceData datos)
     {
-        var fila = cuerpo.Row(42f, 20f);
+        var ficha = p.Roster.Find(clase);
 
-        if (contrata)
+        // Sin la clase en el roster la oferta quedó vieja: la simulación la retira
+        // sin cobrar. Se dibuja lo que se pueda en vez de explotar.
+        if (ficha is null)
         {
-            this.Label(fila, Loc.Get("ui.eleccion.arranca_con_slot"), 14, Palette.TextSecondary);
+            this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 24, Palette.TextDisabled);
             return;
         }
 
-        int slotsAntes = p.Roster.Find(opcion.DefenderClass)?.OpenSlots ?? 1;
-        int tope = DataLoader.Current.Classes.PerkSlotsPerClass;
-        int slotsDespues = System.Math.Min(opcion.ResultingLevel, tope);
+        this.Portrait(icono, ficha);
 
-        this.Label(fila,
+        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 24, Palette.TextPrimary);
+
+        int destino = ficha.Level + 1;
+        int tope = datos.Classes.PerkSlotsPerClass;
+
+        int slotsAntes = ficha.OpenSlots;
+        int slotsDespues = System.Math.Min(destino, tope);
+
+        this.Label(cuerpo.Row(0f, 20f),
+            $"{Loc.Get("ui.eleccion.level")} {ficha.Level} → {destino}", 16, Palette.Warning);
+
+        this.Label(cuerpo.Row(22f, 20f),
             slotsDespues > slotsAntes
-                ? $"{Loc.Get("ui.eleccion.level")} {opcion.ResultingLevel - 1} → " +
-                  $"{opcion.ResultingLevel} · {Loc.Get("ui.eleccion.abre_slot")} " +
-                  $"{slotsDespues} {Loc.Get("ui.eleccion.de")} {tope}"
+                ? $"{Loc.Get("ui.eleccion.abre_slot")} {slotsDespues} " +
+                  $"{Loc.Get("ui.eleccion.de")} {tope}"
                 : Loc.Get("ui.eleccion.slots_completos"),
             14, slotsDespues > slotsAntes ? Palette.Legendary : Palette.TextMuted);
+
+        // ⚠ Cuántas fichas de esta clase están puestas, porque el nivel las sube a
+        // TODAS. Un nivel con seis magos en el tablero y uno con un mago solo son
+        // dos compras muy distintas, y es la única de las siete cartas cuyo valor
+        // depende de lo que hay puesto.
+        int puestos = 0;
+
+        foreach (var d in p.Defenders)
+        {
+            if (d.DefenderClass == clase)
+                puestos++;
+        }
+
+        this.Label(cuerpo.Row(44f, 20f),
+            $"{puestos} {Loc.Get("ui.tienda.en_el_tablero")}", 13,
+            puestos > 0 ? Palette.TextSecondary : Palette.TextMuted);
     }
 
     // =====================================================================
-    // Los cuatro contenidos
+    // Los contenidos
     // =====================================================================
 
     /// <summary>
@@ -699,14 +760,19 @@ public partial class MarketScreen : Control
     private static Color AcentoDe(ShopOffer oferta, BalanceData datos) => oferta.Kind switch
     {
         ShopKind.Class => Palette.Info,
+        ShopKind.Level => Palette.Warning,
         ShopKind.Blueprint => Palette.Epic,
         ShopKind.Weapon => Palette.Common,
         _ => Palette.Rarity(datos.Perks.Get(oferta.Id).Tier),
     };
 
+    // ⚠ Level TIENE que estar en los dos switch. El `_ =>` va a buscar un PERK con
+    // el Id de la oferta, y en una de nivel ese Id es una CLASE: Perks.Get(3) por
+    // «Asesino» devuelve un perk cualquiera y la tarjeta miente sin fallar.
     private static string EtiquetaDe(ShopOffer oferta) => oferta.Kind switch
     {
         ShopKind.Class => Loc.Get("ui.tienda.reclutar"),
+        ShopKind.Level => Loc.Get("ui.tienda.levelear"),
         ShopKind.Blueprint => Loc.Get("ui.tienda.plano"),
         ShopKind.Weapon => Loc.Get("ui.tienda.arma"),
         _ => Loc.Tier(DataLoader.Current.Perks.Get(oferta.Id).Tier),

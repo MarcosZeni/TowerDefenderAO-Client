@@ -56,24 +56,23 @@
 
     // ⚠ CUÁNTAS CLASES SE DESBLOQUEAN GRATIS. De ahí en más, RECLUTAR SE COMPRA.
     //
-    // La elección de cada tres oleadas ofrece contratar solo hasta llegar a este
-    // número; pasado eso, ofrece únicamente subir de nivel, y la única puerta
-    // para una clase nueva es la tienda del mercado.
+    // ⚠ ES 1 Y SOLO CUENTA EL ARRANQUE. Antes eran 2 porque la pantalla de
+    // elección regalaba una clase al empezar y otra en la primera elección; esa
+    // pantalla ya no existe —contratar y subir de nivel son ofertas de la tienda—
+    // y la tienda NO REGALA NADA.
     //
-    // El motivo es que "ancho" era gratis y "profundo" también, así que la
-    // elección no tenía costo de oportunidad real: contratar siempre agregaba
-    // algo que antes no estaba. Con el ancho pago, el oro pasa a competir contra
-    // el tablero y contra los niveles, que es donde el juego quiere la tensión.
+    // Lo único gratis de la corrida es la clase del arranque, que es el reemplazo
+    // directo de la pantalla inicial: la primera tienda ofrece solo clases, una
+    // sin cobrar y con al menos una ofensiva garantizada entre las opciones. Sin
+    // eso el jugador arranca con cero oro y cero clases y no se destraba nunca.
     //
-    // ⚠ El 2 no es un número suelto: es el arranque garantizado. La primera
-    // clase la regala la pantalla inicial —con al menos una ofensiva entre las
-    // tres— y la segunda llega en la primera elección. Con una sola, una corrida
-    // que arranca con clérigo o bardo no tiene con qué defenderse y se pierde
-    // sin que el jugador haya hecho nada mal.
+    // ⚠ Y las que NO se toman no desaparecen: quedan a su precio, comprables con
+    // el oro inicial que entrega la primera clase. Esa es toda la diferencia con
+    // la pantalla de elección, donde tomar una borraba las otras dos.
     //
-    // Subirlo afloja la economía; bajarlo a 1 vuelve al arranque frágil. En 9 se
-    // vuelve al comportamiento viejo, con todo el roster gratis.
-    "freeClasses": 2,
+    // Hoy solo lo lee la validación de arranque. Ponerlo en 0 dejaría la primera
+    // tienda sin nada gratis.
+    "freeClasses": 1,
 
     // ⚠ PASADAS LAS GRATIS, LA ELECCIÓN SE COBRA — con este descuento sobre el
     // precio de comprar lo mismo por el otro camino.
@@ -314,23 +313,63 @@
   // ⚠ LOS ÚNICOS NO SE VENDEN NUNCA. La tienda vende ingredientes y
   // conocimiento; el producto final se fabrica. Vender el Único borraría de un
   // saque buscar los componentes, comprar el plano y decidir si conservarlos.
+  //
+  // --- LA PANTALLA DE ELECCIÓN SE FUSIONÓ ACÁ --------------------------------
+  //
+  // ⚠ "slots" PASÓ DE 4 A 7 y entró "levelWeight". Hasta acá había DOS ventanas
+  // pegadas en la misma pantalla con reglas OPUESTAS: la elección ofrecía tres
+  // cosas, se tomaba UNA y las otras dos desaparecían; la tienda ofrecía cuatro y
+  // solo se consumía la comprada. Para el jugador era una sola tienda de siete
+  // cartas, así que comprar un nivel y ver evaporarse otras dos ofertas se leía
+  // como un bug —y con razón: nada en la pantalla decía que esas tres eran otra
+  // cosa—.
+  //
+  // Ahora es una tienda sola. Comprar no toca a las demás, que es la regla que la
+  // tienda ya tenía y la que el jugador esperaba.
+  //
+  // Lo que se pierde es el descuento: la elección cobraba con
+  // "choiceDiscountPercent" a cambio de no dejar elegir QUÉ salía. En la tienda
+  // el jugador ve las siete y elige, así que el descuento no tiene con qué
+  // pagarse. "choiceDiscountPercent" quedó sin uso.
+  //
+  // ⚠ Y LA TIENDA NO REGALA NADA. Lo único gratis de toda la corrida es la clase
+  // del arranque, que reemplaza a la pantalla de elección inicial. "freeClasses"
+  // ya no reparte nada por oleada.
+  //
+  // ⚠ NO HAY "levelWeight" Y NO TIENE QUE HABERLO. Subir de nivel no es una
+  // categoría aparte: es la OTRA CARA de la ranura de clase. Lo que rota es la
+  // clase, y qué te ofrece de ella lo decide tu roster —reclutarla si no la
+  // tenés, subirla si la tenés, bloqueada si ya está al tope—. Con dos categorías
+  // separadas, la misma clase podía salir dos veces en la misma tienda con dos
+  // caras distintas.
   "shop": {
-    "slots": 4,
+    "slots": 7,
     "intervalWaves": 3,
 
-    "classWeight": 24,
+    // ⚠ SUBIÓ DE 24 A 44 y ya no se apaga con el roster completo: esta ranura
+    // ahora cubre reclutar Y subir de nivel, así que tiene candidatas siempre.
+    // Con el peso viejo, la mitad "profunda" de lo que era la pantalla de
+    // elección habría quedado convertida en una rareza.
+    "classWeight": 44,
+
     "bronzeWeight": 30,
     "silverWeight": 30,
     "goldWeight": 8,
     "blueprintWeight": 8,
     "weaponWeight": 10,
 
+    // Del 7 en adelante el nivel ya no abre ranuras de perk, así que subirlo no
+    // aportaría nada. Al llegar acá la ranura de esa clase sale BLOQUEADA, no
+    // desaparece: que una clase esté terminada es información del roster.
+    // Coincide con "slotsPerkPorClase".
+    "maxLevelOnSale": 6,
+
     "maxGoldOffers": 1,
     "maxBlueprintOffers": 1,
 
-    // De las cuatro cartas, al menos estas tienen que poder aportarle a una clase
-    // que el jugador ya tiene. No hace falta que las cuatro sirvan —la
-    // incertidumbre es parte de la decisión— pero cuatro cartas muertas es una
+    // De las siete cartas, al menos estas tienen que poder aportarle a una clase
+    // que el jugador ya tiene. No hace falta que las siete sirvan —la
+    // incertidumbre es parte de la decisión— pero siete cartas muertas es una
     // pantalla que no existe.
     "minUsableOffers": 2,
 
@@ -393,10 +432,29 @@
   // una mezquindad: la corrida TERMINA al matarlo, así que cualquier recompensa
   // llega cuando ya no hay dónde usarla. Toda recompensa tiene que tener ventana
   // real de uso.
+  //
+  // --- LOS JEFES TARDÍOS DEJAN LLEVAR DOS -----------------------------------
+  //
+  // ⚠ Esto SUBE el poder total de la corrida, que es lo que "ofrecer varios y
+  // llevarse uno" venía cuidando. Es a propósito y tiene un motivo de ritmo: en
+  // el área 5 el jugador ya tiene el roster casi armado, los planos aprendidos y
+  // la mochila llena de Oro que no puede equipar —la ranura de comportamiento es
+  // UNA—, así que el jefe entregaba una carta más para una pila que ya no
+  // entraba. Dos permiten cerrar una receta en un solo jefe, que es lo que hace
+  // que el tramo final tenga algo que perseguir.
+  //
+  // Las áreas tempranas NO cambian: ahí un segundo Oro se equiparía enseguida y
+  // adelantaría la curva de poder entera.
+  //
+  // "bossGoldPicksLate" tiene que ser MENOR que "bossGoldOptionsLate", o dejaría
+  // de haber elección: llevarse tres de tres es un reparto, no una decisión.
   "drops": {
     "commonChance": 4,
     "bronzeChance": 70,
     "bossGoldOptions": 2,
+    "bossGoldLateArea": 5,
+    "bossGoldOptionsLate": 3,
+    "bossGoldPicksLate": 2,
     "synergyWeight": 3,
     "goldPoolSize": 13,
     "goldPoolPerNewClass": 2,
