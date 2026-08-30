@@ -124,6 +124,16 @@ public static class UiWidgets
         PerkEffect.FirstStrike => (UiStyle.Icono)0xE97D,       // ra-crossed-swords
         PerkEffect.Charge => (UiStyle.Icono)0xE9D0,            // ra-focused-lightning
 
+        // Los cinco que antes solo salían de un arma. ⚠ Reusan iconos que ya
+        // están en esta tabla o en UiStyle.Icono: no hay catálogo de la fuente
+        // RPG Awesome en el repo, y un codepoint elegido a ciegas es un glifo
+        // vacío en pantalla. Repetido con sentido se lee; en blanco no.
+        PerkEffect.Marksman => UiStyle.Icono.Range,             // el mismo del alcance
+        PerkEffect.Butchery => (UiStyle.Icono)0xE979,           // ra-crossed-axes
+        PerkEffect.Bloodthirst => (UiStyle.Icono)0xE9A9,        // ra-droplet
+        PerkEffect.TwinStrike => (UiStyle.Icono)0xE97D,         // ra-crossed-swords
+        PerkEffect.Siphon => UiStyle.Icono.Health,              // el mismo de la vida
+
         // --- Únicos: los nueve --------------------------------------------------
         PerkEffect.Perforation => (UiStyle.Icono)0xE919,       // ra-barbed-arrow
         PerkEffect.FrostWave => (UiStyle.Icono)0xE9D6,         // ra-frost-emblem

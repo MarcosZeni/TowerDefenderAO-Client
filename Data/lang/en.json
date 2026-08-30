@@ -51,6 +51,7 @@
     "perk.punteria.name": "Aim",
     "perk.empunadura.name": "Grip",
     "perk.muneca.name": "Wrist",
+    "perk.mira.name": "Scope",
 
     // --- Silver perks -------------------------------------------------------
     "perk.furia.name": "Fury",
@@ -61,6 +62,7 @@
     "perk.ojoDeAguila.name": "Eagle Eye",
     "perk.ira.name": "Wrath",
     "perk.vendaval.name": "Gale",
+    "perk.atalaya.name": "Watchtower",
 
     // --- Gold perks ---------------------------------------------------------
     "perk.ricochet.name": "Ricochet",
@@ -87,6 +89,13 @@
     "perk.sobrepenetracion.name": "Overpenetration",
     "perk.primerImpacto.name": "First Strike",
     "perk.preparacion.name": "Preparation",
+
+    // The five the engine already knew how to run, previously weapon-only.
+    "perk.tiroLejano.name": "Long Shot",
+    "perk.carniceria.name": "Butchery",
+    "perk.sedDeSangre.name": "Bloodthirst",
+    "perk.golpeDoble.name": "Twin Strike",
+    "perk.drenaje.name": "Siphon",
 
     // --- Unique perks -------------------------------------------------------
     "perk.perforacion.name": "Perforation",
@@ -170,6 +179,11 @@
     "effect.Overpenetration.name": "overpenetrate",
     "effect.FirstStrike.name": "first strike",
     "effect.Charge.name": "charge",
+    "effect.Marksman.name": "at range",
+    "effect.Butchery.name": "point blank",
+    "effect.Bloodthirst.name": "thirst",
+    "effect.TwinStrike.name": "twin",
+    "effect.Siphon.name": "siphon",
     "effect.Perforation.name": "perforation",
     "effect.FrostWave.name": "cone of cold",
     "effect.WrathOfGod.name": "wrath of god",

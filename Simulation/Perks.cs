@@ -113,6 +113,36 @@ public enum PerkEffect
     Charge = 42,
 
     // -------------------------------------------------------------------------
+    //  Los cinco que el motor ya sabía hacer y el catálogo no ofrecía
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ Los cinco YA ESTABAN implementados, balanceados y con sus topes, pero
+    //  solo como habilidad de arma. El jugador los veía si el generador se los
+    //  regalaba y no tenía forma de buscarlos: cinco ejes de decisión que la
+    //  corrida no podía elegir, y cinco casos del tick que ninguna partida
+    //  planificada usaba nunca.
+    //
+    //  Comparten la cuenta con su versión de arma pero NO los números: la de
+    //  arma es el premio de una corrida y esta es uno de los ocho Oro. Por eso
+    //  Sed de Sangre y Drenaje llevan sus propios topes en combate.json, más
+    //  bajos que los de Sed y Vampirismo.
+
+    /// <summary>Más daño cuanto más lejos esté el objetivo, dentro del alcance.</summary>
+    Marksman = 43,
+
+    /// <summary>Más daño cuanto más cerca. Lo opuesto de <see cref="Marksman"/>.</summary>
+    Butchery = 44,
+
+    /// <summary>Cada muerte de la oleada sube el daño, con techo. Se reinicia al terminarla.</summary>
+    Bloodthirst = 45,
+
+    /// <summary>Un segundo golpe secundario por una fracción del daño.</summary>
+    TwinStrike = 46,
+
+    /// <summary>Cada tantos ticks, el golpe le devuelve vida a la Torre.</summary>
+    Siphon = 47,
+
+    // -------------------------------------------------------------------------
     //  Únicos — no caen ni se compran: salen de fusionar dos Oro con un plano
     // -------------------------------------------------------------------------
     //

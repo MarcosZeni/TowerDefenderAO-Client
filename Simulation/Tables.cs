@@ -493,7 +493,17 @@ public sealed record BehaviorRules(
     int OverpenRadiusThousandths,
     int OpportunistThresholdPercent,
     int FirstStrikeThresholdPercent,
-    int ChargeIdleTicks);
+    int ChargeIdleTicks,
+
+    // Los cinco que antes solo existían como habilidad de arma. Los topes son
+    // PROPIOS y no se comparten con los de WeaponRules: rebalancear el arma no
+    // tiene por qué mover el perk, y en el caso de Drenaje compartir el
+    // acumulador de oleada haría que un arma le comiera el techo al perk.
+    int RangePortionCap,
+    int RangePortionScale,
+    int BloodthirstBonusCap,
+    int SiphonCooldownTicks,
+    int SiphonMaxHealingPerWave);
 
 /// <summary>Los topes de los Únicos que no entran en sus dos magnitudes.</summary>
 public sealed record UniqueRules(
@@ -1731,6 +1741,8 @@ public static class TableReader
         var foco = Obj(comp, "focus", archivo);
         var sobrepen = Obj(comp, "overpenetration", archivo);
         var eco = Obj(comp, "arcaneEcho", archivo);
+        var escalaAlcance = Obj(comp, "rangeScaling", archivo);
+        var drenaje = Obj(comp, "siphon", archivo);
 
         // "cada cuántos golpes" de los estados periódicos. Van sueltos y no en un
         // objeto común porque cada uno se balancea contra su propio efecto: cambiar
@@ -1796,7 +1808,12 @@ public static class TableReader
                 Int(sobrepen, "radiusThousandths", archivo),
                 Int(Obj(comp, "opportunist", archivo), "hpThresholdPercent", archivo),
                 Int(Obj(comp, "firstStrike", archivo), "hpThresholdPercent", archivo),
-                Int(Obj(comp, "charge", archivo), "idleTicks", archivo)),
+                Int(Obj(comp, "charge", archivo), "idleTicks", archivo),
+                Int(escalaAlcance, "portionCap", archivo),
+                Int(escalaAlcance, "portionScale", archivo),
+                Int(Obj(comp, "bloodthirst", archivo), "bonusCap", archivo),
+                Int(drenaje, "cooldownTicks", archivo),
+                Int(drenaje, "maxHealingPerWave", archivo)),
 
             new UniqueRules(
                 Int(unicos, "frostWaveMaxSecondaries", archivo),

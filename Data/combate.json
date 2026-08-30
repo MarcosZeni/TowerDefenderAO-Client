@@ -233,15 +233,53 @@
     // Sin nadie en alcance durante este rato, el próximo golpe sale cargado.
     // Una sola carga guardada: si se acumularan, un defensor en una esquina
     // muerta del mapa haría un golpe infinito.
-    "charge": { "idleTicks": 45 }
+    "charge": { "idleTicks": 45 },
+
+    // --- Los cinco que antes solo existían como habilidad de arma ------------
+    //
+    // ⚠ Los cinco comportamientos YA ESTABAN en el tick, con sus topes, pero el
+    // catálogo de perks no los ofrecía: se veían solo si el generador de armas
+    // los regalaba. Estos son sus topes de versión ORO, más bajos que los de
+    // arma, porque un arma legendaria es el premio de una corrida y un Oro es
+    // uno de los ocho que reparte el juego.
+
+    // Tiro Lejano y Carnicería escalan con qué porción del alcance usó el
+    // disparo. Son enteros en centésimas: 100 = el alcance entero. Los mismos
+    // números que «weaponAbilities.rangePortion*», y duplicados a propósito:
+    // así rebalancear el arma no mueve el perk sin que nadie lo haya pedido.
+    "rangeScaling": {
+      "portionCap": 100,
+      "portionScale": 100
+    },
+
+    // ⚠ Techo del bonus ACUMULADO por muertes de la oleada, no por muerte. Se
+    // reinicia al lanzar cada oleada. 45 contra los 100 del arma Sed: con 3%
+    // por muerte se llega al techo a los 15 kills, o sea dentro de una oleada
+    // normal, y el perk vale un +45% sostenido en vez de un ×2.
+    "bloodthirst": { "bonusCap": 45 },
+
+    // Drenaje: la versión Oro de Vampirismo. Cura MENOS y más espaciado —2
+    // puntos cada 45 ticks contra 1-8 cada 30—, y con un tope por oleada de 60
+    // contra 150.
+    //
+    // ⚠ Los topes son PROPIOS y no se comparten con los del arma. Un clérigo
+    // con Drenaje y un guerrero con arma de Vampirismo pueden estar en el mismo
+    // tablero, y con un solo acumulador uno le comería el techo al otro.
+    "siphon": {
+      "cooldownTicks": 45,
+      "maxHealingPerWave": 60
+    }
   },
 
   // --- Los Únicos ------------------------------------------------------------
   //
-  // ⚠ UN ÚNICO ES LA FUSIÓN DE DOS ORO CON LAS MAGNITUDES REBAJADAS, y ocupa UN
-  // SOLO SLOT. El slot liberado es la mitad del premio: si además sumara los dos
-  // Oro completos, tener el Único sería estrictamente mejor que tener los dos y
-  // la decisión de fusionar dejaría de ser una decisión.
+  // ⚠ UN ÚNICO ES LA FUSIÓN DE DOS ORO AL VALOR PLENO DE LOS DOS, y ocupa UN
+  // SOLO SLOT. El slot liberado es la otra mitad del premio.
+  //
+  // ⚠ Este párrafo decía lo contrario —«con las magnitudes rebajadas»— y se
+  // contradecía con el de doce líneas más abajo, en el mismo comentario. Es el
+  // texto viejo, de antes de sacar la rebaja: quedó arriba y el nuevo se escribió
+  // debajo. Manda el de abajo, que es el que explica por qué.
   //
   // Los dos números principales de cada Único van en perks.json como "magnitude"
   // y "magnitudeB". Acá quedan los topes que no entran en esos dos.

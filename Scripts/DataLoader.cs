@@ -454,7 +454,12 @@ public static class DataLoader
                 new EnemyCombat(2, 1),
                 new BossControl(50, 40, 30, 0, 1, 30, true, true, true),
                 new StateRules(60, 90, 180, 60, 300, 90, 15, 120, 6, 3, 90, 3, 120, 10, 60, 90, 180),
-                new BehaviorRules(1, 2000, 2, 1500, 3, 1800, 105, 2, 1500, 7, 5, 60, 4, 6, 5, 8, 4, 15, 1000, 40, 1500, 25, 80, 45),
+                // ⚠ Los dos últimos de la primera línea y los tres de la segunda
+                // son los cinco comportamientos que antes solo eran habilidad de
+                // arma. «RangePortionScale» DIVIDE: un 0 acá sería una división
+                // por cero en el primer disparo con Tiro Lejano.
+                new BehaviorRules(1, 2000, 2, 1500, 3, 1800, 105, 2, 1500, 7, 5, 60, 4, 6, 5, 8, 4, 15, 1000, 40, 1500, 25, 80, 45,
+                    100, 100, 45, 45, 60),
                 new UniqueRules(3, 75, 2000, 8, 50, 12, 3),
                 new WeaponRules(4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60, 70, 150, 15, 120, 150),
                 new EnemyTraits(35, 15, 90, 10, 30, 20, 10, 1500)),

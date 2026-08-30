@@ -11,8 +11,13 @@
   //  también por qué un bronze puede decir 100 y un unique 50 sin que esté mal:
   //  no se comparan en el mismo eje.
   //
-  //  ⚠ EL JEFE ES LA ÚNICA FUENTE DE ORO. Ocho por corrida, y desde Drops_v2 el
-  //    jefe OFRECE TRES Y EL JUGADOR ELIGE UNO.
+  //  ⚠ EL JEFE OFRECE DOS ORO Y EL JUGADOR ELIGE UNO. Ocho por corrida.
+  //
+  //    Decía «es la ÚNICA fuente de oro» y «ofrece TRES»: las dos cosas dejaron
+  //    de ser ciertas cuando la tienda rotativa empezó a vender Oro —caro, como
+  //    mucho uno por visita— y el jefe bajó de tres ofertas a dos justamente por
+  //    eso: ocho elecciones de tres MÁS Oro comprable dejaba que casi cualquier
+  //    partida armara el Único que quisiera. El jefe final no suelta nada.
   //  ⚠ LOS ÚNICOS NO CAEN Y NO SE COMPRAN: SE FUSIONAN (ver planos.json).
   //    Que un unique aparezca en una tirada de drop es un bug de datos.
   //
@@ -70,6 +75,14 @@
     { "id":  6, "key": "empunadura", "tier": "bronze", "effect": "Damage",  "magnitude": 12 },
     { "id":  7, "key": "muneca",     "tier": "bronze", "effect": "Cadence", "magnitude": 10 },
 
+    // ⚠ El tercero de alcance, y existe por el SORTEO, no por la magnitud.
+    // Bronce y plata tenían 3 de daño, 3 de cadencia y 2 de alcance cada uno, y
+    // «Perks.Roll» sortea uniforme entre los del tier: el alcance salía un 25%
+    // de las veces contra un 37,5% de los otros dos ejes. Nadie lo decidió —es
+    // el residuo de haber escrito ocho por tier— y no se ve en ningún número del
+    // catálogo, solo en qué ofrece la tienda a lo largo de una corrida.
+    { "id": 53, "key": "mira",       "tier": "bronze", "effect": "Range",   "magnitude": 18 },
+
     // --- Silver: más grandes -------------------------------------------------
     // ⚠ halcon y ojoDeAguila NO HACÍAN NADA en las clases de alcance 2
     // (2 × 1,40 = 2,8 → 2 por truncamiento entero): plata, 240 de oro, uno de
@@ -87,6 +100,11 @@
     { "id": 13, "key": "ojoDeAguila", "tier": "silver", "effect": "Range",   "magnitude": 35 },
     { "id": 14, "key": "ira",         "tier": "silver", "effect": "Damage",  "magnitude": 28 },
     { "id": 15, "key": "vendaval",    "tier": "silver", "effect": "Cadence", "magnitude": 20 },
+
+    // El tercero de alcance en plata, por el mismo motivo que «mira» en bronce:
+    // emparejar el sorteo, que estaba 3/3/2. La magnitud sigue la escala del
+    // tier —el alcance va más alto que el daño porque rinde menos por punto—.
+    { "id": 54, "key": "atalaya",     "tier": "silver", "effect": "Range",   "magnitude": 32 },
 
     // =========================================================================
     //  GOLD: comportamiento, compartido por 2-3 clases
@@ -186,6 +204,55 @@
     // Convierte los huecos entre grupos en una ventaja. Una sola carga guardada.
     { "id": 47, "key": "preparacion",       "tier": "gold", "effect": "Charge",          "magnitude":  60, "classes": ["Hunter", "Paladin"] },
 
+    // --- Los cinco que el motor ya hacía y el catálogo no ofrecía ------------
+    //
+    // ⚠ Los cinco comportamientos YA ESTABAN implementados, balanceados y con
+    // sus topes, pero SOLO como habilidad de arma. El jugador los veía si el
+    // generador se los regalaba y no tenía forma de buscarlos: cinco ejes de
+    // decisión que la corrida no podía elegir.
+    //
+    // ⚠ Y arreglan de paso el reparto del pool de Oro. Antes iba de 4 (Druida) a
+    // 7 (Cazador, Mago): con cuatro, la elección del jefe le ofrecía al Druida
+    // casi el catálogo entero y dejaba de elegir algo. Ahora va de 7 a 8, y por
+    // eso las clases de cada perk no son solo temáticas — se eligieron para
+    // emparejar, y el Mago quedó afuera de los cinco por ser el que más tenía.
+    //
+    // Los topes que no son la magnitud viven en «combate.json §behaviors», y son
+    // PROPIOS: más bajos que los del arma, porque un arma legendaria es el premio
+    // de una corrida y un Oro es uno de los ocho que reparte el juego.
+
+    // El pico es a alcance pleno y escala lineal con la distancia, así que
+    // promedia la mitad: +60 al borde vale como un condicional de ~+30. Va a las
+    // tres clases con alcance para que la distancia varíe de verdad; en las de
+    // alcance 2 el objetivo está casi siempre al borde y sería un +60 plano.
+    { "id": 48, "key": "tiroLejano",        "tier": "gold", "effect": "Marksman",    "magnitude": 60, "classes": ["Hunter", "Druid", "Cleric"] },
+
+    // El espejo exacto, para las tres de alcance 2.
+    //
+    // ⚠ Lo que lo hace rendir es DÓNDE está puesto el defensor, no a quién
+    // apunta: ninguno de los cuatro modos de targeting maximiza «cerca de mí»
+    // —los cuatro ordenan por avance en la ruta o por vida—. Un guerrero pegado
+    // al camino cobra casi el 60 entero; uno puesto en la fila de atrás, casi
+    // nada. Es el primer perk que le pone un número a la colocación.
+    { "id": 49, "key": "carniceria",        "tier": "gold", "effect": "Butchery",    "magnitude": 60, "classes": ["Warrior", "Paladin", "Thief"] },
+
+    // +3% por muerte de la oleada, techo 45% (combate.json). Arranca en cero cada
+    // oleada, así que premia al defensor puesto donde de verdad se mata y no
+    // sirve de nada contra un jefe solo.
+    { "id": 50, "key": "sedDeSangre",       "tier": "gold", "effect": "Bloodthirst", "magnitude":  3, "classes": ["Assassin", "Warrior", "Druid"] },
+
+    // Un segundo golpe por el 35%. Es el único Oro que es daño plano sin
+    // condición ni utilidad, y por eso es el más chico: el Doble del arma pega
+    // 70 y es legendario.
+    // ⚠ El segundo golpe es SECUNDARIO: no proccea nada, ni siquiera a sí mismo.
+    { "id": 51, "key": "golpeDoble",        "tier": "gold", "effect": "TwinStrike",  "magnitude": 35, "classes": ["Thief", "Bard", "Assassin"] },
+
+    // ⚠ La magnitud son PUNTOS de vida de la Torre, no un porcentaje. Dos cada 45
+    // ticks por clase, tope 60 por oleada: la versión chica de Vampirismo, que
+    // cura 1-8 cada 30 con tope 150. Es la única forma de recuperar vida de la
+    // Torre que no depende de encontrar un arma.
+    { "id": 52, "key": "drenaje",           "tier": "gold", "effect": "Siphon",      "magnitude":  2, "classes": ["Cleric", "Paladin", "Druid"] },
+
     // =========================================================================
     //  UNIQUE: NO caen, NO se compran. Se fusionan, y ocupan UN SOLO slot
     // =========================================================================
@@ -229,10 +296,16 @@
     // Hemorragia (30%) + Oportunista (+35% bajo el umbral de vida).
     { "id": 29, "key": "apocalipsis",    "tier": "unique", "effect": "Apocalypse",     "magnitude": 30, "magnitudeB": 35, "classes": ["Assassin"] },
 
-    // Raíces (15 ticks, en combate.json) + Tormenta de Fuego (quemadura del 20%).
-    // ⚠ "magnitudeB" queda en 0 y NO es un olvido: la duración de la raíz no es
-    // una magnitud del perk, sale de «uniques.terribleHungerRootTicks».
-    { "id": 30, "key": "terribleHambre", "tier": "unique", "effect": "TerribleHunger", "magnitude": 20, "magnitudeB":  0, "classes": ["Druid"] },
+    // Raíces (15 ticks, en combate.json) + Tormenta de Fuego (20% al objetivo,
+    // 15% a hasta dos cercanos).
+    //
+    // ⚠ "magnitudeB" era 0 y el comentario decía que no era un olvido —la
+    // duración de la raíz sale de «uniques.terribleHungerRootTicks»—. La
+    // conclusión estaba bien y la consecuencia mal: al no haber segundo número,
+    // el código quemaba SOLO al objetivo y el componente Tormenta de Fuego
+    // entraba a menos de la mitad (20 contra 20 + 15 + 15). Ahora "magnitudeB"
+    // es la quemadura secundaria, igual que en el Oro del que sale.
+    { "id": 30, "key": "terribleHambre", "tier": "unique", "effect": "TerribleHunger", "magnitude": 20, "magnitudeB": 15, "classes": ["Druid"] },
 
     // Inspiración (+10% cadencia) + Quebranto (+8% vulnerable).
     { "id": 31, "key": "tormentaDivina", "tier": "unique", "effect": "DivineStorm",    "magnitude": 10, "magnitudeB":  8, "classes": ["Cleric"] },

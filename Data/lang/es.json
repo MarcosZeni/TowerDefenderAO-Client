@@ -66,6 +66,7 @@
     "perk.punteria.name": "Puntería",
     "perk.empunadura.name": "Empuñadura",
     "perk.muneca.name": "Muñeca",
+    "perk.mira.name": "Mira",
 
     // --- Perks de plata -----------------------------------------------------
     "perk.furia.name": "Furia",
@@ -76,6 +77,7 @@
     "perk.ojoDeAguila.name": "Ojo de Águila",
     "perk.ira.name": "Ira",
     "perk.vendaval.name": "Vendaval",
+    "perk.atalaya.name": "Atalaya",
 
     // --- Perks de oro -------------------------------------------------------
     "perk.ricochet.name": "Ricochet",
@@ -104,6 +106,13 @@
     "perk.sobrepenetracion.name": "Sobrepenetración",
     "perk.primerImpacto.name": "Primer Impacto",
     "perk.preparacion.name": "Preparación",
+
+    // Los cinco que el motor ya sabía hacer y solo salían de un arma.
+    "perk.tiroLejano.name": "Tiro Lejano",
+    "perk.carniceria.name": "Carnicería",
+    "perk.sedDeSangre.name": "Sed de Sangre",
+    "perk.golpeDoble.name": "Golpe Doble",
+    "perk.drenaje.name": "Drenaje",
 
     // --- Perks únicos -------------------------------------------------------
     // Los nombres salen de los 41 hechizos reales de Dat\Hechizos.dat de Austral.
@@ -190,6 +199,11 @@
     "effect.Overpenetration.name": "sobrepenetra",
     "effect.FirstStrike.name": "primer impacto",
     "effect.Charge.name": "carga",
+    "effect.Marksman.name": "a distancia",
+    "effect.Butchery.name": "a quemarropa",
+    "effect.Bloodthirst.name": "sed",
+    "effect.TwinStrike.name": "doble",
+    "effect.Siphon.name": "drena",
     "effect.Perforation.name": "perforación",
     "effect.FrostWave.name": "onda de frío",
     "effect.WrathOfGod.name": "ira de dios",

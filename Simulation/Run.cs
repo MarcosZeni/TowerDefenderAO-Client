@@ -43,6 +43,16 @@ public sealed class Run
     /// <summary>Último tick en que curó Vampirismo, por clase. Ver la habilidad.</summary>
     private readonly Dictionary<DefenderClass, int> _ultimaCuraPorClase = [];
 
+    /// <summary>Ídem para el perk Drenaje.</summary>
+    /// <remarks>
+    /// ⚠ Separado del de Vampirismo a propósito. Los dos curan la Torre y no
+    /// pueden coexistir en el <b>mismo</b> defensor —son la misma ranura—, pero
+    /// sí en el mismo tablero: un clérigo con Drenaje y un guerrero con arma de
+    /// Vampirismo. Con un solo diccionario, el proc de uno le comería la ventana
+    /// al otro cuando fueran de la misma clase.
+    /// </remarks>
+    private readonly Dictionary<DefenderClass, int> _ultimoDrenajePorClase = [];
+
     /// <summary>Buffer reusado por ElegirObjetivo, para no alocar por disparo.</summary>
     private readonly List<int> _candidatos = [];
 
@@ -128,6 +138,14 @@ public sealed class Run
     /// oleada podía bajar, y la Torre quedaba prácticamente inmortal.
     /// </remarks>
     private int _curaVampirismoOleada;
+
+    /// <summary>Lo que lleva curado Drenaje en esta oleada, en centésimas.</summary>
+    /// <remarks>
+    /// Su propio acumulador y su propio tope, por lo mismo que el diccionario:
+    /// el arma es el premio de una corrida y el perk es uno de los ocho Oro, así
+    /// que comparten la cuenta pero no el techo.
+    /// </remarks>
+    private int _curaDrenajeOleada;
 
     /// <summary>Ticks entre spawn y spawn de la oleada actual.</summary>
     /// <remarks>Arranca en el de <c>curvas.json</c> hasta que la primera oleada imponga el suyo.</remarks>
@@ -2191,8 +2209,60 @@ public sealed class Run
             PerkEffect.ThresholdGuard or PerkEffect.WrathOfGod when objetivo.AttackingTower
                 => Ints.WithPercents(dano, stats.BehaviorMagnitude),
 
+            // Tiro Lejano premia lo lejano, Carnicería lo cercano: la misma
+            // cuenta con la porción dada vuelta, igual que Francotirador y
+            // Carnicero de arma. Son la única forma de que el modo de targeting
+            // del defensor cambie su DAÑO y no solo a quién le pega.
+            // ⚠ La escala DIVIDE, así que va con piso en 1: un 0 en el JSON
+            // sería una división por cero en el primer disparo, y el mismo piso
+            // ya lo lleva la cadencia en Roster.StatsOf por lo mismo.
+            PerkEffect.Marksman
+                => dano + Ints.MultiplyPercent(dano, stats.BehaviorMagnitude
+                    * PorcionDeAlcance(stats, defensor, objetivo, b.RangePortionCap)
+                    / System.Math.Max(1, b.RangePortionScale)),
+
+            PerkEffect.Butchery
+                => dano + Ints.MultiplyPercent(dano, stats.BehaviorMagnitude
+                    * (b.RangePortionCap - PorcionDeAlcance(stats, defensor, objetivo, b.RangePortionCap))
+                    / System.Math.Max(1, b.RangePortionScale)),
+
+            // Sed de Sangre sube con cada muerte de la oleada, con techo propio
+            // —más bajo que el del arma Sed— y se reinicia al terminarla.
+            PerkEffect.Bloodthirst
+                => dano + Ints.MultiplyPercent(
+                    dano, System.Math.Min(b.BloodthirstBonusCap, defensor.KillsInWave * stats.BehaviorMagnitude)),
+
             _ => dano,
         };
+    }
+
+    /// <summary>
+    /// Qué porción del alcance usó este disparo, de 0 a <paramref name="tope"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se mide al cuadrado —que es como se mide todo acá— y se compara
+    /// contra el alcance al cuadrado: no hace falta raíz. Las dos distancias van
+    /// en milésimas de celda, que es la unidad del alcance desde la propuesta
+    /// V2.</para>
+    ///
+    /// <para>⚠ La comparten el perk y la habilidad de arma a propósito. Estaba
+    /// escrita una sola vez, adentro de <see cref="AdjustDamageByAbility"/>, y
+    /// copiarla para los perks nuevos habría dejado dos versiones de la misma
+    /// fórmula que se pueden desincronizar en silencio.</para>
+    /// </remarks>
+    private int PorcionDeAlcance(EffectiveStats stats, Defender defensor, Enemy objetivo, int tope)
+    {
+        var celda = _ruta.CellAt(objetivo.DistanceTravelled);
+
+        long d2 = Ints.SquaredDistanceThousandths(
+            defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
+
+        long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
+
+        if (alcance2 <= 0)
+            return 0;
+
+        return (int)System.Math.Min(tope, d2 * 100 / alcance2);
     }
 
     private static bool PorDebajoDe(Enemy e, int porcentaje)
@@ -2313,6 +2383,19 @@ public sealed class Run
                 MarcarBotin(objetivo, stats.BehaviorMagnitude, c.States.LootMaxGoldPerEnemy, c.States.LootMaxGoldPerWave);
                 return;
 
+            // --- Los cinco que antes solo salían de un arma --------------------
+
+            case PerkEffect.TwinStrike:
+                // ⚠ Va como SECUNDARIO, igual que el Doble del arma: duplica el
+                // daño, no el disparo. Si contara como directo dispararía otra
+                // vez este mismo switch y el perk se procearía a sí mismo.
+                GolpeSecundario(objetivo, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+                return;
+
+            case PerkEffect.Siphon:
+                Drenar(defensor, stats.BehaviorMagnitude);
+                return;
+
             // Estos ya escalaron el golpe en AdjustDamageByBehavior y no hacen
             // nada más. Están enumerados y no en el `default` a propósito: así
             // agregar un comportamiento nuevo obliga a decidir en qué lado va.
@@ -2321,6 +2404,9 @@ public sealed class Run
             case PerkEffect.ThresholdGuard:
             case PerkEffect.FirstStrike:
             case PerkEffect.Charge:
+            case PerkEffect.Marksman:
+            case PerkEffect.Butchery:
+            case PerkEffect.Bloodthirst:
                 return;
 
             // =================================================================
@@ -2350,21 +2436,35 @@ public sealed class Run
                 return;
 
             // Raíces + Tormenta de Fuego.
+            //
+            // ⚠ Llama a Quemar, NO a AplicarDot. Tormenta de Fuego son DOS cosas
+            // —quemadura al objetivo y una menor a hasta dos cercanos— y el
+            // Único aplicaba solo la primera: el componente entraba a menos de
+            // la mitad de su valor, contra la regla de que un Único vale lo que
+            // valen sus dos Oro. La quemadura secundaria es «magnitudeB».
             case PerkEffect.TerribleHunger:
-                AplicarDot(objetivo, DotKind.Burn, Ints.MultiplyPercent(dano, stats.BehaviorMagnitude));
+                Quemar(objetivo, dano, stats.BehaviorMagnitude, stats.BehaviorMagnitudeB);
 
                 if (defensor.HitCounter % b.RootEveryHits == 0)
                     Enraizar(objetivo, c.Uniques.TerribleHungerRootTicks);
 
                 return;
 
-            // Inspiración + Quebranto, las dos en el mismo golpe periódico.
+            // Inspiración + Quebranto, CADA UNA EN SU PROPIO PERÍODO.
+            //
+            // ⚠ Iban las dos en el mismo `if`, y eso hacía el componente
+            // Quebranto a la mitad: Inspiración dispara cada 8 golpes y
+            // Quebranto cada 4. Con la cadencia 24 del Clérigo, el uptime de
+            // Vulnerable caía de 60/96 a 60/192 —62% a 31%— sin que ningún
+            // número del catálogo lo dijera. Ira de Dios, que combina el mismo
+            // Quebranto, siempre usó SunderEveryHits: eran dos casos del mismo
+            // switch contando distinto.
             case PerkEffect.DivineStorm:
                 if (defensor.HitCounter % b.InspireEveryHits == 0)
-                {
                     Inspirar(defensor, stats.BehaviorMagnitude);
+
+                if (defensor.HitCounter % b.SunderEveryHits == 0)
                     Vulnerar(objetivo, stats.BehaviorMagnitudeB);
-                }
 
                 return;
 
@@ -2376,13 +2476,18 @@ public sealed class Run
                 Debilitar(objetivo, stats.BehaviorMagnitudeB);
                 return;
 
-            // Golpe Sísmico + Quebranto, las dos en el mismo golpe periódico.
+            // Golpe Sísmico + Quebranto, CADA UNO EN SU PROPIO PERÍODO.
+            //
+            // ⚠ Mismo arreglo que Tormenta Divina, más chico: el Quebranto iba
+            // en el `if` del empujón —cada 5 golpes— cuando el suyo es cada 4.
+            // Con la cadencia 18 del Guerrero, el uptime de Vulnerable pasa de
+            // 60/90 a 60/72: 67% a 83%, que es lo que rinde el Oro suelto.
             case PerkEffect.Strength:
                 if (defensor.HitCounter % b.SeismicEveryHits == 0)
-                {
                     Empujar(objetivo, stats.BehaviorMagnitude, c.Uniques.StrengthMaxPushPerEnemy);
+
+                if (defensor.HitCounter % b.SunderEveryHits == 0)
                     Vulnerar(objetivo, stats.BehaviorMagnitudeB);
-                }
 
                 return;
 
@@ -2644,6 +2749,48 @@ public sealed class Run
         enemigo.ExtraGoldExpiryTick = Tick + _datos.Combat.States.LootTicks;
     }
 
+    /// <summary>
+    /// Drenaje: el golpe le devuelve unos puntos de vida a la Torre.
+    /// </summary>
+    /// <remarks>
+    /// <para>La versión Oro de Vampirismo, con la misma forma y números más
+    /// chicos: un proc <b>por clase</b> cada 45 ticks y un tope de curación por
+    /// oleada. Los dos límites hacen falta juntos —la ventana acota el ritmo, el
+    /// tope acota el total— y es la lección que costó aprender con el arma: sin
+    /// el segundo, una build de cadencia curaba más de lo que la oleada podía
+    /// bajar y la Torre quedaba prácticamente inmortal.</para>
+    ///
+    /// <para>⚠ La magnitud son <b>PUNTOS</b> de vida, no un porcentaje: hay que
+    /// escalarla como el HP de la Torre. Sin eso, curar 2 sobre una Torre de
+    /// 100.000 internos sería curar 0,02 y el perk quedaría mudo.</para>
+    /// </remarks>
+    private void Drenar(Defender defensor, int puntos)
+    {
+        if (puntos <= 0)
+            return;
+
+        var b = _datos.Combat.Behaviors;
+
+        int tope = Ints.ToHundredths(b.SiphonMaxHealingPerWave);
+
+        if (_curaDrenajeOleada >= tope)
+            return;
+
+        if (_ultimoDrenajePorClase.TryGetValue(defensor.DefenderClass, out int ultima) &&
+            Tick - ultima < b.SiphonCooldownTicks)
+            return;
+
+        int cura = System.Math.Min(Ints.ToHundredths(puntos), tope - _curaDrenajeOleada);
+
+        // Lo que la Torre no puede recibir tampoco se descuenta del tope: curar
+        // contra una Torre llena no gastó nada.
+        int antes = Tower.Hp;
+        Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + cura);
+
+        _curaDrenajeOleada += Tower.Hp - antes;
+        _ultimoDrenajePorClase[defensor.DefenderClass] = Tick;
+    }
+
     /// <summary>Suma daño por tiempo, conservando Potencia × Duración.</summary>
     private void AplicarDot(Enemy enemigo, DotKind cual, int danoTotal)
     {
@@ -2742,30 +2889,23 @@ public sealed class Run
             case WeaponAbility.Sniper:
             case WeaponAbility.Butcher:
             {
-                // Cuánto del alcance está usando el disparo, en porcentaje. Se
-                // mide al cuadrado —que es como se mide todo acá— y se compara
-                // contra el alcance al cuadrado: no hace falta raíz. Las dos
-                // distancias van en milésimas de celda, que es la unidad del
-                // alcance desde la propuesta V2.
-                var celda = _ruta.CellAt(objetivo.DistanceTravelled);
+                // ⚠ El tope y la escala salen de combate.json y ya NO son 100
+                // escrito acá. Los dos números existían en el archivo y en
+                // WeaponRules desde siempre, y el tick los ignoraba: tocarlos no
+                // hacía nada y nadie se enteraba. Con los valores actuales
+                // —100 y 100— la cuenta da exactamente lo mismo que antes.
+                var w = _datos.Combat.Weapons;
 
-                long d2 = Ints.SquaredDistanceThousandths(
-                    defensor.Cell.X, defensor.Cell.Y, celda.X, celda.Y);
-
-                long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
-
-                if (alcance2 <= 0)
-                    return dano;
-
-                int porcion = (int)System.Math.Min(100, d2 * 100 / alcance2);
+                int porcion = PorcionDeAlcance(stats, defensor, objetivo, w.RangePortionCap);
 
                 // Francotirador premia lo lejano, carnicero lo cercano. Son la
                 // misma cuenta con el porcentaje dado vuelta, y por eso van juntas.
                 int factor = stats.Ability == WeaponAbility.Sniper
                     ? porcion
-                    : 100 - porcion;
+                    : w.RangePortionCap - porcion;
 
-                return dano + Ints.MultiplyPercent(dano, stats.AbilityMagnitude * factor / 100);
+                return dano + Ints.MultiplyPercent(
+                    dano, stats.AbilityMagnitude * factor / System.Math.Max(1, w.RangePortionScale));
             }
 
             case WeaponAbility.Thirst:
@@ -3317,6 +3457,11 @@ public sealed class Run
     ///
     /// <para>Y para el jugador la diferencia no se nota: si dos defensores con Sed
     /// cubren la misma zona, los dos estuvieron matando.</para>
+    ///
+    /// <para>⚠ Cuenta para las <b>dos</b> cosas que leen el contador: el arma Sed
+    /// y el perk Sed de Sangre. Filtrar solo por el arma dejaba al perk contando
+    /// siempre cero, que es un perk que no hace nada — y no lo diría ningún
+    /// error, solo un número que nunca sube.</para>
     /// </remarks>
     private void ContarMuertesParaSed()
     {
@@ -3324,7 +3469,8 @@ public sealed class Run
         {
             var stats = Roster.StatsOf(d.DefenderClass, Backpack);
 
-            if (stats.Ability != WeaponAbility.Thirst)
+            if (stats.Ability != WeaponAbility.Thirst &&
+                stats.Behavior != PerkEffect.Bloodthirst)
                 continue;
 
             long alcance2 = (long)stats.RangeMilli * stats.RangeMilli;
@@ -3830,6 +3976,11 @@ public sealed class Run
         // que una oleada larga con una build de cadencia seguía curando más de lo
         // que la oleada podía bajar.
         _curaVampirismoOleada = 0;
+
+        // Y con el del perk Drenaje, que lleva el suyo aparte: los dos curan la
+        // Torre y pueden estar en el mismo tablero, así que un solo acumulador
+        // haría que el arma le comiera el techo al perk.
+        _curaDrenajeOleada = 0;
 
         // Lo que quedó en el bolsillo al arrancar la oleada es lo que la tienda
         // NO se llevó. Se mide solo en las oleadas de tienda: en las otras sería
