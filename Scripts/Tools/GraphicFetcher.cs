@@ -2115,7 +2115,24 @@ public static class GraphicFetcher
         // Empaquetado por filas, los más altos primero: es el que menos aire deja
         // sin meterse en un packer de verdad, y acá los cuadros de un mismo bicho
         // miden todos casi lo mismo.
-        const int Aire = 2;
+        //
+        // ⚠ Los pisos van SIN aire, y eso depende de cómo se los dibuja.
+        //
+        // Los dos píxeles de separación existen porque un `AtlasTexture` con filtro
+        // lineal le chupa una fila de píxeles al vecino y aparece una costura. Un
+        // `piso.*` no pasa nunca por ahí: `BakedFloor` lo lee como `Image` con
+        // `SheetImage` y lo copia con `BlitRect`, que es una copia exacta en CPU.
+        // Sin filtrado no hay de dónde sangrar, y sin el aire cuatro bloques de
+        // 512 entran justos en 1024×1024 en vez de necesitar 1036.
+        //
+        // Si algún día un piso se dibuja con `GraphicsLoader.Texture`, esto vuelve
+        // a hacer falta.
+        bool soloPisos = true;
+
+        foreach (var (clave, _) in entradas)
+            soloPisos &= clave.StartsWith("piso.", System.StringComparison.Ordinal);
+
+        int Aire = soloPisos ? 0 : 2;
 
         // ⚠ El ancho sale del ÁREA, no de una constante.
         //
@@ -2411,12 +2428,12 @@ public static class GraphicFetcher
     /// regiones—. Medido sobre este índice, de 547 millones de píxeles en disco se
     /// usan 150.</para>
     ///
-    /// <para>⚠ <b>Las hojas de <c>piso.</c> se saltean.</b> Un piso es un bloque de
-    /// 4×4 tiles que se dibuja pegado al de al lado, y el filtro es lineal: con el
-    /// bloque rodeado de píxeles transparentes, el borde de cada tile interpola
-    /// contra el aire y aparece una costura en el suelo. En la hoja original el
-    /// vecino es otro tile opaco y eso no pasa. Empaquetar pisos necesita el borde
-    /// repetido, que es otro trabajo.</para>
+    /// <para>Los pisos entran también. Se saltearon hasta el 2026-08-31 por miedo
+    /// a las costuras del filtro lineal, hasta que se verificó que un <c>piso.*</c>
+    /// no pasa nunca por un <c>AtlasTexture</c>: <c>BakedFloor</c> lo lee como
+    /// <c>Image</c> y lo copia con <c>BlitRect</c>, que es una copia exacta en CPU.
+    /// Van con cero aire, y por eso cuatro bloques de 512 entran justos en
+    /// 1024×1024 en vez de necesitar 1036.</para>
     ///
     /// <para>La lista de hojas se saca <b>antes</b> de empezar. Cada rehecho crea
     /// una hoja nueva al final de la numeración, y sin la foto previa el recorrido
@@ -2428,30 +2445,19 @@ public static class GraphicFetcher
         var graficos = json["graficos"]!.AsObject();
 
         var hojas = new SortedSet<int>();
-        var conPiso = new HashSet<int>();
 
-        foreach (var (clave, valor) in graficos)
+        foreach (var (_, valor) in graficos)
         {
-            if (valor?["fileNum"] is null)
-                continue;
-
-            int n = (int)valor["fileNum"]!;
-            hojas.Add(n);
-
-            if (clave.StartsWith("piso.", System.StringComparison.Ordinal))
-                conPiso.Add(n);
+            if (valor?["fileNum"] is not null)
+                hojas.Add((int)valor["fileNum"]!);
         }
 
         GD.Print($"── Rehacer las {hojas.Count} hojas ÷{divisor} ─────────────");
-        GD.Print($"  · se saltean {conPiso.Count} hojas de piso");
 
         int hechas = 0;
 
         foreach (int n in hojas)
         {
-            if (conPiso.Contains(n))
-                continue;
-
             RescaleSheet(n, divisor);
             hechas++;
         }
