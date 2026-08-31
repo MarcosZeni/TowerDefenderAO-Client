@@ -18,8 +18,23 @@ namespace TowerOfArgentum;
 /// </remarks>
 public partial class Game : Node2D
 {
-    /// <summary>Milisegundos de un tick. 1000/30 = 33,33… y acá se trunca a 33.</summary>
-    private const long MsPorTick = 1000 / Ints.TicksPerSecond;
+    /// <summary>
+    /// Cuánto vale un tick en las unidades del acumulador.
+    /// </summary>
+    /// <remarks>
+    /// <para>El acumulador ya no cuenta milisegundos: cuenta
+    /// <b>microsegundos × ticks por segundo</b>. Así un tick vale exactamente un
+    /// millón de esas unidades y no hay ningún redondeo en el medio.</para>
+    ///
+    /// <para>⚠ Acá vivía <c>MsPorTick = 1000 / 30</c>, que <b>truncaba a 33</b>
+    /// los 33,33… ms reales de un tick. Eran dos bugs en uno: la simulación
+    /// corría un 1 % rápido contra el reloj de pared, y —peor— con frames de
+    /// 16 o 17 ms enteros el bucle sacaba 1, 2, 1, 1, 2 ticks por frame en vez
+    /// de un ritmo parejo. Esa irregularidad es la mitad de lo "tosco" que se
+    /// veía: los sprites avanzaban a saltos desiguales aunque los FPS
+    /// estuvieran clavados.</para>
+    /// </remarks>
+    private const long UnidadesPorTick = 1_000_000;
 
     /// <summary>
     /// Techo de ticks por frame.
@@ -36,8 +51,30 @@ public partial class Game : Node2D
 
     public Run Run { get; private set; } = null!;
     private ActionLog _log = null!;
-    private long _ultimoMs;
+    private long _ultimoUs;
     private long _acumulador;
+
+    /// <summary>
+    /// Dónde estaba cada enemigo en la ruta <b>antes</b> del último tick, por
+    /// <c>SpawnId</c> y en milésimas de celda.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la mitad de atrás de la interpolación del render: el dibujo no
+    /// muestra el estado del tick, muestra un punto <i>entre</i> el tick anterior
+    /// y el actual. Sin esto los enemigos se mueven 30 veces por segundo y el
+    /// monitor los repite dos o cinco frames seguidos — que es exactamente la
+    /// sensación de tosco que hay que sacar.</para>
+    ///
+    /// <para>⚠ Esto <b>no vuelve nunca a la simulación</b>, igual que
+    /// <c>Route.PosicionFina</c>. Se llena leyendo el estado justo antes de
+    /// <c>Run.Advance</c> y solo lo consume <c>_Draw</c>.</para>
+    ///
+    /// <para>Se indexa por <c>SpawnId</c> porque no se reusa nunca: un enemigo
+    /// muerto deja una entrada huérfana que se pisa en el clear del tick
+    /// siguiente, y un enemigo recién aparecido no tiene entrada y se dibuja en
+    /// su posición exacta, que es lo correcto.</para>
+    /// </remarks>
+    private readonly System.Collections.Generic.Dictionary<int, long> _distanciaPrevia = new();
 
     /// <summary>Multiplicador de velocidad. Acelerar no toca el ranking: los ticks son los mismos.</summary>
     private int _velocidad = 1;
@@ -149,7 +186,7 @@ public partial class Game : Node2D
             Position = new Vector2(tx, ty - 14),
         });
 
-        _ultimoMs = FineClock.Ms;
+        _ultimoUs = FineClock.Us;
 
         GD.Print($"RunCurve iniciada · seed {Seed} · run {RunId} · " +
                  $"ruta de {mapa.Route.Length / Ints.ThousandthsPerCell} celdas");
@@ -375,15 +412,110 @@ public partial class Game : Node2D
         QueueRedraw();
     }
 
+    /// <summary>
+    /// En qué parte del tick actual está el dibujo, en milésimas: 0 recién
+    /// terminado el tick, 1000 justo antes del que viene.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el <i>alfa</i> de la interpolación. Se topea en 1000 a propósito:
+    /// cuando el bucle choca contra <see cref="MaxTicksPorFrame"/> el acumulador
+    /// queda por encima de un tick, y dejarlo pasar sería <b>extrapolar</b> —
+    /// adivinar dónde va a estar el enemigo—. Adivinar se ve peor que atrasarse:
+    /// un bicho que muere o frena en la Torre se pasaría de largo y volvería.</para>
+    /// </remarks>
+    private long FraccionMilesimas
+    {
+        get
+        {
+            long f = _acumulador * 1000 / UnidadesPorTick;
+
+            return f < 0 ? 0 : (f > 1000 ? 1000 : f);
+        }
+    }
+
+    /// <summary>
+    /// El instante que se está dibujando, en milisegundos de mundo.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el reloj de las animaciones de sprite. <b>Sale de la simulación,
+    /// no del reloj de pared</b>: si el juego se atrasa contra el reloj —o si
+    /// está en pausa, o corriendo a x4— las patas de los bichos se mueven al
+    /// ritmo del mundo y no al de la máquina.</para>
+    ///
+    /// <para>Se cuenta desde <c>Tick - 1</c> porque el render va justo un tick
+    /// atrás: es el mismo instante que muestra la posición interpolada, y si la
+    /// animación fuera por delante de la posición el sprite pisaría en un lugar
+    /// y se dibujaría en otro.</para>
+    ///
+    /// <para>⚠ Acá estaba <c>Run.Tick * MsPorTick</c>, con <c>MsPorTick</c>
+    /// truncado a 33: la animación corría un 1 % rápida y, sobre todo, avanzaba
+    /// a escalones de 33 ms. La división por <see cref="Ints.TicksPerSecond"/> al
+    /// final —y no antes— mantiene los 33,33… exactos.</para>
+    /// </remarks>
+    private long MsMundo
+    {
+        get
+        {
+            // En milésimas de tick, para dividir una sola vez.
+            long milesimas = (((long)Run.Tick - 1) * 1000) + FraccionMilesimas;
+
+            return milesimas < 0 ? 0 : milesimas / Ints.TicksPerSecond;
+        }
+    }
+
+    /// <summary>
+    /// Dónde dibujar a este enemigo sobre la ruta, en milésimas de celda.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se interpola la <b>distancia recorrida</b>, no el par (x, y). Es un
+    /// solo escalar y, sobre todo, <c>Route.PosicionFina</c> se encarga después
+    /// de la geometría: el sprite dobla las esquinas por el camino en vez de
+    /// cortar en diagonal, que es lo que pasaría al interpolar los píxeles.</para>
+    ///
+    /// <para>Sin entrada previa —enemigo recién aparecido— o sin avance —frenado
+    /// pegándole a la Torre— se devuelve la posición exacta y no se inventa
+    /// nada.</para>
+    /// </remarks>
+    private long DistanciaVisible(Enemy e)
+    {
+        if (!_distanciaPrevia.TryGetValue(e.SpawnId, out long previa))
+            return e.DistanceTravelled;
+
+        long avance = e.DistanceTravelled - previa;
+
+        if (avance <= 0)
+            return e.DistanceTravelled;
+
+        return previa + (avance * FraccionMilesimas / 1000);
+    }
+
+    /// <summary>
+    /// Corre un tick, anotando antes dónde estaba cada enemigo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Todo tick pasa por acá.</b> Un <c>Run.Advance()</c> suelto deja la
+    /// foto vieja y el render interpola contra una posición de dos ticks atrás:
+    /// el enemigo se ve arrastrarse y después pegar un salto.
+    /// </remarks>
+    private void AvanzarUnTick()
+    {
+        _distanciaPrevia.Clear();
+
+        foreach (var e in Run.Enemies)
+            _distanciaPrevia[e.SpawnId] = e.DistanceTravelled;
+
+        Run.Advance();
+    }
+
     public override void _Process(double delta)
     {
         // ⚠ `delta` de Godot es un double y no se usa: el acumulador va en
-        // enteros de milisegundos. No es que un double acá rompa el
+        // enteros de microsegundos. No es que un double acá rompa el
         // determinismo —el acumulador solo decide CUÁNTOS ticks correr, no qué
         // pasa adentro— pero mantener la frontera limpia evita la discusión.
-        long ahora = FineClock.Ms;
-        long transcurrido = ahora - _ultimoMs;
-        _ultimoMs = ahora;
+        long ahora = FineClock.Us;
+        long transcurrido = ahora - _ultimoUs;
+        _ultimoUs = ahora;
 
         // ⚠ En pausa el acumulador NO se llena.
         //
@@ -402,29 +534,39 @@ public partial class Game : Node2D
 
         if (Run.Paused)
         {
-            Run.Advance();
+            // Con la simulación en pausa no hay tick que interpolar: se vuelve a
+            // cero para que el dibujo muestre el estado exacto y no una fracción
+            // congelada del último tick que corrió.
+            _acumulador = 0;
+
+            AvanzarUnTick();
             QueueRedraw();
             GuardarAlAbrirPreparacion();
             return;
         }
 
-        _acumulador += transcurrido * _velocidad;
+        _acumulador += transcurrido * Ints.TicksPerSecond * _velocidad;
 
         int corridos = 0;
-        while (_acumulador >= MsPorTick && corridos < MaxTicksPorFrame)
+        while (_acumulador >= UnidadesPorTick && corridos < MaxTicksPorFrame)
         {
-            Run.Advance();
-            _acumulador -= MsPorTick;
+            AvanzarUnTick();
+            _acumulador -= UnidadesPorTick;
             corridos++;
         }
 
         // Se descarta lo que sobró del acumulador por encima del techo: si no,
         // la deuda se arrastra al frame siguiente y nunca se paga.
-        if (corridos == MaxTicksPorFrame && _acumulador > MsPorTick * MaxTicksPorFrame)
+        if (corridos == MaxTicksPorFrame && _acumulador > UnidadesPorTick * MaxTicksPorFrame)
             _acumulador = 0;
 
-        if (corridos > 0)
-            QueueRedraw();
+        // ⚠ Se redibuja SIEMPRE, corran ticks o no.
+        //
+        // Antes se redibujaba solo cuando había corrido al menos un tick, o sea
+        // 30 veces por segundo: en un monitor de 60 Hz cada posición se repetía
+        // dos frames y en uno de 144 Hz, cinco. Eso es lo que se veía tosco, y no
+        // se arregla con la interpolación si el frame intermedio no se dibuja.
+        QueueRedraw();
 
         AjustarClaseElegida();
     }
@@ -457,7 +599,11 @@ public partial class Game : Node2D
     /// <summary>Elige la clase a poner. La llama la barra de clases del HUD.</summary>
     public void SelectClass(DefenderClass clase)
     {
-        if (!Run.Roster.Has(clase) || _claseElegida == clase)
+        // ⚠ Una clase sellada se ve en la columna pero no se elige: elegirla
+        // dejaría al jugador con un cursor cargado que ninguna celda acepta, y
+        // `CanPlace` rebota en silencio — el peor no de todos, el que no dice
+        // que dijo que no.
+        if (Run.Roster.Find(clase) is not { Sealed: false } || _claseElegida == clase)
             return;
 
         _claseElegida = clase;
@@ -856,9 +1002,17 @@ public partial class Game : Node2D
 
         // Los enemigos. La posición fina viene de la ruta y NO vuelve a la
         // simulación: es solo para que el sprite no salte de celda en celda.
+        //
+        // ⚠ Y no se dibuja el estado del tick, sino un punto INTERPOLADO entre el
+        // tick anterior y el actual (ver `DistanciaVisible`). El costo es que el
+        // render va un tick atrás —33 ms—; la ganancia es que el movimiento deja
+        // de estar clavado a 30 pasos por segundo y se dibuja a los Hz del
+        // monitor.
         foreach (var e in Run.Enemies)
         {
-            var (fx, fy) = ruta.PosicionFina(e.DistanceTravelled);
+            long distancia = DistanciaVisible(e);
+
+            var (fx, fy) = ruta.PosicionFina(distancia);
 
             var centro = new Vector2(
                 (float)fx / Ints.ThousandthsPerCell * celda + (celda / 2f),
@@ -868,7 +1022,7 @@ public partial class Game : Node2D
             // verse"; esto es el placeholder de eso (INTERFAZ.md §5).
             bool conPerk = e.ExtraHealthPerk > 0 || e.ExtraSpeedPerk > 0;
 
-            if (!DibujarBicho(e, centro, celda, conPerk))
+            if (!DibujarBicho(e, distancia, centro, celda, conPerk))
             {
                 // Sin sprite todavía: el arte entra por áreas y hoy está la 1. El
                 // círculo de siempre, para que el área 5 se pueda jugar igual.
@@ -1047,9 +1201,9 @@ public partial class Game : Node2D
         if (g is null)
             return false;
 
-        // La animación sale del tick, igual que la del bicho. Con animar en falso
-        // va siempre el cuadro 0: el de estar parado.
-        long ms = (long)Run.Tick * MsPorTick;
+        // La animación sale del reloj del mundo, igual que la del bicho. Con
+        // animar en falso va siempre el cuadro 0: el de estar parado.
+        long ms = MsMundo;
 
         bool mueve = animar && Settings.AnimateWeapons;
         var textura = GraphicsLoader.Texture(completa, mueve ? (int)(ms / g.MsPerFrame) : 0);
@@ -1083,14 +1237,18 @@ public partial class Game : Node2D
     /// encima de la ruta.</para>
     /// </remarks>
     /// <returns><c>false</c> si ese bicho todavía no tiene arte.</returns>
-    private bool DibujarBicho(Enemy e, Vector2 centro, int celda, bool conPerk)
+    private bool DibujarBicho(Enemy e, long distancia, Vector2 centro, int celda, bool conPerk)
     {
         var dato = DataLoader.Current.Get(e.TypeId);
 
         if (dato is null || dato.Graphic.Length == 0)
             return false;
 
-        int direccion = Run.Route.Direction(e.DistanceTravelled);
+        // ⚠ La dirección se saca de la distancia INTERPOLADA, la misma con la que
+        // se calculó `centro`. Con la del tick, en una esquina el sprite se da
+        // vuelta hasta un tick antes o después de doblar, y se ve caminar de
+        // costado media celda.
+        int direccion = Run.Route.Direction(distancia);
         string clave = $"{dato.Graphic}.{Direcciones[direccion]}";
 
         var g = GraphicsLoader.Data(clave);
@@ -1098,13 +1256,15 @@ public partial class Game : Node2D
         if (g is null)
             return false;
 
-        // ⚠ Se pasa el tick a milisegundos y recién ahí se divide.
+        // ⚠ Se trabaja en milisegundos de mundo y recién ahí se divide.
         //
         // "Cada cuántos ticks cambia el cuadro" es una división entera que redondea
         // para abajo: con los 55 ms/cuadro que trae el arte de Austral y un tick de
         // 33 ms daba 1, o sea 33 ms, un 66 % más rápido de lo que dice el dato. La
-        // hormiga caminaba como si patinara.
-        long ms = (long)Run.Tick * MsPorTick;
+        // hormiga caminaba como si patinara. `MsMundo` además avanza dentro del
+        // tick, así que el cuadro cambia en el frame que le toca y no en el
+        // borde del tick.
+        long ms = MsMundo;
         int cuadro = (int)(ms / g.MsPerFrame);
 
         // Cada bicho arranca en un cuadro distinto. Sin esto los treinta enemigos

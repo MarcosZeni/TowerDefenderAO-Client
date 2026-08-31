@@ -132,6 +132,16 @@ public sealed class Shop
 {
     private readonly List<ShopOffer> _stock = [];
 
+    /// <summary>
+    /// Cuántas ofertas gratis quedan por tomar. <b>Solo la tienda del arranque lo
+    /// pone en más de cero</b> — la tienda no regala nada en el resto de la
+    /// corrida.
+    /// </summary>
+    private int _gratisRestantes;
+
+    /// <summary>Cuántas clases gratis quedan en la tienda del arranque.</summary>
+    public int FreeLeft => _gratisRestantes;
+
     public IReadOnlyList<ShopOffer> Stock => _stock;
 
     /// <summary>En qué oleada se renovó el stock por última vez.</summary>
@@ -175,7 +185,13 @@ public sealed class Shop
         _stock.Clear();
         StockWave = oleada;
 
-        var clases = roster.Available();
+        _gratisRestantes = 0;
+
+        // ⚠ `Owned` y no `Available`: la tienda mira lo que el jugador TIENE, no
+        // lo que puede poner hoy. Una clase sellada equipa perks y arma igual, así
+        // que ofrecerle cosas es correcto; con `Available` la clase sellada quedaba
+        // invisible para la tienda y sus perks no salían nunca.
+        var clases = roster.Owned();
         var cfg = datos.Curves.Shop;
 
         // ⚠ CON EL ROSTER VACÍO LA TIENDA IGUAL TIENE QUE ABRIR, y antes se
@@ -263,7 +279,15 @@ public sealed class Shop
         var pozo = new List<DefenderClass>(ChoiceBuilder.All);
         pozo.Remove(garantizada);
 
-        int cuantas = System.Math.Min(cfg.Slots, ChoiceBuilder.All.Length);
+        // ⚠ La tienda del arranque NO usa «slots»: usa «initialClassOffers».
+        //
+        // Con las 7 ranuras de una tienda normal el arranque mostraba 7 clases y
+        // una gratis, y la decisión importante —cuál me llevo— quedaba diluida en
+        // una lista que además el jugador todavía no sabe leer. Tres ofertas y dos
+        // gratis es una elección que se abarca de un vistazo.
+        int cuantas = System.Math.Min(
+            datos.Curves.RunCurve.InitialClassOffers, ChoiceBuilder.All.Length);
+
         var salida = new List<DefenderClass>(cuantas) { garantizada };
 
         for (int i = 1; i < cuantas; i++)
@@ -273,20 +297,20 @@ public sealed class Shop
             pozo.RemoveAt(j);
         }
 
-        // ⚠ La gratis se sortea entre las ofensivas de la lista, no es «la
-        // primera». Si fuera fija, el jugador aprendería que la de arriba es la
-        // buena y la garantía se volvería visible como un truco.
-        var candidatasGratis = new List<int>();
-
-        for (int i = 0; i < salida.Count; i++)
-        {
-            if (System.Array.IndexOf(ofensivas, salida[i]) >= 0)
-                candidatasGratis.Add(i);
-        }
-
-        int gratis = candidatasGratis.Count == 0
-            ? 0
-            : candidatasGratis[rng.Index(candidatasGratis.Count)];
+        // ⚠ TODAS LAS OFERTAS DEL ARRANQUE SON GRATIS, y el cupo es el que
+        // limita cuántas se toman.
+        //
+        // Antes se marcaba UNA sola como gratis, sorteada entre las ofensivas
+        // para que la garantía no se leyera como «la de arriba es la buena». Con
+        // dos clases regaladas ese sorteo deja de servir: marcar dos de tres
+        // seguiría diciendo cuáles, y la elección se reduciría a aceptar el par
+        // que el juego ya eligió. Marcando las tres, la que queda afuera la elige
+        // el jugador — que es exactamente la decisión que el arranque busca.
+        //
+        // El cupo lo lleva `_gratisRestantes` y lo descuenta ConsumeFree: cuando
+        // se agota, la tercera pasa a costar su precio y queda comprable con el
+        // oro inicial.
+        _gratisRestantes = System.Math.Min(datos.Curves.RunCurve.FreeClasses, salida.Count);
 
         for (int i = 0; i < salida.Count; i++)
         {
@@ -295,7 +319,7 @@ public sealed class Shop
                 (int)salida[i],
                 cfg.ClassRecruitPrice(oleada, datos.StatsOf(salida[i]).Cost),
                 false,
-                i == gratis));
+                true));
         }
     }
 
@@ -305,7 +329,8 @@ public sealed class Shop
     // reemplaza a la pantalla de elección inicial.
 
     /// <summary>
-    /// Se tomó la clase del arranque: las otras de esa tienda pasan a costar.
+    /// Se usó una de las gratis del arranque. Cuando se agota el cupo, las que
+    /// quedan pasan a costar.
     /// </summary>
     /// <remarks>
     /// <para>⚠ <b>No se retiran.</b> Es la regla entera de por qué la elección se
@@ -313,11 +338,22 @@ public sealed class Shop
     /// otras. La oferta sigue en la pantalla, con su precio, y el jugador decide
     /// si además la paga con el oro inicial que acaba de entrar.</para>
     ///
+    /// <para>⚠ <b>Antes vaciaba el cupo de una</b>: tomar la gratis desmarcaba
+    /// todas las demás en la misma pasada. Con dos clases regaladas eso hacía que
+    /// la segunda saliera a precio lleno, y el jugador se quedaba con una sola
+    /// clase sin que nada dijera por qué. Ahora descuenta de a una.</para>
+    ///
     /// <para>Solo tiene efecto en la tienda del arranque: es la única que marca
     /// ofertas gratis. <b>La tienda no regala nada más en toda la corrida.</b></para>
     /// </remarks>
     public void ConsumeFree()
     {
+        if (_gratisRestantes > 0)
+            _gratisRestantes--;
+
+        if (_gratisRestantes > 0)
+            return;
+
         for (int i = 0; i < _stock.Count; i++)
         {
             if (_stock[i].Free)

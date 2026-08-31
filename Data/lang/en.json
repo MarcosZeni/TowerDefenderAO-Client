@@ -348,6 +348,12 @@
     "ui.tienda.levelear": "LEVEL UP",
     "ui.tienda.nivel_maximo": "already maxed",
     "ui.tienda.gratis": "free",
+
+    // The opening notice and the unlock one. «{m}» is how many free picks are
+    // left, so the player watches it drop after taking the first.
+    "ui.tienda.elegi_gratis": "Take {m} for free · the second one comes sealed and opens by itself at the next shop",
+    "ui.tienda.sello_abierto": "seal lifted: you can place it on the board now",
+
     "ui.tienda.en_el_tablero": "on the board now",
     "ui.tienda.plano": "BLUEPRINT",
     "ui.tienda.arma": "WEAPON",
@@ -407,6 +413,10 @@
     "ui.hud.consejo": "Tip:",
     "ui.hud.niv": "LV.",
     "ui.hud.libre": "free",
+
+    // The sealed-class band in the roster column. «{m}» is the wave it opens on:
+    // a lock with no date reads like a bug.
+    "ui.hud.sellada": "SEALED · WAVE {m}",
 
     // --- Class roles, for the roster card ------------------------------------
     "class.Mage.role": "Magic damage",

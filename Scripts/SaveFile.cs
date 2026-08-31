@@ -50,8 +50,15 @@ public static class SaveFile
     /// la última acción del log, y guardar en medio de una oleada —Alt+F4, cierre
     /// de la ventana— retomaba REBOBINADO a la última acción: los segundos de
     /// combate posteriores se perdían y se podían volver a jugar distinto.
+    ///
+    /// <para>v3 agrega el <b>hash de los datos de balance</b>. Un guardado es un
+    /// log que se reproduce re-simulando, así que <b>solo vale contra los mismos
+    /// números con los que se jugó</b>: es la misma regla que ya rige el ranking
+    /// —cada rebalanceo es una temporada— y faltaba acá. Sin el hash, cambiar un
+    /// número de <c>Data\*.json</c> hacía que el replay divergiera en silencio y
+    /// la corrida terminara en un estado que el log no explica.</para>
     /// </summary>
-    private const byte Version = 2;
+    private const byte Version = 3;
 
     public static bool Exists() => ArchivoGodot.FileExists(Route);
 
@@ -84,6 +91,9 @@ public static class SaveFile
         // El tick del momento de guardar. Es lo que permite retomar EXACTO aunque
         // el cierre haya caído en medio de una oleada.
         f.Store32((uint)tick);
+
+        // El hash de los datos de balance con los que se jugó. Ver `Version`.
+        f.StorePascalString(DataLoader.Current.Hash);
 
         byte[] blob = BinaryLog.Write(log);
         f.Store32((uint)blob.Length);
@@ -124,6 +134,26 @@ public static class SaveFile
         long runId = (long)f.Get64();
         int tick = (int)f.Get32();
 
+        string hash = f.GetPascalString();
+
+        if (hash != DataLoader.Current.Hash)
+        {
+            // ⚠ Este es el chequeo que faltaba, y su ausencia costaba un cuelgue.
+            //
+            // Un guardado es un log que se reproduce re-simulando. Con otros
+            // números de balance la re-simulación DIVERGE: una acción que en su
+            // momento fue válida ahora se rechaza, la corrida llega a otro estado
+            // y el log deja de encajar. En el mejor caso se retoma una partida
+            // que no es la que se jugó; en el peor la corrida queda en pausa con
+            // acciones pendientes para un tick que ya pasó, y el bucle de abajo
+            // no sale nunca.
+            GD.PushWarning(
+                $"El guardado se jugó con los datos {hash[..System.Math.Min(12, hash.Length)]}… " +
+                $"y esta build tiene {DataLoader.Current.Hash[..12]}…: se descarta.");
+
+            return (null, null, 0, 0);
+        }
+
         uint largo = f.Get32();
         byte[] blob = f.GetBuffer((long)largo);
 
@@ -154,7 +184,28 @@ public static class SaveFile
             if (!partida.Paused && partida.Tick >= tick)
                 break;
 
+            int tickPrevio = partida.Tick;
+            int cursorPrevio = partida.LogCursor;
+
             partida.Advance();
+
+            // ⚠ El corte de seguridad. Una vuelta que no movió NI el reloj NI el
+            // cursor del log no va a mover nada nunca: el bucle está trabado.
+            //
+            // Es lo que pasaba antes de que el guardado llevara el hash de los
+            // datos, y el síntoma era el peor posible: la ventana congelada, sin
+            // excepción, sin log, sin nada que mirar. Vale la pena dejarlo aunque
+            // el hash cierre la puerta conocida — un cuelgue mudo es mucho más
+            // caro de diagnosticar que un guardado descartado.
+            if (partida.Tick == tickPrevio && partida.LogCursor == cursorPrevio)
+            {
+                GD.PushError(
+                    $"El guardado se trabó al re-simular: tick {partida.Tick}, " +
+                    $"acción {partida.LogCursor} de {log.Count}, " +
+                    $"en pausa {partida.Paused}. Se descarta.");
+
+                return (null, null, 0, 0);
+            }
         }
 
         GD.Print($"RunCurve retomada · seed {seed} · run {runId} · " +

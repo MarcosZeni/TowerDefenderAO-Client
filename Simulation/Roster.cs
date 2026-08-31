@@ -106,6 +106,33 @@ public sealed class RosterClass
     /// <c>clases.json</c> y lo pone <see cref="Roster.Contratar"/>.
     /// </summary>
     public required int MaxLevel { get; init; }
+
+    /// <summary>
+    /// Hasta qué oleada esta clase está <b>sellada</b>: está en el roster, se ve
+    /// y ya es tuya, pero <b>no se puede poner en el tablero</b>. <c>0</c> es una
+    /// clase normal.
+    /// </summary>
+    /// <remarks>
+    /// <para>Existe por la elección del arranque: se ofrecen tres clases y el
+    /// jugador se queda con <b>dos</b>, pero la segunda entra sellada hasta la
+    /// primera tienda. Sin el sello, empezar con dos clases desarma la decisión
+    /// que el arranque quiere forzar —con qué se limpian las primeras
+    /// oleadas— y de paso duplica el ancho del tablero antes de la primera
+    /// compra.</para>
+    ///
+    /// <para>Se guarda la <b>oleada</b> y no un booleano para que la pantalla
+    /// pueda decir <i>cuándo</i> se abre. Un candado sin fecha es un candado que
+    /// el jugador lee como un bug.</para>
+    ///
+    /// <para>⚠ El sello frena <b>poner fichas</b>, nada más. La clase sube de
+    /// nivel, equipa perks y arma, y cuenta para todo lo que mire el roster —los
+    /// drops, la tienda, las recetas—. Es capacidad comprada que todavía no se
+    /// puede usar, no una clase a medias.</para>
+    /// </remarks>
+    public int SealedUntilWave { get; set; }
+
+    /// <summary>Si hoy no se puede poner en el tablero.</summary>
+    public bool Sealed => SealedUntilWave > 0;
 }
 
 /// <summary>
@@ -129,12 +156,66 @@ public sealed class Roster(BalanceData datos)
         return null;
     }
 
-    public void Hire(DefenderClass clase)
+    public void Hire(DefenderClass clase, int selladaHastaOleada = 0)
     {
         if (Has(clase))
             return;
 
-        _clases.Add(new RosterClass { DefenderClass = clase, MaxLevel = _datos.Classes.PerkSlotsPerClass });
+        _clases.Add(new RosterClass
+        {
+            DefenderClass = clase,
+            MaxLevel = _datos.Classes.PerkSlotsPerClass,
+            SealedUntilWave = selladaHastaOleada,
+        });
+    }
+
+    /// <summary>¿Esta clase está en el roster pero todavía sellada?</summary>
+    public bool IsSealed(DefenderClass clase) => Find(clase) is { Sealed: true };
+
+    /// <summary>
+    /// Todas las clases del roster, <b>selladas incluidas</b>.
+    /// </summary>
+    /// <remarks>
+    /// Es la lista que mira la tienda y el generador de armas: una clase sellada
+    /// ya es tuya, sube de nivel y equipa: ofrecerle perks y armas es correcto.
+    /// Lo único que el sello frena es poner fichas en el tablero, y para eso está
+    /// <see cref="Available"/>.
+    /// </remarks>
+    public List<DefenderClass> Owned()
+    {
+        var lista = new List<DefenderClass>(_clases.Count);
+        foreach (var c in _clases)
+            lista.Add(c.DefenderClass);
+
+        return lista;
+    }
+
+    /// <summary>
+    /// Levanta el sello de las clases cuya oleada ya llegó.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lo llama <c>Run</c> cuando abre la tienda, que es el único momento
+    /// en que el sello se puede caer. <b>No hay acción del jugador</b>: es
+    /// automático, así que no entra al log y el servidor lo reproduce solo.</para>
+    ///
+    /// <para>Devuelve las que se abrieron para que la pantalla lo pueda anunciar.
+    /// Un desbloqueo que pasa en silencio entre dos oleadas es poder que el
+    /// jugador tiene y no sabe que tiene.</para>
+    /// </remarks>
+    public List<DefenderClass> Unseal(int oleada)
+    {
+        var abiertas = new List<DefenderClass>();
+
+        foreach (var c in _clases)
+        {
+            if (c.Sealed && oleada >= c.SealedUntilWave)
+            {
+                c.SealedUntilWave = 0;
+                abiertas.Add(c.DefenderClass);
+            }
+        }
+
+        return abiertas;
     }
 
     public void LevelUp(DefenderClass clase)
@@ -144,12 +225,23 @@ public sealed class Roster(BalanceData datos)
             c.Level++;
     }
 
-    /// <summary>Las clases que el jugador puede poner en el mapa, para la UI.</summary>
+    /// <summary>
+    /// Las clases que el jugador puede poner en el mapa, para la UI.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Las selladas quedan afuera</b>, y es la diferencia con
+    /// <see cref="Classes"/>. Esta lista contesta «¿qué puedo poner ahora?» y la
+    /// otra «¿qué tengo?»: la pantalla necesita las dos, porque una clase
+    /// sellada <b>se muestra</b> —con su candado y su oleada— pero no se elige.
+    /// </remarks>
     public List<DefenderClass> Available()
     {
         var lista = new List<DefenderClass>(_clases.Count);
         foreach (var c in _clases)
-            lista.Add(c.DefenderClass);
+        {
+            if (!c.Sealed)
+                lista.Add(c.DefenderClass);
+        }
 
         return lista;
     }

@@ -56,23 +56,57 @@
 
     // ⚠ CUÁNTAS CLASES SE DESBLOQUEAN GRATIS. De ahí en más, RECLUTAR SE COMPRA.
     //
-    // ⚠ ES 1 Y SOLO CUENTA EL ARRANQUE. Antes eran 2 porque la pantalla de
-    // elección regalaba una clase al empezar y otra en la primera elección; esa
-    // pantalla ya no existe —contratar y subir de nivel son ofertas de la tienda—
-    // y la tienda NO REGALA NADA.
+    // ⚠ PASÓ DE 1 A 2, y la segunda entra SELLADA hasta "sealedUnlockWave".
     //
-    // Lo único gratis de la corrida es la clase del arranque, que es el reemplazo
-    // directo de la pantalla inicial: la primera tienda ofrece solo clases, una
-    // sin cobrar y con al menos una ofensiva garantizada entre las opciones. Sin
-    // eso el jugador arranca con cero oro y cero clases y no se destraba nunca.
+    // Con una sola gratis, el arranque era una decisión de un solo eje —cuál me
+    // llevo— y la corrida entera dependía de que esa clase sirviera para las
+    // primeras oleadas. Con dos, el jugador elige además EN QUÉ ORDEN: con cuál
+    // limpia el principio y cuál espera. El sello es lo que hace que la segunda
+    // sea una decisión y no simplemente el doble de tablero: sin él, empezar con
+    // dos clases duplica el ancho antes de la primera compra y desarma el primer
+    // tramo de la curva.
     //
-    // ⚠ Y las que NO se toman no desaparecen: quedan a su precio, comprables con
-    // el oro inicial que entrega la primera clase. Esa es toda la diferencia con
-    // la pantalla de elección, donde tomar una borraba las otras dos.
+    // Lo gratis sigue siendo SOLO el arranque, que es el reemplazo directo de la
+    // pantalla de elección: la primera tienda ofrece solo clases, con al menos
+    // una ofensiva garantizada entre las opciones. Sin eso el jugador arranca con
+    // cero oro y cero clases y no se destraba nunca.
     //
-    // Hoy solo lo lee la validación de arranque. Ponerlo en 0 dejaría la primera
-    // tienda sin nada gratis.
-    "freeClasses": 1,
+    // ⚠ Y la que NO se toma no desaparece: queda a su precio, comprable con el
+    // oro inicial que entrega la primera clase. Esa es toda la diferencia con la
+    // vieja pantalla de elección, donde tomar una borraba las otras dos.
+    //
+    // Ponerlo en 0 dejaría la primera tienda sin nada gratis y el cargador lo
+    // rechaza. Subirlo a 3 con "initialClassOffers" en 3 también: regalar todo lo
+    // que se ofrece no es elegir, es repartir.
+    "freeClasses": 2,
+
+    // ⚠ CUÁNTAS CLASES MUESTRA LA TIENDA DEL ARRANQUE. Solo esa: el resto usan
+    // "shop.slots", que son 7.
+    //
+    // Antes el arranque usaba las 7 ranuras de una tienda normal y regalaba una:
+    // la decisión importante quedaba diluida en una lista larga que además el
+    // jugador todavía no sabe leer —no conoce las clases, no conoce los precios y
+    // no tiene oro—. Tres ofertas y dos gratis es una elección que se abarca de un
+    // vistazo, y la que sobra queda comprable.
+    //
+    // Tiene que ser MAYOR que "freeClasses" o el cargador tira.
+    "initialClassOffers": 3,
+
+    // ⚠ EN QUÉ OLEADA SE ABRE SOLA LA SEGUNDA CLASE GRATIS.
+    //
+    // Es automático: no hay acción del jugador, así que no entra al log y el
+    // servidor lo reproduce solo. El sello se levanta CUANDO ABRE LA TIENDA, no
+    // en un tick suelto, porque la preparación es el único momento en que el
+    // jugador puede hacer algo con la clase que se le acaba de abrir.
+    //
+    // Por eso tiene que ser múltiplo de "wavesBetweenChoices" —el cargador lo
+    // exige—: un número intermedio se correría solo hasta la tienda siguiente y
+    // el dato mentiría sobre cuándo pasa.
+    //
+    // 3 es la primera tienda después del arranque. Más tarde —6 o 9— alarga el
+    // tramo de una sola clase, que es justo donde la curva de oleadas todavía
+    // perdona poco: medir con --balance antes de moverlo.
+    "sealedUnlockWave": 3,
 
     // ⚠ PASADAS LAS GRATIS, LA ELECCIÓN SE COBRA — con este descuento sobre el
     // precio de comprar lo mismo por el otro camino.

@@ -216,6 +216,12 @@ public static class UiWidgets
         this CanvasItem ci, Rect2 r, RosterClass ficha, int costo, bool alcanza,
         bool elegida, int puestas)
     {
+        // ⚠ Una clase SELLADA no puede estar elegida. El sello frena poner
+        // fichas, así que dibujarla como «la que se va a poner» sería mentir
+        // sobre lo que va a pasar con el próximo click.
+        if (ficha.Sealed)
+            elegida = false;
+
         var acento = elegida ? Palette.Info : Palette.BorderNormal;
 
         ci.DrawRect(r, Palette.PanelElevated.Alpha(elegida ? 0.96f : 0.88f));
@@ -275,6 +281,33 @@ public static class UiWidgets
         ci.Label(badge, $"{ficha.Perks.Count}/{ficha.OpenSlots}", 14,
             ficha.HasFreeSlot ? Palette.Success : Palette.TextMuted,
             HorizontalAlignment.Right, 6f);
+
+        // ⚠ La clase SELLADA se apaga y dice CUÁNDO se abre.
+        //
+        // Va acá abajo, encima de todo lo demás, y no como una tarjeta distinta:
+        // es la misma clase, con el mismo nivel y los mismos perks —el sello solo
+        // frena poner fichas—, así que esconderla detrás de una tarjeta genérica
+        // le sacaría al jugador la información con la que decide qué levelear
+        // mientras espera.
+        //
+        // Y siempre con la oleada escrita. Un candado sin fecha se lee como un bug
+        // o como contenido que no existe; con la fecha se lee como una promesa,
+        // que es lo que es.
+        if (ficha.Sealed)
+        {
+            ci.DrawRect(r, Palette.BackgroundMain.Alpha(0.55f));
+
+            var sello = new Rect2(retrato.Position.X, retrato.End.Y - 20f,
+                r.End.X - retrato.Position.X - 8f, 20f);
+
+            ci.DrawRect(sello, Palette.Warning.Alpha(0.22f));
+            ci.DrawRect(sello, Palette.Warning.Alpha(0.7f), filled: false, width: 1f);
+
+            ci.Label(sello, Loc.Get("ui.hud.sellada", ficha.SealedUntilWave), 13,
+                Palette.Warning, HorizontalAlignment.Center);
+
+            return;
+        }
 
         // El costo va sobre el retrato, abajo, con la moneda: es el número que
         // se mira mientras se arrastra, y ahí es donde está el ojo.

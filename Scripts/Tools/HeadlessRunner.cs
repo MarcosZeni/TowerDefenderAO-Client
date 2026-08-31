@@ -1534,6 +1534,14 @@ public static class HeadlessRunner
 
         foreach (var ficha in partida.Roster.Classes)
         {
+            // ⚠ La clase sellada no se puede poner todavía. Sin esto el bot
+            // elegía la segunda gratis del arranque —suele ser la más fuerte,
+            // porque la elige por puntaje—, `CanPlace` la rechazaba y el tablero
+            // quedaba vacío las tres primeras oleadas: el piso medido se desplomaba
+            // por un bug del bot y no por el balance.
+            if (ficha.Sealed)
+                continue;
+
             var stats = DataLoader.Current.StatsOf(ficha.DefenderClass);
 
             int puntaje = stats.Damage * 100 / System.Math.Max(1, stats.CadenceTicks);
@@ -1564,6 +1572,11 @@ public static class HeadlessRunner
 
         foreach (var ficha in partida.Roster.Classes)
         {
+            // Misma razón que en ClaseFavorita: una clase sellada no entra al
+            // tablero, así que elegirla es no poner nada.
+            if (ficha.Sealed)
+                continue;
+
             int costo = DataLoader.Current.StatsOf(ficha.DefenderClass).Cost;
 
             if (costo > mejorCosto && costo <= partida.Gold)

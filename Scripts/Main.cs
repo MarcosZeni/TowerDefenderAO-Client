@@ -97,7 +97,17 @@ public partial class Main : Node2D
 
         if (partida is null || log is null)
         {
-            GD.PushWarning("No se pudo cargar el guardado.");
+            // ⚠ El guardado ilegible SE BORRA, y el botón se va con él.
+            //
+            // Antes solo se avisaba por consola y se volvía: el botón quedaba
+            // ahí, y apretarlo no hacía absolutamente nada visible. Un guardado
+            // que no carga hoy no va a cargar mañana —los motivos son la versión
+            // del formato y el hash de los datos, y ninguno se arregla solo—, así
+            // que dejarlo en disco es dejar un botón muerto en el menú.
+            GD.PushWarning("No se pudo cargar el guardado: se descarta.");
+            SaveFile.Delete();
+
+            _ = _menu.RefreshAsync();
             return;
         }
 

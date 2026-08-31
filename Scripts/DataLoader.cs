@@ -422,7 +422,7 @@ public static class DataLoader
 
             Curves = new CurveData(
                 new TowerData(1, 1, 30),
-                new RunData(1, 1, [1], 1, 30, 1, 100),
+                new RunData(1, 1, [1], 1, 30, 1, 1, 0, 100),
                 new DefenderData(1, 1, 50, 100),
                 new EconomyData(1, 0, 0, 1, [100]),
                 new BudgetData(0, 0, 1, 1),

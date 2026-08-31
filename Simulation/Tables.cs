@@ -59,6 +59,8 @@ public sealed record RunData(
     int WavesBetweenChoices,
     int PreparationSeconds,
     int FreeClasses,
+    int InitialClassOffers,
+    int SealedUnlockWave,
     int ChoiceDiscountPercent);
 
 public sealed record DefenderData(
@@ -1416,6 +1418,8 @@ public static class TableReader
                 Int(corrida, "wavesBetweenChoices", archivo),
                 Int(corrida, "preparationSeconds", archivo),
                 Int(corrida, "freeClasses", archivo),
+                Int(corrida, "initialClassOffers", archivo),
+                Int(corrida, "sealedUnlockWave", archivo),
                 Int(corrida, "choiceDiscountPercent", archivo)),
 
             new DefenderData(
@@ -1584,6 +1588,51 @@ public static class TableReader
         // matar al primer bicho y no hay oro para comprar una clase todavía.
         if (curvas.RunCurve.FreeClasses < 1)
             throw new InvalidBalanceDataException($"{archivo}: «freeClasses» tiene que ser 1 o más");
+
+        // ⚠ No se puede regalar más clases que las que la pantalla ofrece: el
+        // cupo sobrante quedaría vivo en la tienda siguiente, que NO regala nada,
+        // y la primera oferta pagada de la corrida saldría gratis sin que nada lo
+        // explique.
+        if (curvas.RunCurve.InitialClassOffers < curvas.RunCurve.FreeClasses)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «initialClassOffers» ({curvas.RunCurve.InitialClassOffers}) no puede ser " +
+                $"menor que «freeClasses» ({curvas.RunCurve.FreeClasses})");
+        }
+
+        // ⚠ Y ofrecer exactamente las que se regalan no es elegir, es repartir.
+        if (curvas.RunCurve.FreeClasses > 1 &&
+            curvas.RunCurve.InitialClassOffers <= curvas.RunCurve.FreeClasses)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «initialClassOffers» tiene que ser mayor que «freeClasses» " +
+                $"para que el arranque sea una elección");
+        }
+
+        // ⚠ La clase sellada tiene que abrirse ANTES de que termine la corrida, y
+        // en una oleada que abra tienda: el sello se levanta cuando la tienda
+        // abre, así que un número que no sea múltiplo de «wavesBetweenChoices» se
+        // redondearía solo hacia la tienda siguiente sin que nadie lo pidiera.
+        if (curvas.RunCurve.FreeClasses > 1)
+        {
+            int desbloqueo = curvas.RunCurve.SealedUnlockWave;
+
+            if (desbloqueo < 1 || desbloqueo >= curvas.RunCurve.WavesPerRun)
+            {
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: «sealedUnlockWave» tiene que estar entre 1 y " +
+                    $"{curvas.RunCurve.WavesPerRun - 1}");
+            }
+
+            if (curvas.RunCurve.WavesBetweenChoices > 0 &&
+                desbloqueo % curvas.RunCurve.WavesBetweenChoices != 0)
+            {
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: «sealedUnlockWave» ({desbloqueo}) tiene que ser múltiplo de " +
+                    $"«wavesBetweenChoices» ({curvas.RunCurve.WavesBetweenChoices}): " +
+                    $"el sello se levanta cuando abre la tienda");
+            }
+        }
 
         // ⚠ Un jefe que ofrece cero Oro rompe la única fuente de Oro del juego.
         if (curvas.Drops.BossGoldOptions < 1)

@@ -191,6 +191,20 @@ public sealed class Run
     public Shop Shop { get; } = new();
 
     /// <summary>
+    /// Las clases a las que se les acaba de levantar el sello, para que la
+    /// pantalla lo anuncie. Se llena al abrir la tienda y se vacía al lanzar la
+    /// oleada.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Es salida para la UI, no estado de la simulación.</b> Nada del tick la
+    /// lee y nadie decide nada con ella: si se borrara, la corrida daría
+    /// exactamente lo mismo. Está para que un desbloqueo automático no pase en
+    /// silencio — poder que el jugador tiene y no sabe que tiene es poder que no
+    /// usa.
+    /// </remarks>
+    public IReadOnlyList<DefenderClass> UnsealedNow { get; private set; } = [];
+
+    /// <summary>
     /// Lo que pasó adentro de la corrida, contado mientras pasa.
     /// </summary>
     /// <remarks>
@@ -263,6 +277,22 @@ public sealed class Run
     /// ahí <b>casi siempre</b>.</para>
     /// </remarks>
     public bool WaitsForPlayer => Paused && _cursorLog >= _log.Count;
+
+    /// <summary>
+    /// Cuántas acciones del log ya se aplicaron. <b>Solo para detectar que una
+    /// re-simulación se trabó.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>Todo bucle que re-simula avanza por una de dos vías: sube el
+    /// <see cref="Tick"/> o sube este cursor. Si en una vuelta no se movió
+    /// ninguno de los dos, el bucle no va a terminar nunca, y quien lo corre
+    /// tiene que cortar con un error en vez de colgarse.</para>
+    ///
+    /// <para>Pasa cuando la corrida queda en pausa —el reloj congelado— con
+    /// acciones pendientes cuyo tick ya no coincide con el actual, que es lo que
+    /// deja un log reproducido contra otros datos de balance.</para>
+    /// </remarks>
+    public int LogCursor => _cursorLog;
 
     /// <summary>Qué número de oleada viene. Durante la preparación, la que espera.</summary>
     public int NextWave => _oleadaArmada is null ? Wave : Wave + 1;
@@ -500,7 +530,11 @@ public sealed class Run
         // Solo se puede poner una clase contratada. El roster arranca vacío y se
         // llena eligiendo, así que la primera elección es obligatoria antes de
         // poder jugar.
-        if (!Roster.Has(clase))
+        //
+        // ⚠ Y no alcanza con tenerla: una clase SELLADA está en el roster y
+        // todavía no se puede poner. Es la segunda gratis del arranque, que se
+        // abre en la oleada que dice `sealedUnlockWave`.
+        if (Roster.Find(clase) is not { Sealed: false })
             return false;
 
         if (!_mapa.IsPlaceable(celda))
@@ -1416,7 +1450,23 @@ public sealed class Run
 
                 bool primeraClase = Roster.Classes.Count == 0;
 
-                Roster.Hire(clase);
+                // ⚠ LA SEGUNDA GRATIS DEL ARRANQUE ENTRA SELLADA.
+                //
+                // El arranque ofrece tres clases y el jugador se lleva dos, pero
+                // solo una juega desde la oleada 1: la otra se abre sola cuando
+                // abre la primera tienda. Sin el sello, empezar con dos clases
+                // duplica el ancho del tablero antes de la primera compra y
+                // deshace la decisión que la pantalla quiere forzar — con cuál se
+                // limpian las primeras oleadas.
+                //
+                // Se sella LA QUE SE TOMA SEGUNDA, no una que marque la oferta: es
+                // el jugador el que decide cuál juega ya y cuál espera, y esa es la
+                // mitad interesante de la elección.
+                int sello = oferta.Free && !primeraClase
+                    ? _datos.Curves.RunCurve.SealedUnlockWave
+                    : 0;
+
+                Roster.Hire(clase, sello);
 
                 // Contratar abre Oro nuevo: sin esto, reclutar dejaría a la clase
                 // nueva sin comportamiento propio para siempre.
@@ -3926,6 +3976,18 @@ public sealed class Run
 
         if (_tiendaAbierta)
         {
+            // ⚠ EL SELLO SE LEVANTA ACÁ, y es automático: no hay acción del
+            // jugador, así que no entra al log y el servidor lo reproduce solo al
+            // revalidar.
+            //
+            // Va pegado a que la tienda abra —y no a un tick suelto— por dos
+            // motivos. Uno, es el momento en que el jugador ya está mirando el
+            // roster, así que el aviso llega donde mira. Dos, la preparación es
+            // cuando puede poner la clase que se le acaba de abrir; desbloquearla
+            // en medio de una oleada la deja mirando un candado que se fue sin que
+            // pudiera usarla.
+            UnsealedNow = Roster.Unseal(Wave);
+
             Metrics.GoldBeforeShopTotal += Gold;
 
             // ⚠ La tienda NO REGALA. Lo único gratis de la corrida es la clase
@@ -3958,6 +4020,11 @@ public sealed class Run
     {
         if (_oleadaArmada is not { } armada)
             return;
+
+        // El aviso de desbloqueo vale para la pantalla de preparación, que es
+        // donde el jugador puede hacer algo con la clase que se abrió. Arrancada
+        // la oleada ya no dice nada.
+        UnsealedNow = [];
 
         Wave++;
 

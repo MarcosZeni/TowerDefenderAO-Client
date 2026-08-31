@@ -395,6 +395,13 @@
     "ui.tienda.levelear": "SUBIR DE NIVEL",
     "ui.tienda.nivel_maximo": "ya está al máximo",
     "ui.tienda.gratis": "gratis",
+
+    // El cartel del arranque y el del desbloqueo. «{m}» es cuántas gratis
+    // quedan: se muestra mientras haya cupo, así que el jugador ve el número
+    // bajar al llevarse la primera.
+    "ui.tienda.elegi_gratis": "Llevate {m} sin pagar · la segunda entra sellada y se abre sola en la próxima tienda",
+    "ui.tienda.sello_abierto": "se abrió el sello: ya se puede poner en el tablero",
+
     "ui.tienda.en_el_tablero": "en el tablero ahora",
     "ui.tienda.plano": "PLANO",
     "ui.tienda.arma": "ARMA",
@@ -472,6 +479,10 @@
     "ui.hud.consejo": "Consejo:",
     "ui.hud.niv": "NIV.",
     "ui.hud.libre": "libre",
+
+    // La banda de la clase sellada, en la columna del roster. «{m}» es la oleada
+    // en la que se abre: un candado sin fecha se lee como un bug.
+    "ui.hud.sellada": "SELLADA · OLEADA {m}",
 
     // --- Los oficios, para la tarjeta de clase -------------------------------
     // No son un dato de balance: no cambian nada del tick. Son la línea de

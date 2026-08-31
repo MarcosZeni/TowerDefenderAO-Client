@@ -524,6 +524,52 @@ public partial class MarketScreen : Control
         this.Label(pie.Inset(14f),
             $"{Loc.Get("ui.tienda.proximas_ofertas")} {p.Shop.StockWave + 3}",
             14, Palette.TextMuted, HorizontalAlignment.Right);
+
+        AvisoDelSello(p, pie);
+    }
+
+    /// <summary>
+    /// El cartel del sello: en el arranque explica la regla, y en la tienda que
+    /// lo levanta anuncia que la clase ya se puede poner.
+    /// </summary>
+    /// <remarks>
+    /// <para>Va en el centro del pie y no en un modal aparte. Un modal al empezar
+    /// la corrida se cierra sin leer —es lo primero que aparece y lo único que
+    /// separa al jugador del juego—, y el texto que hace falta recordar es
+    /// justamente el que hay que tener a la vista <b>mientras</b> se elige.</para>
+    ///
+    /// <para>⚠ Los dos casos son excluyentes y en este orden: mientras quede cupo
+    /// gratis, la regla; después, el desbloqueo. Nunca los dos, porque nunca pasan
+    /// juntos —el cupo se agota en el arranque y el sello se levanta tres oleadas
+    /// más tarde.</para>
+    /// </remarks>
+    private void AvisoDelSello(Run p, Rect2 pie)
+    {
+        if (p.Shop.FreeLeft > 0)
+        {
+            this.Label(pie.Inset(14f),
+                Loc.Get("ui.tienda.elegi_gratis", p.Shop.FreeLeft),
+                15, Palette.Warning, HorizontalAlignment.Center);
+
+            return;
+        }
+
+        if (p.UnsealedNow.Count == 0)
+            return;
+
+        var nombres = new System.Text.StringBuilder();
+
+        foreach (var clase in p.UnsealedNow)
+        {
+            if (nombres.Length > 0)
+                nombres.Append(" · ");
+
+            nombres.Append(Loc.Class(clase));
+        }
+
+        this.Label(pie.Inset(14f),
+            $"{nombres} — {Loc.Get("ui.tienda.sello_abierto")}",
+            15, Palette.Success, HorizontalAlignment.Center);
     }
 
     // =====================================================================
