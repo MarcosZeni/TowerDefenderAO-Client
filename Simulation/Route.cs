@@ -120,8 +120,8 @@ public sealed class Route
     }
 
     /// <summary>
-    /// Hacia dónde mira quien va por esa distancia: 0 norte, 1 este, 2 oeste,
-    /// 3 sur.
+    /// Hacia dónde mira quien va por esa distancia: 0 norte, 1 este, 2 sur,
+    /// 3 oeste.
     /// </summary>
     /// <remarks>
     /// <para><b>Solo para el render</b>, igual que <see cref="PosicionFina"/>. Los

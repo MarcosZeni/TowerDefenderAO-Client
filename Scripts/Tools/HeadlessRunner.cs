@@ -216,6 +216,88 @@ public static class HeadlessRunner
                     GraphicFetcher.Forget(i + 1 < args.Length ? args[i + 1] : "");
                     return true;
 
+                // Se corre DESPUÉS de olvidar, no una vez por olvido: renumerar
+                // es lo único que no se puede deshacer entrada por entrada.
+                case "--acomodar-graficos":
+                    GraphicFetcher.Compact();
+                    return true;
+
+                // --reescalar-hoja <fileNum> <divisor>. El divisor 2 deja el arte
+                // en x2: un cuarto de los píxeles, mismo tamaño en pantalla.
+                case "--reescalar-hoja":
+                    GraphicFetcher.RescaleSheet(
+                        (i + 1 < args.Length && int.TryParse(args[i + 1], out int hj)) ? hj : 0,
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int dv)) ? dv : 2);
+                    return true;
+
+                // --reescalar-todo <divisor>. Con 1 no achica: solo recorta el
+                // aire y empaqueta. Saltea los pisos.
+                case "--reescalar-todo":
+                    GraphicFetcher.RescaleAll(
+                        (i + 1 < args.Length && int.TryParse(args[i + 1], out int dt)) ? dt : 1);
+                    return true;
+
+                // --fusionar-hojas <n> <n> <n>... [/<divisor>]. Junta varias hojas
+                // en una. Sirve para el bicho que Austral guarda con una hoja por
+                // dirección, como el Oso Polar.
+                case "--fusionar-hojas":
+                {
+                    var cuales = new List<int>();
+                    int divisorFusion = 1;
+
+                    for (int j = i + 1; j < args.Length; j++)
+                    {
+                        if (args[j].StartsWith('/') && int.TryParse(args[j][1..], out int dvf))
+                        {
+                            divisorFusion = dvf;
+                            continue;
+                        }
+
+                        if (!int.TryParse(args[j], out int hf))
+                            break;
+
+                        cuales.Add(hf);
+                    }
+
+                    GraphicFetcher.MergeSheets([.. cuales], divisorFusion);
+                    return true;
+                }
+
+                // --partir-hoja <fileNum> <partes>. El inverso de fusionar, para
+                // cuando el bicho no entra en una textura sola.
+                case "--partir-hoja":
+                    GraphicFetcher.SplitSheet(
+                        (i + 1 < args.Length && int.TryParse(args[i + 1], out int hpa)) ? hpa : 0,
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int npa)) ? npa : 2);
+                    return true;
+
+                // --achicar-hoja <fileNum> <porcentaje>. Achica el sprite DE
+                // VERDAD: menos píxeles y más chico en pantalla. No confundir con
+                // --reescalar-hoja, que compensa y deja el tamaño igual.
+                case "--achicar-hoja":
+                    GraphicFetcher.ShrinkSheet(
+                        (i + 1 < args.Length && int.TryParse(args[i + 1], out int hac)) ? hac : 0,
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int pac)) ? pac : 75);
+                    return true;
+
+                // --anclar-grafico <clave o prefijo> <px>. Baja el sprite al
+                // dibujarlo. No toca píxeles: escribe un número en el índice.
+                case "--anclar-grafico":
+                    GraphicFetcher.AnchorGraphic(
+                        i + 1 < args.Length ? args[i + 1] : "",
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int anc)) ? anc : 0);
+                    return true;
+
+
+                case "--centro-grafico":
+                    GraphicsInspector.GraphicCenter(
+                        i + 1 < args.Length ? args[i + 1] : "",
+                        (i + 2 < args.Length && float.TryParse(args[i + 2],
+                            System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float um))
+                            ? um : 0.05f);
+                    return true;
+
                 case "--verificar-indices":
                     GraphicsInspector.CheckIndexes();
                     return true;

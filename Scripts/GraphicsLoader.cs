@@ -20,7 +20,7 @@ namespace TowerOfArgentum;
 /// </remarks>
 public sealed record Graphic(
     string Name, int FileNum, int X, int Y, int Width, int Height, int Frames, int MsPerFrame,
-    Rect2I[] Regions, TileGrid? Grid = null);
+    Rect2I[] Regions, TileGrid? Grid = null, int Scale = 4, int AnchorY = 0);
 
 /// <summary>Una hoja de tiles de piso: todos del mismo lado, en grilla regular.</summary>
 /// <remarks>
@@ -319,7 +319,9 @@ public static class GraphicsLoader
                     ? null
                     : new TileGrid(
                         g.Grid.Columns, g.Grid.Rows, g.Grid.Count, g.Grid.Side,
-                        g.Grid.Usable?.ToArray()));
+                        g.Grid.Usable?.ToArray()),
+                g.Scale > 0 ? g.Scale : 4,
+                g.AnchorY);
         }
 
         GD.Print($"Gráficos: {_indice.Count} entradas en el índice");
@@ -381,5 +383,37 @@ public static class GraphicsLoader
         /// <summary>Solo en los tilesets de piso: columnas, filas, cantidad y lado.</summary>
         [JsonPropertyName("grilla")]
         public GrillaJson? Grid { get; set; }
+
+        /// <summary>
+        /// Cuánto bajar el sprite al dibujarlo, en píxeles de la hoja.
+        /// </summary>
+        /// <remarks>
+        /// <para>El sprite se ancla al borde <b>inferior</b> de su región, que es
+        /// como se para un muñeco de Argentum Online sobre su tile. Con la caja ya
+        /// recortada al dibujo eso deja al bicho apoyado, pero no siempre <b>se
+        /// ve</b> apoyado: una criatura de perfil es ancha y baja, y parada en el
+        /// borde de abajo de la celda su masa queda por encima de la línea del
+        /// camino. La Tortuga Gigante yendo de izquierda a derecha fue el
+        /// caso.</para>
+        ///
+        /// <para>Es una corrección de <b>render</b> y por entrada —o sea, por
+        /// dirección—, porque el problema es por dirección: de frente el mismo
+        /// bicho se ve bien. Positivo baja. Se escribe con
+        /// <c>--anclar-grafico</c> y se tantea en <c>Scenes\SpritePreview.tscn</c>
+        /// con <c>[</c> y <c>]</c>.</para>
+        /// </remarks>
+        [JsonPropertyName("anclaY")]
+        public int AnchorY { get; set; }
+
+        /// <summary>
+        /// En qué escala está guardado el arte de esta entrada: 4 = x4, 2 = x2.
+        /// </summary>
+        /// <remarks>
+        /// ⚠ Sin el campo vale 4, que es cómo entró todo el arte hasta que
+        /// <c>--reescalar-hoja</c> empezó a fabricar hojas más chicas. Quien
+        /// dibuja tiene que compensarla o el sprite sale a la mitad de tamaño.
+        /// </remarks>
+        [JsonPropertyName("escala")]
+        public int Scale { get; set; } = 4;
     }
 }

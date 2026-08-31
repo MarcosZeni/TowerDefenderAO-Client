@@ -58,7 +58,7 @@ public static class NpcImporter
         public required int Id { get; init; }
 
         /// <summary>El número de NPC en <c>NPCs.dat</c>. Es la trazabilidad al original.</summary>
-        public required int SourceNpc { get; init; }
+        public required int OriginalNpc { get; init; }
 
         public required string Name { get; init; }
 
@@ -74,7 +74,7 @@ public static class NpcImporter
         public required int Area { get; init; }
 
         /// <summary>HP ya reescalado. Es el que usa la simulación.</summary>
-        public required int HpEscalado { get; init; }
+        public required int ScaledHp { get; init; }
 
         /// <summary>HP crudo de Austral, para poder rehacer el reescalado.</summary>
         public required int RawHp { get; init; }
@@ -259,7 +259,7 @@ public static class NpcImporter
 
         int hpMasAlto = 0;
         foreach (var e in enemigos)
-            hpMasAlto = System.Math.Max(hpMasAlto, e.HpEscalado);
+            hpMasAlto = System.Math.Max(hpMasAlto, e.ScaledHp);
 
         var dragon = enemigos[i];
         enemigos.RemoveAt(i);
@@ -271,7 +271,7 @@ public static class NpcImporter
         enemigos.Add(dragon with
         {
             Area = 8,
-            HpEscalado = hpFinal,
+            ScaledHp = hpFinal,
 
             // Pega fuerte pero lento: un jefe que mata la Torre en tres golpes no
             // se pelea, se pierde.
@@ -419,10 +419,10 @@ public static class NpcImporter
             enemigos.Add(new EnemigoImportado
             {
                 Id = enemigos.Count,
-                SourceNpc = npcActual,
+                OriginalNpc = npcActual,
                 Name = nombre,
                 Area = 0,   // se asigna al final, por percentil
-                HpEscalado = hpEscalado,
+                ScaledHp = hpEscalado,
                 RawHp = hpCrudo,
                 Body = Entero(campos, "Body"),
 
@@ -454,9 +454,9 @@ public static class NpcImporter
                 // bicho de área tardía se sienta pesado y no solo "más números".
                 CadenceTicks = CadenciaDe(hpEscalado),
 
-                // La marca de variante la pone MarcarVariantes al final, cuando ya
-                // se sabe qué cuerpos comparten dos bichos y cuál de los dos es el
-                // duro.
+                // Siempre 100: dos enemigos no comparten cuerpo, así que no hay
+                // variante grande/chica que marcar. El campo queda porque lo lee el
+                // renderer y porque es el lugar donde iría un ajuste a mano.
                 VisualScale = 100,
                 Graphic = ClaveGrafico(nombre),
             });
@@ -502,7 +502,7 @@ public static class NpcImporter
 
         int descartadosClones = DescartarClones(enemigos);
 
-        enemigos.Sort((a, b) => a.HpEscalado.CompareTo(b.HpEscalado));
+        enemigos.Sort((a, b) => a.ScaledHp.CompareTo(b.ScaledHp));
 
         // El área sale del percentil, así que hay que repartir DESPUÉS de ordenar.
         RepartirEnAreas(enemigos);
@@ -516,10 +516,10 @@ public static class NpcImporter
             finales.Add(new EnemigoImportado
             {
                 Id = i,
-                SourceNpc = e.SourceNpc,
+                OriginalNpc = e.OriginalNpc,
                 Name = e.Name,
                 Area = e.Area,
-                HpEscalado = e.HpEscalado,
+                ScaledHp = e.ScaledHp,
                 RawHp = e.RawHp,
                 Body = e.Body,
                 MinDamage = e.MinDamage,
@@ -535,11 +535,8 @@ public static class NpcImporter
             });
         }
 
-        int variantes = MarcarVariantes(finales);
-
         Write(finales, descartadosSinCombate, descartadosNoFauna,
-                 descartadosDuplicados + descartadosClones, descartadosSinCuerpo,
-                 variantes);
+                 descartadosDuplicados + descartadosClones, descartadosSinCuerpo);
     }
 
     /// <summary>
@@ -553,9 +550,15 @@ public static class NpcImporter
     /// porque cada mapa tiene la suya; para la simulación son <b>un solo
     /// enemigo</b>, y dejarlos triplica las chances de que salga el gallo.</para>
     ///
-    /// <para>La clave es el cuerpo más los números que usa el tick. Queda afuera
-    /// <c>poderAtaque</c>, que es la probabilidad de acertar de AO y acá no la usa
-    /// nadie: los tres gallos difieren solo en eso.</para>
+    /// <para>⚠ <b>La clave es el cuerpo, y nada más.</b> Antes era el cuerpo más
+    /// los números del tick, y eso dejaba pasar los pares que comparten sprite
+    /// pero difieren en vida: Lobo y Lobo de dungeon, Tigre y Tigre Salvaje,
+    /// Jabalí y Jabalí Salvaje, Zombie y Lord Zombie, Esqueleto y Esqueleto
+    /// Guerrero, Duende y Duende Molesto, y los tres Body=43 (Orco, Jefe Orco,
+    /// Orco brujo). En pantalla eran <b>el mismo bicho</b> —el único aviso era el
+    /// 120 % de <c>visualScale</c>—, así que el jugador veía nueve enemigos
+    /// repetidos con otro nombre en la barra de vida. En un MMO cada uno tiene su
+    /// mapa; acá el sprite ES la identidad del enemigo.</para>
     ///
     /// <para>Se queda el <b>primero de <c>NPCs.dat</c></b>. Es el criterio que ya
     /// usa el dedupe por nombre, y elegir por "el nombre más lindo" sería una regla
@@ -563,14 +566,12 @@ public static class NpcImporter
     /// </remarks>
     private static int DescartarClones(List<EnemigoImportado> enemigos)
     {
-        var vistos = new HashSet<(int, int, int, int, int, int)>();
+        var vistos = new HashSet<int>();
         var quedan = new List<EnemigoImportado>(enemigos.Count);
 
         foreach (var e in enemigos)
         {
-            var clave = (e.Body, e.HpEscalado, e.MinDamage, e.MaxDamage, e.Speed, e.CadenceTicks);
-
-            if (vistos.Add(clave))
+            if (vistos.Add(e.Body))
                 quedan.Add(e);
         }
 
@@ -582,98 +583,40 @@ public static class NpcImporter
         return descartados;
     }
 
-    /// <summary>
-    /// Le da tamaño creciente a los bichos que comparten cuerpo.
-    /// </summary>
-    /// <remarks>
-    /// <para>Se agrupa por <c>Body</c> y se ordena por vida: el más flojo del
-    /// grupo queda en 100 y cada escalón suma 20 puntos, con techo en 140. Tres
-    /// tamaños alcanzan —ningún cuerpo lo comparten más de tres bichos— y 140 % es
-    /// lo más grande que entra en una celda de 64 px sin pisar la de al lado.</para>
-    ///
-    /// <para>Se hace <b>después</b> de repartir las áreas y de reasignar los ids,
-    /// porque lo que ordena el grupo es el HP final, no el crudo.</para>
-    /// </remarks>
-    /// <returns>Cuántos enemigos quedaron marcados como variante.</returns>
-    private static int MarcarVariantes(List<EnemigoImportado> enemigos)
-    {
-        // Ordenar por HP y desempatar por id: sin el desempate, dos bichos con el
-        // mismo HP quedan en el orden en que los devolvió el diccionario, y la
-        // marca de variante le cae a uno o al otro según la corrida. Eso hizo que
-        // la "Rata" saliera más grande que la "Rata Gigante".
-
-        var porBody = new Dictionary<int, List<int>>();
-
-        for (int i = 0; i < enemigos.Count; i++)
-        {
-            if (!porBody.TryGetValue(enemigos[i].Body, out var grupo))
-            {
-                grupo = [];
-                porBody[enemigos[i].Body] = grupo;
-            }
-
-            grupo.Add(i);
-        }
-
-        int marcados = 0;
-
-        foreach (var grupo in porBody.Values)
-        {
-            if (grupo.Count < 2)
-                continue;
-
-            // La lista ya viene ordenada por HP creciente, así que el orden dentro
-            // del grupo es el orden de dureza. Se ordena igual por si el orden de
-            // arriba cambia: esta función no puede depender de eso en silencio.
-            grupo.Sort((a, b) =>
-            {
-                int porHp = enemigos[a].HpEscalado.CompareTo(enemigos[b].HpEscalado);
-                return porHp != 0 ? porHp : enemigos[a].Id.CompareTo(enemigos[b].Id);
-            });
-
-            for (int escalon = 1; escalon < grupo.Count; escalon++)
-            {
-                int escala = System.Math.Min(140, 100 + (escalon * 20));
-
-                enemigos[grupo[escalon]] = enemigos[grupo[escalon]] with
-                {
-                    VisualScale = escala,
-                };
-
-                marcados++;
-            }
-        }
-
-        return marcados;
-    }
-
     private static void Write(
         List<EnemigoImportado> enemigos, int sinCombate, int noFauna, int duplicados,
-        int sinCuerpo, int variantes)
+        int sinCuerpo)
     {
+        // ⚠ Las claves salen en INGLÉS y son el contrato con DataLoader.
+        //
+        // `enemies`, `scaledHp`, `originalNpc`: así las lee `ArchivoEnemigos`, y
+        // así las dejó el rename del 2026-08-29 (regla de oro 4: las claves de los
+        // JSON de datos van en inglés). Este objeto se había quedado en español
+        // —`enemigos`, `hpEscalado`— y no lo avisaba nadie: el importador escribía
+        // sin error y el juego arrancaba con cero enemigos.
         var salida = new
         {
             version = 1,
-            origen = "NPCs.dat de Austral AO, leído con Encoding.Latin1 y escrito en UTF-8",
+            source = "NPCs.dat de Austral AO, leído con Encoding.Latin1 y escrito en UTF-8",
 
-            aviso = "Generado por el importador. NO editar a mano: se pisa en la próxima " +
+            note = "Generado por el importador. NO editar a mano: se pisa en la próxima " +
                     "corrida de --importar-npcs. Los ajustes de balance van en el importador.",
 
-            reescalado = "hpEscalado = a·hpCrudo^b, clavado en Hormiga (5→30) y Golem " +
+            rescaled = "scaledHp = a·rawHp^b, clavado en Hormiga (5→30) y Golem " +
                          "(23000→6000). Los crudos de Austral son para un MMO 1v1; acá hay " +
                          "treinta bichos contra diez defensores. hpCrudo queda para poder " +
                          "rehacer la curva.",
 
-            avisoBody = "⚠ `body` NO es un fileNum. Hay que resolver body → grh → " +
+            bodyNote = "⚠ `body` NO es un fileNum. Hay que resolver body → grh → " +
                         "frames[] → fileNum con la skill traer-grafico.",
 
-            escalaVisual = "Porcentaje de tamaño al dibujar, 100 = natural. Es RENDER, " +
-                           "no entra en ninguna cuenta del tick. Catorce cuerpos de " +
-                           "Austral los comparten dos o tres bichos («Rata» y «Rata " +
-                           "Gigante» son el mismo Body=71): dentro de un mismo cuerpo, " +
-                           "más grande es más duro.",
+            visualScale = "Porcentaje de tamaño al dibujar, 100 = natural. Es RENDER, " +
+                           "no entra en ninguna cuenta del tick. Hoy son todos 100: " +
+                           "desde que el dedupe descarta por cuerpo, no hay dos " +
+                           "enemigos que compartan sprite, así que no hay nada que " +
+                           "diferenciar por tamaño.",
 
-            enemigos,
+            enemies = enemigos,
         };
 
         var opciones = new JsonSerializerOptions
@@ -705,18 +648,17 @@ public static class NpcImporter
                  $"{enemigos.Count + sinCombate + noFauna + duplicados + sinCuerpo} NPCs");
         GD.Print($"  sin combate  : {sinCombate} (aldeanos, banqueros, taberneros)");
         GD.Print($"  no son fauna : {noFauna} (GMs, guardias, invocaciones, relleno)");
-        GD.Print($"  duplicados   : {duplicados} (mismo nombre, o mismo cuerpo con " +
-                 $"los mismos números)");
+        GD.Print($"  duplicados   : {duplicados} (mismo nombre, o mismo cuerpo: " +
+                 $"un cuerpo, un enemigo)");
         GD.Print($"  sin cuerpo   : {sinCuerpo} (Body=0, no hay arte que traer)");
-        GD.Print($"  variantes    : {variantes} (comparten cuerpo, se dibujan más grandes)");
         GD.Print($"  ENTRAN       : {enemigos.Count}");
 
         if (enemigos.Count > 0)
         {
             GD.Print($"  más flojo    : {enemigos[0].Name} " +
-                     $"({enemigos[0].RawHp} → {enemigos[0].HpEscalado} HP)");
+                     $"({enemigos[0].RawHp} → {enemigos[0].ScaledHp} HP)");
             GD.Print($"  más duro     : {enemigos[^1].Name} " +
-                     $"({enemigos[^1].RawHp} → {enemigos[^1].HpEscalado} HP)");
+                     $"({enemigos[^1].RawHp} → {enemigos[^1].ScaledHp} HP)");
         }
 
         // Cuántos quedaron por área. Es el número que dice si el reparto sirve: un
@@ -778,8 +720,56 @@ public static class NpcImporter
                 return false;
         }
 
+        foreach (string feo in _arteQueNoSirve)
+        {
+            if (limpio.Contains(feo, System.StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
         return true;
     }
+
+    /// <summary>
+    /// Bichos que se descartan por el arte, no por lo que son.
+    /// </summary>
+    /// <remarks>
+    /// <para>Son fauna y pelean, así que ningún filtro de los de arriba los toca.
+    /// Salen porque el sprite no sirve: los dos comparten <c>Body=25</c> en
+    /// <c>NPCs.dat</c> —un unicornio y un árbol dibujados con el mismo cuerpo— y
+    /// en un tower defense visto desde arriba no se leen como enemigos.</para>
+    ///
+    /// <para>Va como lista aparte de <see cref="_noSonFauna"/> a propósito: aquella
+    /// dice "esto no es un enemigo", esta dice "esto es un enemigo pero no lo
+    /// queremos ver". Mezclarlas hace que el próximo que lea el filtro no sepa cuál
+    /// de las dos reglas está tocando.</para>
+    /// </remarks>
+    private static readonly string[] _arteQueNoSirve =
+    [
+        // Comparten Body=25 en NPCs.dat: un unicornio y un árbol dibujados con el
+        // mismo cuerpo, y ninguno de los dos se lee como enemigo desde arriba.
+        "ucorno", "arbol de jungla", "árbol de jungla",
+
+        // ⚠ Los de abajo los eligió el usuario mirando las hojas una por una
+        // (2026-08-31), así que la razón es visual y no hay regla que la derive.
+        //
+        // Los barcos y los bichos de agua —galeones, calamar, leviatán— son
+        // sprites de 1312 px de ancho hechos para el mar de AO: en una ruta de
+        // celdas de 96 px ocupan diez celdas y tapan el tablero.
+        //
+        // Bandido, Práctica, Servidor del Mal, Bruja, Mago Oscuro y Druida son
+        // humanoides que en NPCs.dat traen Head, y el importador solo guarda
+        // Body: se dibujan DECAPITADOS. Quedan afuera hasta que el bestiario
+        // sepa apilar cabeza, como ya lo hace el defensor.
+        "calamar", "leviatán", "leviatan",
+        "galeón", "galeon",
+        "bandido", "practica", "práctica", "servidor del mal",
+        // "mago" se lleva a los tres: Mago, Mago malvado y Mago Oscuro. Los tres
+        // son el mismo humanoide con túnica y sin cabeza, y de los tres el cuerpo
+        // sale de una armadura de defensor, así que además se pisaban con el
+        // muñeco del jugador.
+        "bruja", "mago", "druida",
+        "fuego fatuo",
+    ];
 
     /// <summary>
     /// Palabras que delatan algo que no es un enemigo de oleada.

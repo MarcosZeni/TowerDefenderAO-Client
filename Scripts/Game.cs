@@ -890,6 +890,31 @@ public partial class Game : Node2D
         DibujarCursor(celda);
     }
 
+    /// <summary>
+    /// Cuánto se achica el arte de disco al dibujarlo en el mundo.
+    /// </summary>
+    /// <remarks>
+    /// El tile de AO en x4 mide 128 px y la celda mide 96 (<see cref="Canvas.CellSide"/>),
+    /// así que la escala es 96/128 = 0,75 (INTERFAZ.md §2). ⚠ Acá decía 0,5, que
+    /// era la escala de cuando la celda medía 64: con la celda en 96 todo el arte
+    /// —bichos, cuerpos, cabezas y armas— se dibujaba a dos tercios de su tamaño y
+    /// flotando sobre la ruta.
+    /// </remarks>
+    private const float EscalaSprite = 0.75f;
+
+    /// <summary>
+    /// Cuánto achicar el arte de un gráfico concreto, según en qué escala esté
+    /// guardado.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EscalaSprite"/> es la cuenta para el arte x4, que es como entró
+    /// casi todo. Una hoja que pasó por <c>--reescalar-hoja</c> guarda el arte en
+    /// x2 y tiene la mitad de píxeles de lado, así que hay que dibujarla al doble
+    /// para que <b>se vea igual</b>: lo que cambia es la memoria, no la pantalla.
+    /// </remarks>
+    private static float EscalaDe(Graphic g)
+        => EscalaSprite * 4f / (g.Scale > 0 ? g.Scale : 4);
+
     /// <summary>Los cuatro sufijos de dirección, en el orden de <see cref="Ruta.Direction"/>.</summary>
     private static readonly string[] Direcciones = ["norte", "este", "sur", "oeste"];
 
@@ -940,11 +965,11 @@ public partial class Game : Node2D
         // ⚠ La cabeza va corrida, y el offset sale del cuerpo.
         //
         // Sin esto la cabeza queda a los pies del muñeco. El número está en
-        // píxeles x4 y el mundo se dibuja a la mitad, así que se escala igual que
-        // el sprite. Es lo que separa razas altas de bajas: -38 px contra -28.
+        // píxeles x4 y el mundo se dibuja a tres cuartos, así que se escala igual
+        // que el sprite. Es lo que separa razas altas de bajas: -38 px contra -28.
         var offsetCabeza = new Vector2(
-            apariencia.HeadOffset.X * 0.5f,
-            apariencia.HeadOffset.Y * 0.5f);
+            apariencia.HeadOffset.X * EscalaSprite,
+            apariencia.HeadOffset.Y * EscalaSprite);
 
         DibujarPieza(apariencia.Head, direccion, centro, celda, offsetCabeza, animar: false);
         DibujarPieza(apariencia.Weapon, direccion, centro, celda, Vector2.Zero, animar: true);
@@ -1032,8 +1057,8 @@ public partial class Game : Node2D
         if (textura is null)
             return false;
 
-        // x4 dibujado a la mitad, como todo el mundo (INTERFAZ.md §2).
-        var tamano = textura.GetSize() * 0.5f;
+        // x4 dibujado a tres cuartos, como todo el mundo (INTERFAZ.md §2).
+        var tamano = textura.GetSize() * EscalaDe(g);
 
         var esquina = new Vector2(
             centro.X - (tamano.X / 2f) + offset.X,
@@ -1093,16 +1118,19 @@ public partial class Game : Node2D
         if (textura is null)
             return false;
 
-        // El arte está en x4 y el mundo se dibuja a la mitad de eso: la celda mide
-        // 64 px porque el tile x4 de AO mide 128 (INTERFAZ.md §2). La escala
+        // El arte está en x4 y el mundo se dibuja a tres cuartos de eso: la celda
+        // mide 96 px porque el tile x4 de AO mide 128 (INTERFAZ.md §2). La escala
         // visual del bicho se multiplica encima.
-        float escala = 0.5f * dato.VisualScale / 100f;
+        float escala = EscalaDe(g) * dato.VisualScale / 100f;
 
         var tamano = textura.GetSize() * escala;
 
+        // `AnchorY` baja el sprite en los casos en que apoyar en el borde de la
+        // celda no se ve apoyado. Va en píxeles de la hoja, así que se escala
+        // igual que el sprite.
         var esquina = new Vector2(
             centro.X - (tamano.X / 2f),
-            centro.Y + (celda / 2f) - tamano.Y);
+            centro.Y + (celda / 2f) - tamano.Y + (g.AnchorY * escala));
 
         // Los que llevan perk van teñidos. Es el mismo placeholder que el círculo
         // amarillo, pero encima del sprite.

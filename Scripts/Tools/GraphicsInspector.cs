@@ -958,11 +958,121 @@ public static class GraphicsInspector
             GD.PrintErr($"  ✗ el cuerpo no resuelve a ninguna región: {s}");
     }
 
+    /// <summary>
+    /// Dónde está el dibujo dentro de su región: el centro de lo que no es
+    /// transparente.
+    /// </summary>
+    /// <remarks>
+    /// <para>El que dibuja centra el sprite por la <b>caja</b> de la región. Eso
+    /// asume que el dibujo está centrado adentro de la caja, y en el arte de
+    /// Austral no siempre lo está: un bicho de perfil suele quedar corrido hacia
+    /// un lado, porque en el MMO la caja es la celda del tile y el muñeco se
+    /// apoya donde le toca.</para>
+    ///
+    /// <para>El síntoma es exactamente el que se reporta mirando: el bicho camina
+    /// centrado cuando va para arriba y para abajo, y desplazado unos píxeles
+    /// cuando va de perfil. Esto lo mide en vez de discutirlo.</para>
+    ///
+    /// <para><c>dx</c> es cuánto hay que correr el sprite para que el dibujo quede
+    /// centrado: positivo, el dibujo está a la derecha de la caja.</para>
+    /// </remarks>
+    public static void GraphicCenter(string prefijo, float umbral = 0.05f)
+    {
+        if (string.IsNullOrWhiteSpace(prefijo))
+        {
+            GD.PrintErr("  ✗ hace falta una clave, por ejemplo «bicho.tortugaGigante»");
+            return;
+        }
+
+        GD.Print($"── Centro del dibujo · «{prefijo}» ────────────────");
+        GD.Print("  clave                          cuadro   ancho  dibujo    dx   aire   alto");
+
+        var hojas = new Dictionary<int, Image>();
+
+        foreach (var (clave, g) in GraphicsLoader.Index)
+        {
+            if (!clave.StartsWith(prefijo, System.StringComparison.Ordinal))
+                continue;
+
+            if (!hojas.TryGetValue(g.FileNum, out var hoja))
+            {
+                string ruta = Path.Combine(
+                    ProjectSettings.GlobalizePath("res://../Resources"), g.FileNum + ".PNG");
+
+                if (!File.Exists(ruta))
+                {
+                    GD.PrintErr($"  ✗ no está {ruta}");
+                    continue;
+                }
+
+                hoja = Image.LoadFromFile(ruta);
+
+                if (hoja is null)
+                    continue;
+
+                hoja.Convert(Image.Format.Rgba8);
+                hojas[g.FileNum] = hoja;
+            }
+
+            for (int i = 0; i < g.Regions.Length; i++)
+            {
+                var r = g.Regions[i];
+
+                int minX = int.MaxValue, maxX = int.MinValue;
+                int minY = int.MaxValue, maxY = int.MinValue;
+
+                for (int y = 0; y < r.Size.Y; y++)
+                {
+                    for (int x = 0; x < r.Size.X; x++)
+                    {
+                        // El umbral no es cero: el arte HD de Austral es un upscale
+                        // suavizado y deja un halo de alfa 1-3 alrededor del dibujo
+                        // que, contado, devuelve la caja entera y no mide nada.
+                        if (hoja.GetPixel(r.Position.X + x, r.Position.Y + y).A <= umbral)
+                            continue;
+
+                        if (x < minX)
+                            minX = x;
+
+                        if (x > maxX)
+                            maxX = x;
+
+                        if (y < minY)
+                            minY = y;
+
+                        if (y > maxY)
+                            maxY = y;
+                    }
+                }
+
+                if (minX > maxX)
+                {
+                    GD.Print($"  {clave,-30} {i,3}     vacío");
+                    continue;
+                }
+
+                float centroCaja = r.Size.X / 2f;
+                float centroDibujo = (minX + maxX + 1) / 2f;
+                float dx = centroDibujo - centroCaja;
+
+                // El aire de abajo es lo que separa al sprite del piso: el ancla es
+                // el borde inferior de la caja, así que cada fila transparente que
+                // sobra lo levanta un píxel sobre el camino.
+                int aire = r.Size.Y - 1 - maxY;
+
+                GD.Print($"  {clave,-30} {i,3}   {r.Size.X,5}  {minX,4}-{maxX,-4} " +
+                         $"{dx,6:+0.0;-0.0;0.0}  {aire,5}   {minY,4}-{maxY,-4}");
+            }
+        }
+
+        GD.Print("───────────────────────────────────────────────────");
+    }
+
     /// <summary>Lee lo justo de <c>enemigos.json</c>: nombre, área y body.</summary>
     public static List<EnemyArt> ReadEnemies()
     {
         string ruta = Path.Combine(
-            ProjectSettings.GlobalizePath("res://"), "Datos", "enemigos.json");
+            ProjectSettings.GlobalizePath("res://"), "Data", "enemigos.json");
 
         var salida = new List<EnemyArt>();
 
@@ -975,7 +1085,7 @@ public static class GraphicsInspector
         var json = System.Text.Json.Nodes.JsonNode.Parse(
             File.ReadAllText(ruta, Encoding.UTF8));
 
-        var lista = json?["enemigos"]?.AsArray();
+        var lista = json?["enemies"]?.AsArray();
 
         if (lista is null)
             return salida;
@@ -987,10 +1097,10 @@ public static class GraphicsInspector
 
             salida.Add(new EnemyArt(
                 (int)nodo["id"]!,
-                nodo["nombre"]!.GetValue<string>(),
+                nodo["name"]!.GetValue<string>(),
                 (int)nodo["area"]!,
                 (int)nodo["body"]!,
-                nodo["grafico"]?.GetValue<string>() ?? ""));
+                nodo["graphic"]?.GetValue<string>() ?? ""));
         }
 
         return salida;

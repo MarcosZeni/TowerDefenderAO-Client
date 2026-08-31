@@ -1738,6 +1738,816 @@ public static class GraphicFetcher
         return salida.ToString();
     }
 
+    /// <summary>
+    /// Borra las hojas que quedaron sin dueño y renumera el resto de 1 a N.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la segunda mitad de <see cref="Forget"/>. Aquel borra las entradas
+    /// del índice y solo se anima a borrar hojas <b>del final</b>: sacar una del
+    /// medio deja un agujero, y taparlo obliga a renumerar todo lo que viene
+    /// después. Esto hace exactamente eso, y por eso va en un comando aparte que
+    /// se corre cuando se terminó de sacar cosas, no una vez por cada olvido.</para>
+    ///
+    /// <para>El invariante que restablece lo declara el propio índice en
+    /// <c>_numeracion</c>: <i>«Los fileNum arrancan en 1 y son consecutivos»</i>.
+    /// La trazabilidad al gráfico de Austral no se pierde al renumerar porque vive
+    /// en <c>origen</c>, no en el <c>fileNum</c>.</para>
+    ///
+    /// <para>⚠ <b>Las hojas ajenas no se tocan.</b> Es la misma guarda que
+    /// <see cref="Forget"/>: arriba de <c>graficos.Count + 1</c> están las hojas
+    /// que el usuario dejó a mano con la numeración original de Austral para
+    /// elegirlas, y ni se borran ni se renumeran.</para>
+    ///
+    /// <para>El renombre va en orden ascendente y el destino siempre es menor o
+    /// igual que el origen, así que no se pisa nada. Si aun así el destino existe
+    /// —una hoja ajena parada justo ahí— se corta sin escribir el índice: es
+    /// preferible dejar los agujeros a mezclar dos numeraciones.</para>
+    /// </remarks>
+    public static void Compact()
+    {
+        var json = CargarIndice();
+        var graficos = json["graficos"]!.AsObject();
+
+        GD.Print("── Acomodar las hojas ─────────────────────────────");
+
+        var usados = new SortedSet<int>();
+
+        foreach (var (_, valor) in graficos)
+        {
+            if (valor?["fileNum"] is not null)
+                usados.Add((int)valor["fileNum"]!);
+        }
+
+        int techoPropio = graficos.Count + 1;
+
+        var enDisco = new List<int>();
+
+        if (Directory.Exists(CarpetaDestino))
+        {
+            foreach (string ruta in Directory.GetFiles(CarpetaDestino, "*.PNG"))
+            {
+                if (int.TryParse(Path.GetFileNameWithoutExtension(ruta), out int n))
+                    enDisco.Add(n);
+            }
+        }
+
+        enDisco.Sort();
+
+        // Primero las huérfanas: si no se borran antes de renumerar, el hueco que
+        // dejan no se llena y la cuenta final no da consecutiva.
+        int borradas = 0;
+
+        foreach (int n in enDisco)
+        {
+            if (n > techoPropio || usados.Contains(n))
+                continue;
+
+            string ruta = Path.Combine(CarpetaDestino, n + ".PNG");
+
+            if (!File.Exists(ruta))
+                continue;
+
+            File.Delete(ruta);
+            borradas++;
+            GD.Print($"  ✗ hoja {n} borrada (sin dueño)");
+        }
+
+        // Ahora el corrimiento. `usados` viene ordenado, así que el destino de la
+        // i-ésima hoja es i+1 y nunca es mayor que su número actual.
+        var mapa = new Dictionary<int, int>();
+        int siguiente = 1;
+
+        foreach (int viejo in usados)
+        {
+            if (viejo > techoPropio)
+            {
+                GD.PrintErr($"  ⚠ la hoja {viejo} está fuera de la numeración propia " +
+                            $"y se deja como está");
+                continue;
+            }
+
+            mapa[viejo] = siguiente++;
+        }
+
+        int movidas = 0;
+
+        foreach (var (viejo, nuevo) in mapa)
+        {
+            if (viejo == nuevo)
+                continue;
+
+            string origen = Path.Combine(CarpetaDestino, viejo + ".PNG");
+            string destino = Path.Combine(CarpetaDestino, nuevo + ".PNG");
+
+            if (!File.Exists(origen))
+            {
+                GD.PrintErr($"  ⚠ el índice apunta a la hoja {viejo} y no está en disco");
+                continue;
+            }
+
+            if (File.Exists(destino))
+            {
+                GD.PrintErr($"  ✗ la hoja {nuevo} ya existe y no es de esta renumeración. " +
+                            $"Se corta sin escribir el índice.");
+                return;
+            }
+
+            File.Move(origen, destino);
+            movidas++;
+        }
+
+        // El índice se toca al final y de una: si algo falló arriba, el JSON quedó
+        // como estaba y se puede volver a correr.
+        foreach (var (_, valor) in graficos)
+        {
+            if (valor?["fileNum"] is null)
+                continue;
+
+            if (mapa.TryGetValue((int)valor["fileNum"]!, out int nuevo))
+                valor["fileNum"] = nuevo;
+        }
+
+        GuardarIndice(json);
+
+        GD.Print($"  ✓ {borradas} hojas borradas · {movidas} renumeradas · " +
+                 $"{mapa.Count} hojas del 1 al {mapa.Count}");
+        GD.Print("───────────────────────────────────────────────────");
+    }
+
+    /// <summary>
+    /// Recorta y empaqueta una hoja, <b>bajando los píxeles sin cambiar cuánto se
+    /// ve</b>.
+    /// </summary>
+    /// <remarks>
+    /// El <c>divisor</c> 2 deja el arte en x2 —la mitad de lado, un cuarto de
+    /// píxeles— y compensa con el campo <c>escala</c>, así que el sprite se sigue
+    /// viendo igual. Es una optimización. Para achicar el bicho <b>de verdad</b>
+    /// está <see cref="ShrinkSheet"/>.
+    /// </remarks>
+    public static void RescaleSheet(int fileNum, int divisor)
+        => Rehacer([fileNum], divisor <= 0 ? 100 : 100 / divisor, compensarEscala: true);
+
+    /// <summary>
+    /// Achica de verdad un bicho: menos píxeles <b>y</b> más chico en pantalla.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es lo contrario de <see cref="RescaleSheet"/>, aunque las dos
+    /// resamplean.</b> Aquella baja los píxeles y <b>compensa</b> con el campo
+    /// <c>escala</c>, así que el sprite se sigue viendo igual. Esta baja los
+    /// píxeles y <b>no compensa</b>, así que el bicho se ve más chico. Confundirlas
+    /// es fácil y el síntoma es mudo —el arte cambia de tamaño en disco y en
+    /// pantalla no pasa nada, o al revés—, por eso son dos comandos y no un
+    /// flag.</para>
+    ///
+    /// <para>El porcentaje es sobre el tamaño actual: 75 deja al bicho en tres
+    /// cuartos. El número sale de mirarlo caminar en
+    /// <c>Scenes\SpritePreview.tscn</c>, que aplica el mismo porcentaje en vivo
+    /// con <c>+</c> y <c>-</c>.</para>
+    ///
+    /// <para>⚠ <b>Resamplear encima de lo resampleado pierde definición.</b> Cada
+    /// pasada interpola sobre la anterior, así que conviene tantear en la escena
+    /// —que no toca el disco— y aplicar una sola vez el número final, en vez de ir
+    /// bajando de a diez.</para>
+    /// </remarks>
+    public static void ShrinkSheet(int fileNum, int porcentaje)
+    {
+        if (porcentaje is < 5 or > 100)
+        {
+            GD.PrintErr("  ✗ el porcentaje va entre 5 y 100 (75 = tres cuartos)");
+            return;
+        }
+
+        Rehacer([fileNum], porcentaje, compensarEscala: false);
+    }
+
+    /// <summary>
+    /// Junta varias hojas en una sola, recortando y empaquetando.
+    /// </summary>
+    /// <remarks>
+    /// <para>Austral guarda una hoja por dirección cuando el bicho es grande: el
+    /// Oso Polar son cuatro archivos de 1810×518, uno por lado, y en el juego
+    /// nunca se dibuja uno sin los otros tres. Cuatro texturas donde va una son
+    /// cuatro cargas de disco, cuatro entradas en el diccionario de hojas y —lo
+    /// que importa para el atlas— cuatro rectángulos que empaquetar en vez de
+    /// uno.</para>
+    ///
+    /// <para>Es el mismo trabajo que <see cref="RescaleSheet"/> con más de una
+    /// hoja de entrada, así que comparten cuerpo: lo único que agrega es que el
+    /// rectángulo se identifica por <b>hoja + posición</b> y no solo por posición
+    /// —dos hojas distintas tienen un (0,0) cada una—.</para>
+    /// </remarks>
+    public static void MergeSheets(int[] fileNums, int divisor)
+    {
+        if (fileNums.Length < 2)
+        {
+            GD.PrintErr("  ✗ hacen falta al menos dos hojas para fusionar");
+            return;
+        }
+
+        Rehacer([.. fileNums], divisor <= 0 ? 100 : 100 / divisor, compensarEscala: true);
+    }
+
+    /// <summary>
+    /// Rehace un conjunto de hojas: recorta lo que se usa, lo escala y lo empaqueta
+    /// pegado en una hoja nueva.
+    /// </summary>
+    /// <remarks>
+    /// <para>Las hojas de Austral vienen del atlas del MMO y traen la grilla
+    /// entera aunque nosotros usemos cuatro regiones. La del Dragón Rojo medía
+    /// 8192×8192: son <b>256 MB de VRAM en RGBA8</b> para dibujar un cuadro, y
+    /// muchos Android con GLES3 topean la textura en 4096 y directamente no la
+    /// pueden crear. Esto arma una hoja nueva del tamaño de lo que se usa.</para>
+    ///
+    /// <para>No hay arte x2 guardado en <c>asset-legacy</c>: hay x4
+    /// (<c>N.PNG</c>) y 1x (<c>N.PNG.orig</c>), y el x2 se fabrica bajando el x4.
+    /// Subir el 1x se ve peor, que es lo que dice INTERFAZ.md §2.</para>
+    ///
+    /// <para><c>compensarEscala</c> es lo único que separa las dos herramientas
+    /// que llaman acá: con él, la entrada anota que ahora está en x2 y el renderer
+    /// dibuja al doble, así que el sprite queda igual; sin él, la entrada sigue
+    /// diciendo x4 y el bicho se achica en pantalla.</para>
+    ///
+    /// <para>⚠ <b>Se empaqueta con dos píxeles de aire entre cuadro y cuadro.</b>
+    /// El filtro es lineal y un <c>AtlasTexture</c> pegado al vecino le chupa una
+    /// fila de píxeles al interpolar: el cuadro aparece con una costura del color
+    /// del de al lado.</para>
+    /// </remarks>
+    private static void Rehacer(
+        List<int> hojas, int porcentaje, bool compensarEscala, List<string>? soloEstas = null)
+    {
+        if (porcentaje is < 1 or > 100)
+        {
+            GD.PrintErr($"  ✗ porcentaje fuera de rango: {porcentaje}");
+            return;
+        }
+
+        var json = CargarIndice();
+        var graficos = json["graficos"]!.AsObject();
+
+        string cuales = string.Join(" + ", hojas);
+        GD.Print($"── Rehacer la hoja {cuales} al {porcentaje} % ──────────────");
+
+        // Las entradas que viven en estas hojas. Se juntan TODAS: las cuatro
+        // direcciones de un bicho suelen compartir hoja, y rehacer una sola
+        // dejaría la vieja con dueño y no se podría borrar.
+        var entradas = new List<(string Clave, JsonObject Valor)>();
+
+        foreach (var (clave, valor) in graficos)
+        {
+            if (valor?["fileNum"] is null || !hojas.Contains((int)valor["fileNum"]!))
+                continue;
+
+            // El filtro es para partir: se rehace un subconjunto de las entradas de
+            // la hoja y el resto se queda donde está.
+            if (soloEstas is not null && !soloEstas.Contains(clave))
+                continue;
+
+            entradas.Add((clave, valor.AsObject()));
+        }
+
+        if (entradas.Count == 0)
+        {
+            GD.PrintErr($"  ✗ ninguna entrada usa {cuales}");
+            return;
+        }
+
+        // ⚠ Todas las entradas tienen que estar en la MISMA escala.
+        //
+        // La hoja nueva es una sola y lleva una sola escala, así que fusionar una
+        // entrada en x4 con otra en x2 dejaría a la segunda dibujándose al doble
+        // o a la mitad, sin un aviso. Pasa en cuanto alguien fusione después de
+        // haber reescalado una parte, que es exactamente el orden en que se
+        // trabajó el Dragón Rojo.
+        int escalaVieja = EscalaDe(entradas[0].Valor);
+
+        foreach (var (clave, valor) in entradas)
+        {
+            if (EscalaDe(valor) == escalaVieja)
+                continue;
+
+            GD.PrintErr($"  ✗ {clave} está en x{EscalaDe(valor)} y el resto en " +
+                        $"x{escalaVieja}. No se fusionan escalas distintas.");
+
+            return;
+        }
+
+        var origenes = new Dictionary<int, Image>();
+        long pixelesAntes = 0;
+        long bytesAntes = 0;
+
+        foreach (int n in hojas)
+        {
+            string ruta = Path.Combine(CarpetaDestino, n + ".PNG");
+
+            if (!File.Exists(ruta))
+            {
+                GD.PrintErr($"  ✗ no está {ruta}");
+                return;
+            }
+
+            var img = Image.LoadFromFile(ruta);
+
+            if (img is null)
+            {
+                GD.PrintErr($"  ✗ no se pudo abrir {ruta}");
+                return;
+            }
+
+            img.Convert(Image.Format.Rgba8);
+            origenes[n] = img;
+
+            pixelesAntes += (long)img.GetWidth() * img.GetHeight();
+            bytesAntes += new FileInfo(ruta).Length;
+        }
+
+        // ⚠ El recorte al dibujo es SOLO para los bichos.
+        //
+        // Un defensor se arma apilando cuerpo + cabeza + arma, y la cabeza se
+        // corre con el offset de `Personajes.ind`, que está medido contra la caja
+        // original. Recortar esas cajas mueve las tres piezas cada una por su
+        // cuenta y el muñeco se desarma. Los pisos ya quedan afuera antes de
+        // llegar acá.
+        bool soloBichos = true;
+
+        foreach (var (clave, _) in entradas)
+            soloBichos &= clave.StartsWith("bicho.", System.StringComparison.Ordinal);
+
+        var recorte = soloBichos
+            ? RecorteAlDibujo(entradas, origenes)
+            : [];
+
+        if (soloBichos && recorte.Count > 0)
+            GD.Print($"  · recortado al dibujo en {recorte.Count} entrada(s)");
+
+        // Un mismo rectángulo puede estar en varias entradas —las direcciones que
+        // comparten cuadro—, así que se recorta una vez sola y todas apuntan ahí.
+        //
+        // ⚠ La clave lleva la hoja adelante. Sin eso, al fusionar, el (0,0) de la
+        // hoja 116 se confunde con el (0,0) de la 115 y las cuatro direcciones del
+        // Oso Polar terminan mostrando la misma.
+        var rects = new List<(int Hoja, Rect2I R)>();
+        var donde = new Dictionary<(int, Rect2I), int>();
+        var recortadas = new Dictionary<string, List<Rect2I>>();
+
+        foreach (var (clave, valor) in entradas)
+        {
+            int hoja = (int)valor["fileNum"]!;
+            var lista = new List<Rect2I>();
+
+            foreach (var r in RegionesDe(valor))
+            {
+                var efectiva = recorte.TryGetValue(clave, out var margen)
+                    ? Aplicar(r, margen)
+                    : r;
+
+                lista.Add(efectiva);
+
+                if (donde.ContainsKey((hoja, efectiva)))
+                    continue;
+
+                donde[(hoja, efectiva)] = rects.Count;
+                rects.Add((hoja, efectiva));
+            }
+
+            recortadas[clave] = lista;
+        }
+
+        // Empaquetado por filas, los más altos primero: es el que menos aire deja
+        // sin meterse en un packer de verdad, y acá los cuadros de un mismo bicho
+        // miden todos casi lo mismo.
+        const int Aire = 2;
+
+        // ⚠ El ancho sale del ÁREA, no de una constante.
+        //
+        // Con un ancho fijo la hoja crece solo para abajo, y eso es peor que no
+        // empaquetar: el Dragón Rojo fusionado —48 cuadros— salió 1738×9818, y una
+        // textura de 9818 de alto no la crea ninguna GPU de celular. Apuntando al
+        // lado de un cuadrado la misma carga da algo del orden de 4100×4100, que
+        // entra donde el tirón vertical no entraba.
+        long areaTotal = 0;
+        var tamanoDe = new Vector2I[rects.Count];
+
+        for (int i = 0; i < rects.Count; i++)
+        {
+            int w = System.Math.Max(1, rects[i].R.Size.X * porcentaje / 100);
+            int h = System.Math.Max(1, rects[i].R.Size.Y * porcentaje / 100);
+
+            tamanoDe[i] = new Vector2I(w, h);
+            areaTotal += (long)(w + Aire) * (h + Aire);
+        }
+
+        int anchoObjetivo = (int)System.Math.Sqrt(areaTotal * 1.05);
+
+        // El piso es el cuadro más ancho: si el objetivo quedara por debajo, ese
+        // cuadro no entraría en ninguna fila y el empaquetado no terminaría nunca.
+        foreach (var t in tamanoDe)
+            anchoObjetivo = System.Math.Max(anchoObjetivo, t.X + (Aire * 2));
+
+        var orden = new List<int>(rects.Count);
+        for (int i = 0; i < rects.Count; i++)
+            orden.Add(i);
+
+        orden.Sort((a, b) => tamanoDe[b].Y.CompareTo(tamanoDe[a].Y));
+
+        var destinoDe = new Vector2I[rects.Count];
+
+        int cursorX = Aire, cursorY = Aire, altoFila = 0, anchoUsado = 0;
+
+        foreach (int i in orden)
+        {
+            if (cursorX + tamanoDe[i].X + Aire > anchoObjetivo && cursorX > Aire)
+            {
+                cursorX = Aire;
+                cursorY += altoFila + Aire;
+                altoFila = 0;
+            }
+
+            destinoDe[i] = new Vector2I(cursorX, cursorY);
+
+            cursorX += tamanoDe[i].X + Aire;
+            altoFila = System.Math.Max(altoFila, tamanoDe[i].Y);
+            anchoUsado = System.Math.Max(anchoUsado, cursorX);
+        }
+
+        int anchoHoja = anchoUsado + Aire;
+        int altoHoja = cursorY + altoFila + Aire;
+
+        var salida = Image.CreateEmpty(anchoHoja, altoHoja, false, Image.Format.Rgba8);
+
+        for (int i = 0; i < rects.Count; i++)
+        {
+            var trozo = origenes[rects[i].Hoja].GetRegion(rects[i].R);
+
+            if (tamanoDe[i] != rects[i].R.Size)
+                trozo.Resize(tamanoDe[i].X, tamanoDe[i].Y, Image.Interpolation.Lanczos);
+
+            salida.BlitRect(trozo, new Rect2I(Vector2I.Zero, trozo.GetSize()), destinoDe[i]);
+        }
+
+        // La hoja nueva va al final de la numeración. Compactar es trabajo de
+        // --acomodar-graficos, que ya sabe hacerlo sin romper el resto.
+        int numeroNuevo = 1;
+
+        foreach (var (_, valor) in graficos)
+        {
+            if (valor?["fileNum"] is not null)
+                numeroNuevo = System.Math.Max(numeroNuevo, (int)valor["fileNum"]! + 1);
+        }
+
+        string destinoRuta = Path.Combine(CarpetaDestino, numeroNuevo + ".PNG");
+        var error = salida.SavePng(destinoRuta);
+
+        if (error != Error.Ok)
+        {
+            GD.PrintErr($"  ✗ no se pudo escribir {destinoRuta}: {error}");
+            return;
+        }
+
+        int escalaNueva = compensarEscala
+            ? System.Math.Max(1, escalaVieja * porcentaje / 100)
+            : escalaVieja;
+
+        foreach (var (clave, valor) in entradas)
+        {
+            int hoja = (int)valor["fileNum"]!;
+            var lista = recortadas[clave];
+            var nuevas = new JsonArray();
+
+            foreach (var r in lista)
+            {
+                int i = donde[(hoja, r)];
+
+                nuevas.Add(new JsonArray(
+                    destinoDe[i].X, destinoDe[i].Y, tamanoDe[i].X, tamanoDe[i].Y));
+            }
+
+            int i0 = donde[(hoja, lista[0])];
+
+            valor["fileNum"] = numeroNuevo;
+            valor["x"] = destinoDe[i0].X;
+            valor["y"] = destinoDe[i0].Y;
+            valor["w"] = tamanoDe[i0].X;
+            valor["h"] = tamanoDe[i0].Y;
+            valor["escala"] = escalaNueva;
+            valor["regiones"] = nuevas;
+
+            GD.Print($"  ✓ {clave}  {lista.Count} cuadros");
+        }
+
+        GuardarIndice(json);
+
+        long despues = new FileInfo(destinoRuta).Length;
+
+        GD.Print($"  {hojas.Count} hoja(s) → hoja {numeroNuevo} {anchoHoja}x{altoHoja} " +
+                 $"· escala x{escalaNueva}");
+
+        GD.Print($"  disco {bytesAntes / 1024} KB → {despues / 1024} KB · " +
+                 $"VRAM {pixelesAntes * 4 / 1048576} MB → " +
+                 $"{(long)anchoHoja * altoHoja * 4 / 1048576} MB");
+
+        GD.Print("  · la hoja vieja queda sin dueño: corré --acomodar-graficos");
+        GD.Print("───────────────────────────────────────────────────");
+    }
+
+    /// <summary>
+    /// Cuánto sobra de transparente alrededor del dibujo de cada entrada.
+    /// </summary>
+    /// <remarks>
+    /// <para>Arregla un bug que se ve caminando: el sprite se ancla al <b>borde
+    /// inferior de la caja</b>, y en el arte de Austral la caja no está ajustada
+    /// al dibujo. La Tortuga Gigante de perfil tiene 43 píxeles transparentes
+    /// abajo contra 12 de frente, así que al ir de izquierda a derecha apoyaba
+    /// treinta píxeles más arriba que al ir de arriba abajo, flotando sobre el
+    /// camino.</para>
+    ///
+    /// <para>⚠ <b>El margen es de la ENTRADA, no del cuadro.</b> Recortar cada
+    /// cuadro por su cuenta le saca el movimiento a la animación: el ciclo de
+    /// caminar de AO sube y baja al bicho unos píxeles, y eso <b>es</b> el
+    /// movimiento. Se toma el rectángulo que cubre a todos los cuadros de esa
+    /// dirección, así que el bicho queda apoyado y el balanceo queda.</para>
+    ///
+    /// <para>El umbral de alfa no es cero: el arte HD es un upscale suavizado y
+    /// deja un halo de alfa 1-3 alrededor del dibujo que, contado, devuelve la caja
+    /// entera y no recorta nada.</para>
+    /// </remarks>
+    /// <returns>Por clave, cuánto sacar de cada lado: izquierda, arriba, derecha, abajo.</returns>
+    private static Dictionary<string, (int L, int T, int R, int B)> RecorteAlDibujo(
+        List<(string Clave, JsonObject Valor)> entradas, Dictionary<int, Image> origenes)
+    {
+        var salida = new Dictionary<string, (int, int, int, int)>();
+
+        foreach (var (clave, valor) in entradas)
+        {
+            if (valor["fileNum"] is null || !origenes.TryGetValue((int)valor["fileNum"]!, out var hoja))
+                continue;
+
+            var regiones = RegionesDe(valor);
+
+            int menorL = int.MaxValue, menorT = int.MaxValue;
+            int menorR = int.MaxValue, menorB = int.MaxValue;
+
+            foreach (var r in regiones)
+            {
+                int minX = int.MaxValue, maxX = int.MinValue;
+                int minY = int.MaxValue, maxY = int.MinValue;
+
+                for (int y = 0; y < r.Size.Y; y++)
+                {
+                    for (int x = 0; x < r.Size.X; x++)
+                    {
+                        if (hoja.GetPixel(r.Position.X + x, r.Position.Y + y).A <= 0.05f)
+                            continue;
+
+                        if (x < minX)
+                            minX = x;
+
+                        if (x > maxX)
+                            maxX = x;
+
+                        if (y < minY)
+                            minY = y;
+
+                        if (y > maxY)
+                            maxY = y;
+                    }
+                }
+
+                // Un cuadro vacío no aporta margen y no puede recortar a los otros.
+                if (minX > maxX)
+                    continue;
+
+                menorL = System.Math.Min(menorL, minX);
+                menorT = System.Math.Min(menorT, minY);
+                menorR = System.Math.Min(menorR, r.Size.X - 1 - maxX);
+                menorB = System.Math.Min(menorB, r.Size.Y - 1 - maxY);
+            }
+
+            if (menorL == int.MaxValue)
+                continue;
+
+            if (menorL + menorT + menorR + menorB == 0)
+                continue;
+
+            salida[clave] = (menorL, menorT, menorR, menorB);
+        }
+
+        return salida;
+    }
+
+    /// <summary>Le saca el margen a un rectángulo, sin dejarlo vacío.</summary>
+    private static Rect2I Aplicar(Rect2I r, (int L, int T, int R, int B) m)
+    {
+        int w = System.Math.Max(1, r.Size.X - m.L - m.R);
+        int h = System.Math.Max(1, r.Size.Y - m.T - m.B);
+
+        return new Rect2I(r.Position.X + m.L, r.Position.Y + m.T, w, h);
+    }
+
+    /// <summary>
+    /// Parte una hoja en varias, repartiendo sus entradas.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el inverso de <see cref="MergeSheets"/>, y existe porque fusionar
+    /// no siempre entra. El Dragón Rojo son 48 cuadros y a x2 juntos dan
+    /// 4050×4436: pasan el techo de 4096 que tiene la textura en buena parte de
+    /// los Android, así que la hoja fusionada no se puede crear. Partido en dos
+    /// cada mitad queda cómoda, y <b>no hace falta tocar la escala</b> —que es lo
+    /// que no se puede decidir hasta ver el bicho en pantalla—.</para>
+    ///
+    /// <para>Reparte por <b>entradas enteras</b>, nunca por cuadros: los cuadros de
+    /// una dirección tienen que quedar juntos porque comparten el
+    /// <c>AtlasTexture</c> de su hoja.</para>
+    /// </remarks>
+    public static void SplitSheet(int fileNum, int partes)
+    {
+        if (partes < 2)
+        {
+            GD.PrintErr("  ✗ hacen falta al menos dos partes");
+            return;
+        }
+
+        var json = CargarIndice();
+        var graficos = json["graficos"]!.AsObject();
+
+        var claves = new List<string>();
+
+        foreach (var (clave, valor) in graficos)
+        {
+            if (valor?["fileNum"] is not null && (int)valor["fileNum"]! == fileNum)
+                claves.Add(clave);
+        }
+
+        if (claves.Count < partes)
+        {
+            GD.PrintErr($"  ✗ la hoja {fileNum} tiene {claves.Count} entrada(s): " +
+                        $"no se puede partir en {partes}");
+
+            return;
+        }
+
+        GD.Print($"── Partir la hoja {fileNum} en {partes} ──────────────");
+
+        // Se reparte en tramos contiguos y no salteado: las direcciones de un bicho
+        // vienen seguidas en el índice, así que cada parte se lleva un par que se
+        // dibuja junto.
+        int porParte = (claves.Count + partes - 1) / partes;
+
+        for (int i = 0; i < claves.Count; i += porParte)
+        {
+            var tramo = claves.GetRange(i, System.Math.Min(porParte, claves.Count - i));
+            Rehacer([fileNum], 100, compensarEscala: false, tramo);
+        }
+
+        GD.Print("───────────────────────────────────────────────────");
+    }
+
+    /// <summary>
+    /// Le pasa <see cref="RescaleSheet"/> a todas las hojas del índice.
+    /// </summary>
+    /// <remarks>
+    /// <para>Con <c>divisor 1</c> no achica nada: solo recorta y empaqueta. Es la
+    /// mitad barata de la mejora, porque las hojas de Austral son en su mayoría
+    /// aire —el atlas del MMO trae la grilla entera y nosotros usamos cuatro
+    /// regiones—. Medido sobre este índice, de 547 millones de píxeles en disco se
+    /// usan 150.</para>
+    ///
+    /// <para>⚠ <b>Las hojas de <c>piso.</c> se saltean.</b> Un piso es un bloque de
+    /// 4×4 tiles que se dibuja pegado al de al lado, y el filtro es lineal: con el
+    /// bloque rodeado de píxeles transparentes, el borde de cada tile interpola
+    /// contra el aire y aparece una costura en el suelo. En la hoja original el
+    /// vecino es otro tile opaco y eso no pasa. Empaquetar pisos necesita el borde
+    /// repetido, que es otro trabajo.</para>
+    ///
+    /// <para>La lista de hojas se saca <b>antes</b> de empezar. Cada rehecho crea
+    /// una hoja nueva al final de la numeración, y sin la foto previa el recorrido
+    /// se encontraría con las que él mismo va fabricando.</para>
+    /// </remarks>
+    public static void RescaleAll(int divisor)
+    {
+        var json = CargarIndice();
+        var graficos = json["graficos"]!.AsObject();
+
+        var hojas = new SortedSet<int>();
+        var conPiso = new HashSet<int>();
+
+        foreach (var (clave, valor) in graficos)
+        {
+            if (valor?["fileNum"] is null)
+                continue;
+
+            int n = (int)valor["fileNum"]!;
+            hojas.Add(n);
+
+            if (clave.StartsWith("piso.", System.StringComparison.Ordinal))
+                conPiso.Add(n);
+        }
+
+        GD.Print($"── Rehacer las {hojas.Count} hojas ÷{divisor} ─────────────");
+        GD.Print($"  · se saltean {conPiso.Count} hojas de piso");
+
+        int hechas = 0;
+
+        foreach (int n in hojas)
+        {
+            if (conPiso.Contains(n))
+                continue;
+
+            RescaleSheet(n, divisor);
+            hechas++;
+        }
+
+        GD.Print($"── {hechas} hojas rehechas · corré --acomodar-graficos ────");
+    }
+
+    /// <summary>
+    /// Escribe el <c>anclaY</c> de las entradas que empiezan con un prefijo.
+    /// </summary>
+    /// <remarks>
+    /// <para>El sprite se ancla al borde inferior de su región. Con la caja
+    /// recortada al dibujo eso lo deja apoyado, pero apoyado en el borde de abajo
+    /// de la celda no siempre <b>se ve</b> apoyado: una criatura de perfil es
+    /// ancha y baja, y su masa queda por encima de la línea del camino. La Tortuga
+    /// Gigante yendo de izquierda a derecha fue el caso que lo destapó.</para>
+    ///
+    /// <para>Es corrección de render y por <b>entrada</b> —o sea, por dirección—,
+    /// porque el problema es por dirección: de frente el mismo bicho se ve bien.
+    /// Positivo baja. No toca ningún píxel: solo escribe el número en el
+    /// índice.</para>
+    ///
+    /// <para>El valor se tantea en <c>Scenes\SpritePreview.tscn</c> con <c>[</c> y
+    /// <c>]</c>, que muestran el total en el panel.</para>
+    /// </remarks>
+    public static void AnchorGraphic(string prefijo, int px)
+    {
+        if (string.IsNullOrWhiteSpace(prefijo))
+        {
+            GD.PrintErr("  ✗ hace falta una clave, por ejemplo «bicho.tortugaGigante.este»");
+            return;
+        }
+
+        var json = CargarIndice();
+        var graficos = json["graficos"]!.AsObject();
+
+        GD.Print($"── Ancla de «{prefijo}» = {px} px ────────────────");
+
+        int tocadas = 0;
+
+        foreach (var (clave, valor) in graficos)
+        {
+            if (!clave.StartsWith(prefijo, System.StringComparison.Ordinal) || valor is null)
+                continue;
+
+            // El cero se borra en vez de escribirse: una entrada sin el campo y una
+            // con `anclaY: 0` valen lo mismo, y dejarlo escrito ensucia el índice
+            // con ruido que después hay que leer.
+            if (px == 0)
+                valor.AsObject().Remove("anclaY");
+            else
+                valor["anclaY"] = px;
+
+            tocadas++;
+            GD.Print($"  ✓ {clave}");
+        }
+
+        if (tocadas == 0)
+        {
+            GD.PrintErr("  ✗ no hay ninguna entrada con ese prefijo");
+            return;
+        }
+
+        GuardarIndice(json);
+
+        GD.Print($"  {tocadas} entrada(s)");
+        GD.Print("───────────────────────────────────────────────────");
+    }
+
+    /// <summary>Los rectángulos de una entrada, con el suelto como respaldo.</summary>
+    private static List<Rect2I> RegionesDe(JsonObject valor)
+    {
+        var salida = new List<Rect2I>();
+
+        if (valor["regiones"] is JsonArray arr && arr.Count > 0)
+        {
+            foreach (var nodo in arr)
+            {
+                if (nodo is JsonArray r && r.Count >= 4)
+                    salida.Add(new Rect2I((int)r[0]!, (int)r[1]!, (int)r[2]!, (int)r[3]!));
+            }
+        }
+
+        if (salida.Count == 0)
+        {
+            salida.Add(new Rect2I(
+                (int)valor["x"]!, (int)valor["y"]!, (int)valor["w"]!, (int)valor["h"]!));
+        }
+
+        return salida;
+    }
+
+    /// <summary>La escala de una entrada. Sin el campo es x4, que es el default histórico.</summary>
+    private static int EscalaDe(JsonObject valor)
+        => valor["escala"] is not null ? (int)valor["escala"]! : 4;
+
     private static JsonNode CargarIndice()
     {
         if (File.Exists(RutaIndice))
