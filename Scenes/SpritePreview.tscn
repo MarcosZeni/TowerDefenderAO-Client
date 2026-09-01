@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://cblg5v4sqp3l8"]
 
-[ext_resource type="Script" path="res://Scripts/SpritePreview.cs" id="1_preview"]
+[ext_resource type="Script" uid="uid://tsq4q5b1kkbf" path="res://Scripts/SpritePreview.cs" id="1_preview"]
 
-[node name="SpritePreview" type="Node2D"]
+[node name="SpritePreview" type="Node2D" unique_id=1849666557]
 script = ExtResource("1_preview")
