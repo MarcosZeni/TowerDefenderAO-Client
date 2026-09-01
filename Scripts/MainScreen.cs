@@ -215,8 +215,16 @@ public partial class MainScreen : Control
 
     public async Task RefreshAsync()
     {
-        // El botón de continuar existe solo mientras exista el guardado.
+        // El botón de continuar existe si hay algo que continuar, en disco o en la
+        // nube. La consulta a la nube va después de pintar lo local: en el caso
+        // normal —guardado en disco— el botón aparece sin esperar a la red.
         _continuar.Visible = SaveFile.Exists();
+
+        if (!_continuar.Visible && Net.ApiClient.LoggedIn)
+        {
+            var (hayNube, _, _) = await Net.ApiClient.CurrentRunAsync();
+            _continuar.Visible = hayNube;
+        }
 
         var (ok, perfil, error) = await Net.ApiClient.ProfileAsync();
 
@@ -244,7 +252,8 @@ public partial class MainScreen : Control
         // ⚠ El hash de los datos viaja acá. Si el cliente juega con otros números
         // que el servidor, la corrida no sería reproducible ni comparable, y es
         // infinitamente mejor rechazarla ahora que después de tres horas.
-        var (ok, datos, error) = await Net.ApiClient.StartRunAsync(DataLoader.Current.Hash);
+        var (ok, datos, error) = await Net.ApiClient.StartRunAsync(
+            DataLoader.Current.Hash, Device.Kind);
 
         _jugar.Disabled = false;
 

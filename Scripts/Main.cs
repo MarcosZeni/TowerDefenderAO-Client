@@ -34,6 +34,34 @@ public partial class Main : Node2D
             return;
         }
 
+        // Argumentos de prueba del guardado en la nube. Permiten simular el
+        // segundo aparato SIN un segundo aparato: dos instancias en la misma PC,
+        // una de ellas con --celular, se comportan como PC y teléfono — otra
+        // plataforma declarada y otro archivo de guardado local, mismo servidor.
+        //
+        //   --celular          se declara "celular" y guarda en un archivo aparte
+        //   --servidor <url>   apunta a otra API (para el teléfono real: la IP
+        //                      de LAN de la PC, http://192.168.x.x:5090)
+        string[] argumentos = OS.GetCmdlineUserArgs();
+
+        for (int i = 0; i < argumentos.Length; i++)
+        {
+            switch (argumentos[i])
+            {
+                case "--celular":
+                    Device.SimulateMobile = true;
+                    SaveFile.FileSuffix = ".celular";
+                    GD.Print("Simulando celular: plataforma «celular», guardado aparte.");
+                    break;
+
+                case "--servidor" when i + 1 < argumentos.Length:
+                    Net.ApiClient.BaseUrl = argumentos[i + 1];
+                    GD.Print($"Servidor: {Net.ApiClient.BaseUrl}");
+                    i++;
+                    break;
+            }
+        }
+
         Resolution.ApplySaved();
         Settings.Load();
         Loc.Load(Settings.Language);
@@ -90,10 +118,71 @@ public partial class Main : Node2D
             juego.StoreRun();
     }
 
-    /// <summary>Retoma la corrida guardada: re-simula el log y arma la escena.</summary>
-    private void AlContinuarCorrida()
+    /// <summary>
+    /// Retoma la corrida guardada: re-simula el log y arma la escena.
+    /// </summary>
+    /// <remarks>
+    /// <para>Hay dos guardados posibles y <b>gana el que llegó más lejos</b>: el de
+    /// disco y el que dejó otro dispositivo en el servidor. Es lo que permite
+    /// empezar en la PC y seguir en el celular, y al revés.</para>
+    ///
+    /// <para>La comparación es por <b>tick</b> y se hace antes de re-simular:
+    /// <see cref="SaveFile.PeekTick"/> lee solo la cabecera del archivo, así que
+    /// elegir no cuesta dos reconstrucciones para tirar una.</para>
+    ///
+    /// <para>⚠ Si el de la nube es de otra <b>temporada</b> —otra
+    /// <c>datosVersion</c>— se ignora sin borrarlo. Un log solo se reproduce igual
+    /// contra los números con los que se jugó, y esa corrida ya no es replicable
+    /// con esta build; pero la fila es del servidor y no le toca al cliente
+    /// decidir que se tire.</para>
+    /// </remarks>
+    private async void AlContinuarCorrida()
     {
-        var (partida, log, seed, runId) = SaveFile.Load();
+        int tickLocal = SaveFile.PeekTick();
+
+        Net.CurrentRun? nube = null;
+
+        if (Net.ApiClient.LoggedIn)
+        {
+            var (ok, datos, _) = await Net.ApiClient.CurrentRunAsync();
+
+            if (ok && datos is { Log.Length: > 0 } &&
+                datos.DataVersion == DataLoader.Current.Version)
+            {
+                nube = datos;
+            }
+        }
+
+        (Run? Run, ActionLog? Log, ulong Seed, long RunId) cargado;
+
+        if (nube is not null && nube.SavedTick > tickLocal)
+        {
+            GD.Print($"Retomando de la nube: corrida {nube.RunId}, tick {nube.SavedTick} " +
+                     $"(en disco había {tickLocal})");
+
+            cargado = SaveFile.Rebuild(
+                nube.Seed, nube.RunId, nube.SavedTick, System.Convert.FromBase64String(nube.Log!));
+
+            // ⚠ El chequeo de determinismo entre aparatos, gratis. El que subió el
+            // checkpoint reportó su oleada; si la re-simulación de ESTA máquina no
+            // llega a la misma, las dos arquitecturas divergieron — que es
+            // exactamente lo que la regla «todo en enteros, PRNG propio» promete
+            // que no pasa. Si este aviso aparece alguna vez, es un bug de la
+            // simulación y es el más caro del proyecto: a cazarlo, no a taparlo.
+            if (cargado.Run is { } reconstruida && reconstruida.Wave != nube.Wave)
+            {
+                GD.PushError(
+                    $"DETERMINISMO ROTO entre aparatos: el checkpoint dice oleada " +
+                    $"{nube.Wave} y la re-simulación llegó a {reconstruida.Wave} " +
+                    $"(seed {nube.Seed}, tick {nube.SavedTick}).");
+            }
+        }
+        else
+        {
+            cargado = SaveFile.Load();
+        }
+
+        var (partida, log, seed, runId) = cargado;
 
         if (partida is null || log is null)
         {

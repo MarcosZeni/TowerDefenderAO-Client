@@ -199,7 +199,50 @@ public partial class Game : Node2D
     /// Sale gratis del determinismo: guardar es escribir la seed y el log, y
     /// cargar es re-simular desde el tick 0. Ver <see cref="SaveFile"/>.
     /// </remarks>
-    public void StoreRun() => SaveFile.Store(Seed, RunId, _log, Run.Tick);
+    public void StoreRun()
+    {
+        SaveFile.Store(Seed, RunId, _log, Run.Tick);
+        _ = UploadProgressAsync();
+    }
+
+    /// <summary>
+    /// Sube el mismo guardado al servidor, para poder seguir en otro aparato.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No se espera y no se avisa si falla.</b> El guardado que importa
+    /// es el de disco, que ya se escribió: la nube es un extra. Bloquear la
+    /// apertura de la preparación esperando una respuesta HTTP haría que el juego
+    /// se trabe cuando se cae internet, y avisar de cada checkpoint perdido sería
+    /// un cartel por oleada que nadie puede accionar.</para>
+    ///
+    /// <para>Sube el <b>log</b>, no un contador. Es lo que hace que el checkpoint
+    /// sea verificable: con la seed que el servidor ya tiene, se re-simula. Un
+    /// «voy por la oleada 60» suelto no se puede comprobar nunca.</para>
+    ///
+    /// <para>Sin sesión no se intenta: se puede jugar deslogueado y ahí no hay
+    /// corrida abierta del lado del servidor que actualizar.</para>
+    /// </remarks>
+    private async System.Threading.Tasks.Task UploadProgressAsync()
+    {
+        if (RunId <= 0 || !Net.ApiClient.LoggedIn)
+            return;
+
+        // ⚠ `ticks` y `tick` son el mismo número acá y NO son lo mismo en el
+        // servidor: uno es el reclamo que ordena el ranking y el otro el punto de
+        // reanudación. Coinciden porque se guarda con el reloj parado, pero la
+        // columna es distinta a propósito — al cerrar, `ticks` se congela y
+        // `tick_guardado` deja de importar.
+        var (ok, _, error) = await Net.ApiClient.SaveProgressAsync(
+            RunId,
+            Run.Wave,
+            DataLoader.Current.Areas.OfWave(Run.Wave),
+            Run.Tick,
+            Run.Tick,
+            BinaryLog.Write(_log));
+
+        if (!ok)
+            GD.Print($"No se pudo subir el progreso de la corrida {RunId}: {error}");
+    }
 
     /// <summary>Abierto el menú de ESC. Congela el reloj, como <c>_pausado</c>.</summary>
     public bool MenuOpen { get; set; }

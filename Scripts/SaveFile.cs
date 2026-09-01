@@ -43,7 +43,18 @@ public static class SaveFile
     /// <c>%APPDATA%</c>, y una build instalada en Archivos de Programa no puede
     /// escribir en su propia carpeta.
     /// </summary>
-    private const string Route = "user://corrida.guardada";
+    private static string Route => "user://corrida.guardada" + FileSuffix;
+
+    /// <summary>
+    /// Sufijo del archivo de guardado. Vacío en el juego real.
+    /// </summary>
+    /// <remarks>
+    /// Existe para probar el guardado en la nube <b>sin un segundo aparato</b>:
+    /// dos instancias en la misma PC comparten <c>user://</c>, así que sin esto la
+    /// «segunda máquina» pisaría el guardado local de la primera y la prueba no
+    /// probaría nada. Lo setea el argumento <c>--celular</c> (ver <c>Main</c>).
+    /// </remarks>
+    public static string FileSuffix { get; set; } = "";
 
     /// <summary>
     /// v2 agrega el <b>tick del momento de guardar</b>. La v1 re-simulaba hasta
@@ -157,6 +168,51 @@ public static class SaveFile
         uint largo = f.Get32();
         byte[] blob = f.GetBuffer((long)largo);
 
+        return Rebuild(seed, runId, tick, blob);
+    }
+
+    /// <summary>
+    /// Cuánto avanzó el guardado de disco, sin re-simular nada.
+    /// </summary>
+    /// <remarks>
+    /// Lee solo la cabecera. Sirve para elegir entre el guardado local y el de la
+    /// nube sin pagar dos re-simulaciones para descartar una.
+    /// </remarks>
+    /// <returns><c>-1</c> si no hay guardado, o si es de otra versión del formato.</returns>
+    public static int PeekTick()
+    {
+        if (!Exists())
+            return -1;
+
+        using var f = ArchivoGodot.Open(Route, ArchivoGodot.ModeFlags.Read);
+
+        if (f is null || f.Get8() != Version)
+            return -1;
+
+        f.Get64();  // seed
+        f.Get64();  // runId
+
+        return (int)f.Get32();
+    }
+
+    /// <summary>
+    /// Re-simula una corrida desde su seed y su log, hasta el tick dado.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el corazón de <see cref="Load"/>, separado para que el guardado de
+    /// la nube use <b>exactamente el mismo camino</b>. La diferencia entre los dos
+    /// es de dónde salen los cuatro datos, no qué se hace con ellos: duplicar esta
+    /// función sería garantizar que el día que una se corrija, la otra no.</para>
+    ///
+    /// <para>⚠ El que llama tiene que haber verificado el <b>hash de los datos de
+    /// balance</b> antes. Acá no se puede: la corrida de la nube trae su
+    /// <c>datosVersion</c> y la de disco su hash, y son dos chequeos distintos
+    /// contra la misma regla —un log solo se reproduce igual contra los números
+    /// con los que se jugó—.</para>
+    /// </remarks>
+    public static (Run? Run, ActionLog? Log, ulong Seed, long RunId) Rebuild(
+        ulong seed, long runId, int tick, byte[] blob)
+    {
         var log = BinaryLog.Read(blob);
 
         // El mapa sale de la seed, igual que en una corrida nueva: guardarlo

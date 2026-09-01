@@ -767,7 +767,7 @@ public static class NpcImporter
         // son el mismo humanoide con túnica y sin cabeza, y de los tres el cuerpo
         // sale de una armadura de defensor, así que además se pisaban con el
         // muñeco del jugador.
-        "bruja", "mago", "druida",
+        "bruja", "mago", "druida", "asesino",
         "fuego fatuo",
     ];
 

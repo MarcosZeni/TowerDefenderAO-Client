@@ -45,6 +45,19 @@ public sealed record RunFinished(
     [property: JsonPropertyName("oleada")] int Wave,
     [property: JsonPropertyName("gano")] bool Won);
 
+public sealed record CurrentRun(
+    [property: JsonPropertyName("runId")] long RunId,
+    [property: JsonPropertyName("seed")] ulong Seed,
+    [property: JsonPropertyName("datosVersion")] int DataVersion,
+    [property: JsonPropertyName("oleada")] int Wave,
+    [property: JsonPropertyName("area")] int Area,
+    [property: JsonPropertyName("ticks")] int Ticks,
+    [property: JsonPropertyName("tick")] int SavedTick,
+    [property: JsonPropertyName("log")] string? Log,
+    [property: JsonPropertyName("logTruncado")] bool LogTruncated,
+    [property: JsonPropertyName("plataforma")] string? Platform,
+    [property: JsonPropertyName("actualizada")] System.DateTime? UpdatedUtc);
+
 public sealed record Profile(
     [property: JsonPropertyName("nick")] string Nick,
     [property: JsonPropertyName("oro")] long Gold,
@@ -226,8 +239,9 @@ public static class ApiClient
     ///
     /// <para><b>Sin mapa.</b> El área no se elige: se llega o no se llega.</para>
     /// </remarks>
-    public static Task<(bool Ok, RunStarted? Data, string? Error)> StartRunAsync(string hashDatos)
-        => PostAsync<RunStarted>("/run/start", new { hashDatos });
+    public static Task<(bool Ok, RunStarted? Data, string? Error)> StartRunAsync(
+        string hashDatos, string plataforma)
+        => PostAsync<RunStarted>("/run/start", new { hashDatos, plataforma });
 
     /// <summary>
     /// Cierra la corrida con el reclamo del cliente.
@@ -249,6 +263,51 @@ public static class ApiClient
             ticks,
             log = Convert.ToBase64String(log),
         });
+
+    /// <summary>
+    /// Sube el progreso de la corrida abierta, sin cerrarla.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el mismo trío que <c>SaveFile</c> escribe en disco —log, tick y
+    /// hasta dónde llegó—, contra el servidor. Con eso la corrida sobrevive a que
+    /// se cierre el juego y <b>se puede seguir en otro dispositivo</b>.</para>
+    ///
+    /// <para>⚠ <c>ticks</c> es el reclamo del ranking y <c>tick</c> es el punto de
+    /// reanudación. Son dos números distintos y los dos hacen falta: sin el
+    /// segundo, retomar rebobina hasta la última acción del log y los segundos de
+    /// combate posteriores se vuelven a jugar distinto.</para>
+    ///
+    /// <para>Un <c>false</c> puede ser que la corrida ya no esté abierta o que el
+    /// checkpoint llegara atrasado —otro dispositivo subió uno más avanzado—. En
+    /// los dos casos lo que corresponde es consultar <see cref="CurrentRunAsync"/>,
+    /// no reintentar.</para>
+    /// </remarks>
+    public static Task<(bool Ok, object? Data, string? Error)> SaveProgressAsync(
+        long runId, int oleada, int area, int ticks, int tick, byte[] log)
+        => PostAsync<object>("/run/progress", new
+        {
+            runId,
+            oleada,
+            area,
+            ticks,
+            tick,
+            log = Convert.ToBase64String(log),
+        });
+
+    /// <summary>
+    /// La corrida abierta de la cuenta, lista para retomar.
+    /// </summary>
+    /// <remarks>
+    /// <para>Devuelve seed + log + tick, que es todo lo que hace falta para
+    /// reconstruir el estado: no hay estado serializado, cargar es re-simular
+    /// desde el tick 0 a máxima velocidad. Es <see cref="SaveFile"/> con el
+    /// archivo viniendo de la red.</para>
+    ///
+    /// <para>⚠ <b>Un 404 no es un error</b>: es la respuesta normal para quien no
+    /// dejó ninguna corrida a medias.</para>
+    /// </remarks>
+    public static Task<(bool Ok, CurrentRun? Data, string? Error)> CurrentRunAsync()
+        => GetAsync<CurrentRun>("/run/actual");
 
     public static Task<(bool Ok, Profile? Data, string? Error)> ProfileAsync()
         => GetAsync<Profile>("/perfil/me");
