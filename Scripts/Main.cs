@@ -40,8 +40,10 @@ public partial class Main : Node2D
         // plataforma declarada y otro archivo de guardado local, mismo servidor.
         //
         //   --celular          se declara "celular" y guarda en un archivo aparte
-        //   --servidor <url>   apunta a otra API (para el teléfono real: la IP
-        //                      de LAN de la PC, http://192.168.x.x:5090)
+        //   --servidor <url>   apunta a otra API. El default compilado es el
+        //                      hosting (ver ApiClient.BaseUrl), así que esto es
+        //                      lo que se usa para DESARROLLAR contra la local:
+        //                      --servidor http://127.0.0.1:5090
         string[] argumentos = OS.GetCmdlineUserArgs();
 
         for (int i = 0; i < argumentos.Length; i++)

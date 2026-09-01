@@ -123,8 +123,18 @@ public static class ApiClient
         PropertyNameCaseInsensitive = true,
     };
 
-    /// <summary>Dónde vive el servidor. En local, el 5090.</summary>
-    public static string BaseUrl { get; set; } = "http://127.0.0.1:5090";
+    /// <summary>
+    /// Dónde vive el servidor. Por defecto, el hosting.
+    ///
+    /// ⚠ El default es el de PRODUCCIÓN y no el 5090 de la máquina, a propósito:
+    /// un build exportado —sobre todo el de Android— no recibe argumentos de
+    /// línea de comandos, así que lo que quede acá compilado es lo único que va
+    /// a usar el jugador. Para desarrollar contra la API local hay que pasar
+    /// <c>--servidor http://127.0.0.1:5090</c>.
+    ///
+    /// Sin barra al final: las rutas se concatenan con <c>BaseUrl + "/auth/login"</c>.
+    /// </summary>
+    public static string BaseUrl { get; set; } = "https://gameapi-production-92e7.up.railway.app";
 
     /// <summary>El token de la sesión abierta. Va en el header de cada pedido.</summary>
     public static string? Token { get; private set; }
