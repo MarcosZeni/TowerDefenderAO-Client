@@ -499,3 +499,7 @@ appsettings.Local.json
 # el .nupkg son artefactos generados.
 Simulation/obj/
 Simulation/bin/
+
+# El paquete de arte: artefacto de --empaquetar-arte, la fuente son los PNG
+# de Resources\. Misma regla que el atlas, y son 56 MB.
+arte.pck

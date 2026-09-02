@@ -146,6 +146,14 @@ public static class DataValidator
         {
             if (e != PerkEffect.None && Loc.Effect(e) == $"effect.{e}.name")
                 faltan.Add($"effect.{e}.name");
+
+            // ⚠ Y la FRASE, no solo el nombre. El nombre es una palabra suelta
+            // —«sobrepenetra»— y la frase es lo único que le dice al jugador qué
+            // pasa cuando golpea. Sin este chequeo, agregar un efecto nuevo deja
+            // el perk con un renglón en blanco en las tres pantallas que lo
+            // dibujan, y eso solo se descubre jugando.
+            if (e != PerkEffect.None && Loc.Get($"effect.{e}.text") == $"effect.{e}.text")
+                faltan.Add($"effect.{e}.text");
         }
 
         foreach (var h in System.Enum.GetValues<WeaponAbility>())

@@ -736,6 +736,15 @@ public partial class Game : Node2D
     public Defender? Arrastrada
         => _arrastrando && _arrastreId >= 0 ? Run.DefenderById(_arrastreId) : null;
 
+    /// <summary>Con qué botón se agarró la ficha que se está arrastrando.</summary>
+    /// <remarks>
+    /// ⚠ Hace falta porque ahora <b>los dos botones agarran</b>: hay que soltar
+    /// con el mismo con el que se agarró, o apretar el derecho mientras se
+    /// arrastra con el izquierdo cancelaría a mitad de camino un gesto que el
+    /// jugador está haciendo bien.
+    /// </remarks>
+    private MouseButton _arrastreBoton = MouseButton.Left;
+
     public override void _UnhandledInput(InputEvent evento)
     {
         switch (evento)
@@ -759,8 +768,9 @@ public partial class Game : Node2D
                 QueueRedraw();
                 return;
 
-            case InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } suelta
-                when _arrastreId >= 0:
+            // Se suelta con el mismo botón con el que se agarró. Ver _arrastreBoton.
+            case InputEventMouseButton { Pressed: false } suelta
+                when _arrastreId >= 0 && suelta.ButtonIndex == _arrastreBoton:
                 SoltarArrastre(suelta.Position);
                 return;
 
@@ -784,52 +794,61 @@ public partial class Game : Node2D
     /// </remarks>
     private bool PuedeActuar => !_pausado && Run.State == RunState.InProgress;
 
+    /// <summary>
+    /// Un botón apretado sobre el tablero.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>UN CLICK EN UNA CELDA VACÍA YA NO PONE NADA.</b> Ponía la clase
+    /// seleccionada y cobraba el oro, y ese era el gesto más caro de hacer sin
+    /// querer que tenía el juego: elegir una ficha en la columna deja la clase
+    /// seleccionada para siempre, así que cualquier click posterior sobre el mapa
+    /// —para mirar, para deseleccionar, para cerrar un panel— compraba una unidad.
+    /// Temprano, cuando el oro es lo único que hay, eso es media corrida.</para>
+    ///
+    /// <para>Poner es <b>arrastrar desde la tarjeta del roster hasta la celda</b>,
+    /// que ya existía y ya dibuja el fantasma con la celda imantada y en rojo
+    /// donde no se puede (<see cref="Hud"/>). Un gesto continuo no se hace sin
+    /// querer, y encima muestra lo que va a pasar antes de soltar — que es
+    /// exactamente lo que el click no hacía.</para>
+    ///
+    /// <para>⚠ <b>Y AHORA AGARRAN LOS DOS BOTONES.</b> Sobre una ficha puesta, el
+    /// izquierdo y el derecho hacen lo mismo: la levantan. El derecho está porque
+    /// es el gesto que la mano espera para «agarrar y llevar» y porque el
+    /// izquierdo quedó cargado de significados; sobre una celda vacía sigue
+    /// cancelando, que es lo único que hacía antes.</para>
+    /// </remarks>
     private void AtenderClick(InputEventMouseButton boton)
     {
         if (!PuedeActuar)
+            return;
+
+        if (boton.ButtonIndex is not (MouseButton.Left or MouseButton.Right))
             return;
 
         var celda = ACelda(boton.Position);
         if (celda is null)
             return;
 
-        if (boton.ButtonIndex == MouseButton.Left)
+        // Sobre una ficha puesta: la levanta. Agarrar y soltar en el mismo lugar
+        // es un click, y el click selecciona: abre el panel de targeting, que es
+        // lo único que se decide por defensor.
+        if (Run.DefenderAt(celda.Value) is { } ocupada)
         {
-            // ⚠ Click en una celda OCUPADA agarra la ficha; en una vacía, pone.
-            //
-            // No hay conflicto porque las dos cosas son excluyentes por
-            // construcción: `PuedePoner` ya rechazaba la celda ocupada. Agarrar y
-            // soltar en el mismo lugar es un click, y el click selecciona: abre el
-            // panel de targeting, que es lo único que se decide por defensor.
-            var ocupada = Run.DefenderAt(celda.Value);
-
-            if (ocupada is not null)
-            {
-                _arrastreId = ocupada.PlacementId;
-                _arrastreDesde = boton.Position;
-                _arrastrando = false;
-
-                return;
-            }
-
-            SelectedDefender = -1;
-            PlaceAt(boton.Position);
-        }
-        else if (boton.ButtonIndex == MouseButton.Right)
-        {
-            // ⚠ EL BOTÓN DERECHO YA NO VENDE.
-            //
-            // Vendía la ficha de abajo del cursor, sin confirmar y sin poder
-            // deshacer: un click derecho al costado —el gesto más fácil de hacer
-            // sin querer que hay— borraba una unidad puesta y su oro. Vender vive
-            // ahora en el panel del defensor, donde hay que apuntar a un botón que
-            // dice cuánto devuelve.
-            //
-            // Acá cancela: suelta el arrastre y cierra el panel.
-            _arrastreId = -1;
+            _arrastreId = ocupada.PlacementId;
+            _arrastreDesde = boton.Position;
+            _arrastreBoton = boton.ButtonIndex;
             _arrastrando = false;
-            SelectedDefender = -1;
+
+            return;
         }
+
+        // Sobre una celda vacía: cancelar. No pone —ver arriba— y el botón
+        // derecho tampoco vende: vendía la ficha de abajo del cursor, sin
+        // confirmar y sin poder deshacer. Vender vive en el panel del defensor,
+        // donde hay que apuntar a un botón que dice cuánto devuelve.
+        _arrastreId = -1;
+        _arrastrando = false;
+        SelectedDefender = -1;
     }
 
     /// <summary>
@@ -1022,8 +1041,22 @@ public partial class Game : Node2D
         // La Torre no se dibuja acá: es el cristal, y va de hijo porque está
         // animado. Ver TowerCrystal.
 
-        // Los defensores.
+        // ⚠ DEFENSORES Y ENEMIGOS SE DIBUJAN JUNTOS Y ORDENADOS POR Y.
+        //
+        // Antes eran dos bucles: primero TODOS los defensores y después TODOS los
+        // enemigos, así que un bicho que pasaba por detrás de un defensor se
+        // dibujaba igual encima de él. En un top-down eso rompe la lectura de la
+        // profundidad, que es lo único que da el sentido de "delante" y "detrás":
+        // el que está más al sur —más abajo en la pantalla, más cerca del que
+        // mira— tiene que taparlo al de arriba, sea lo que sea cada uno.
+        //
+        // El criterio es EL PIE, no el centro ni la celda: los cuerpos de Austral
+        // son altos y angostos y se anclan abajo, así que dos sprites de alturas
+        // distintas parados en la misma fila tienen centros distintos y el mismo
+        // pie. Ordenar por el centro los alternaría según quién sea más alto.
         var llevada = Arrastrada;
+
+        _paraDibujar.Clear();
 
         foreach (var d in Run.Defenders)
         {
@@ -1035,15 +1068,13 @@ public partial class Game : Node2D
                 ? bajoCursor
                 : d.Cell;
 
-            if (!DibujarDefensor(d, celda, donde))
-            {
-                DrawRect(
-                    new Rect2(donde.X * celda + 8, donde.Y * celda + 8, celda - 16, celda - 16),
-                    Palette.Success);
-            }
+            var centro = new Vector2((donde.X + 0.5f) * celda, (donde.Y + 0.5f) * celda);
+
+            _paraDibujar.Add(new Dibujable(
+                centro.Y + (celda / 2f), centro, donde, d.PlacementId, d, null, 0));
         }
 
-        // Los enemigos. La posición fina viene de la ruta y NO vuelve a la
+        // La posición fina de los enemigos viene de la ruta y NO vuelve a la
         // simulación: es solo para que el sprite no salte de celda en celda.
         //
         // ⚠ Y no se dibuja el estado del tick, sino un punto INTERPOLADO entre el
@@ -1061,31 +1092,257 @@ public partial class Game : Node2D
                 (float)fx / Ints.ThousandthsPerCell * celda + (celda / 2f),
                 (float)fy / Ints.ThousandthsPerCell * celda + (celda / 2f));
 
+            _paraDibujar.Add(new Dibujable(
+                centro.Y + (celda / 2f), centro, default, e.SpawnId, null, e, distancia));
+        }
+
+        _paraDibujar.Sort(PorProfundidad);
+
+        foreach (var cosa in _paraDibujar)
+        {
+            if (cosa.Defensor is { } defensor)
+            {
+                if (!DibujarDefensor(defensor, celda, cosa.Celda))
+                {
+                    DrawRect(
+                        new Rect2(cosa.Celda.X * celda + 8, cosa.Celda.Y * celda + 8,
+                            celda - 16, celda - 16),
+                        Palette.Success);
+                }
+
+                continue;
+            }
+
+            var bicho = cosa.Enemigo!;
+
             // Los que llevan perk se ven distinto. Está escrito que "tiene que
             // verse"; esto es el placeholder de eso (INTERFAZ.md §5).
-            bool conPerk = e.ExtraHealthPerk > 0 || e.ExtraSpeedPerk > 0;
+            bool conPerk = bicho.ExtraHealthPerk > 0 || bicho.ExtraSpeedPerk > 0;
 
-            if (!DibujarBicho(e, distancia, centro, celda, conPerk))
+            if (!DibujarBicho(bicho, cosa.Distancia, cosa.Centro, celda, conPerk))
             {
                 // Sin sprite todavía: el arte entra por áreas y hoy está la 1. El
                 // círculo de siempre, para que el área 5 se pueda jugar igual.
-                DrawCircle(centro, celda * 0.3f,
+                DrawCircle(cosa.Centro, celda * 0.3f,
                     conPerk ? Palette.Warning : Palette.Danger);
             }
+        }
 
-            // Barra de vida. Los mismos tres colores que la de la Torre —verde,
-            // ámbar, rojo—: el jugador ya sabe leerlos de la barra de arriba, y
-            // dos escalas distintas de "cuánta vida queda" se confunden.
-            int porcentaje = e.MaxHp == 0 ? 0 : e.Hp * 100 / e.MaxHp;
-            var barra = new Rect2(centro.X - 20f, centro.Y - 30f, 40f, 5f);
+        // ⚠ LAS BARRAS DE VIDA VAN EN UNA SEGUNDA PASADA, después de TODOS los
+        // sprites. Con el orden por Y, la barra de un bicho de atrás quedaba
+        // tapada por el cuerpo del que venía adelante, y una barra a medio tapar
+        // es peor que ninguna: se lee como vida que no es.
+        foreach (var cosa in _paraDibujar)
+        {
+            if (cosa.Enemigo is not { } bicho)
+                continue;
+
+            // Los mismos tres colores que la barra de la Torre —verde, ámbar,
+            // rojo—: el jugador ya sabe leerlos de la barra de arriba, y dos
+            // escalas distintas de "cuánta vida queda" se confunden.
+            int porcentaje = bicho.MaxHp == 0 ? 0 : bicho.Hp * 100 / bicho.MaxHp;
+            var barra = new Rect2(cosa.Centro.X - 20f, cosa.Centro.Y - 30f, 40f, 5f);
 
             DrawRect(barra, Palette.BackgroundMain.Alpha(0.7f));
             DrawRect(new Rect2(barra.Position, new Vector2(40f * porcentaje / 100f, 5f)),
                 Palette.Health(porcentaje));
         }
 
+        // Los disparos, encima de todo el mundo: un proyectil que pasa por detrás
+        // de un cuerpo desaparece justo en el medio del recorrido, que es donde el
+        // jugador lo está siguiendo con la vista.
+        DibujarDisparos(celda);
+
         DibujarCursor(celda);
     }
+
+    // =====================================================================
+    // El orden de dibujo, y los disparos
+    // =====================================================================
+
+    /// <summary>
+    /// Algo que se dibuja en el mundo y compite por profundidad.
+    /// </summary>
+    /// <param name="Pie">
+    /// La Y donde el sprite apoya. <b>Es la clave del orden</b>, no el centro:
+    /// los cuerpos de Austral se anclan abajo y tienen alturas distintas.
+    /// </param>
+    /// <param name="Id">
+    /// El desempate estable. <see cref="Defender.PlacementId"/> o
+    /// <see cref="Enemy.SpawnId"/>, los dos irrepetibles dentro de la corrida.
+    /// </param>
+    private readonly record struct Dibujable(
+        float Pie, Vector2 Centro, Cell Celda, int Id,
+        Defender? Defensor, Enemy? Enemigo, long Distancia);
+
+    /// <summary>
+    /// La lista de dibujo del cuadro. Se reusa entre cuadros.
+    /// </summary>
+    /// <remarks>
+    /// Es un campo y no una variable local porque <c>_Draw</c> corre a los Hz del
+    /// monitor: una lista nueva por cuadro son 144 listas por segundo con una
+    /// oleada de 60 bichos adentro, o sea basura para el recolector en el peor
+    /// momento posible —mientras el jugador está mirando—.
+    /// </remarks>
+    private readonly System.Collections.Generic.List<Dibujable> _paraDibujar = [];
+
+    /// <summary>
+    /// Ordena por pie, y a igual pie por tipo y por id.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>El desempate no es decorativo.</b> <c>List.Sort</c> no es estable, así
+    /// que dos cosas con exactamente la misma Y —dos defensores de la misma fila,
+    /// un bicho parado sobre la fila de un defensor— podrían intercambiarse de
+    /// orden entre un cuadro y el siguiente, y eso se ve como un parpadeo. Con el
+    /// id de por medio el orden es el mismo todos los cuadros.
+    /// </remarks>
+    private static int PorProfundidad(Dibujable a, Dibujable b)
+    {
+        int porPie = a.Pie.CompareTo(b.Pie);
+
+        if (porPie != 0)
+            return porPie;
+
+        // A igual pie, el defensor primero: está plantado y el bicho es el que
+        // pasa por delante o por detrás.
+        int porTipo = (a.Defensor is null ? 1 : 0).CompareTo(b.Defensor is null ? 1 : 0);
+
+        return porTipo != 0 ? porTipo : a.Id.CompareTo(b.Id);
+    }
+
+    /// <summary>Cuántos ticks tarda un proyectil en llegar. Solo render.</summary>
+    /// <remarks>
+    /// ⚠ <b>El daño ya se cobró</b> en el tick en que salió el disparo: esto es la
+    /// animación de algo que ya pasó, igual que el proyectil de cualquier tower
+    /// defense. Que el daño esperara a que el sprite llegue ataría el resultado a
+    /// los FPS, que es exactamente lo que la simulación entera existe para evitar
+    /// (<c>Doc/Jugabilidad/03-el-tick.md</c>).
+    ///
+    /// Seis ticks son 200 ms al 1×: se ve salir y llegar, y a la cadencia más
+    /// rápida del juego todavía no se superponen dos disparos del mismo defensor.
+    /// </remarks>
+    private const int TicksDeVuelo = 6;
+
+    /// <summary>
+    /// Los disparos que están en el aire y los golpes cuerpo a cuerpo.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No hay lista de proyectiles.</b> Se derivan de dos campos que el
+    /// defensor ya guarda —<see cref="Defender.LastHitTick"/> y
+    /// <see cref="Defender.LastHitAt"/>— así que no hay estado que mantener, nada
+    /// que limpiar cuando un bicho muere a mitad de vuelo, y nada que se
+    /// desincronice al pausar, al acelerar o al cargar una partida guardada. Un
+    /// defensor dibuja como mucho un disparo a la vez, que es lo que su cadencia
+    /// permite.</para>
+    ///
+    /// <para><b>Cuerpo a cuerpo se ve distinto a propósito.</b> Un guerrero que
+    /// escupe una bolita a la celda de al lado se lee como un mago malo; el arco
+    /// del tajo dice «te pegué», que es lo que pasó. La línea entre los dos es la
+    /// distancia al objetivo y no la clase: el mismo defensor tira si el bicho
+    /// está lejos y taja si lo tiene encima.</para>
+    /// </remarks>
+    private void DibujarDisparos(int celda)
+    {
+        var llevada = Arrastrada;
+
+        foreach (var d in Run.Defenders)
+        {
+            // La que se está arrastrando todavía no dispara: el fantasma es una
+            // intención, no una unidad puesta.
+            if (ReferenceEquals(d, llevada) || d.LastHitAt is not { } blanco)
+                continue;
+
+            long transcurrido = ((long)(Run.Tick - d.LastHitTick) * 1000L) + FraccionMilesimas;
+            long total = TicksDeVuelo * 1000L;
+
+            if (transcurrido < 0 || transcurrido > total)
+                continue;
+
+            float t = (float)transcurrido / total;
+
+            var desde = new Vector2(
+                (d.Cell.X + 0.5f) * celda,
+                ((d.Cell.Y + 0.5f) * celda) - (celda * 0.18f));
+
+            var hasta = new Vector2(
+                (blanco.X + 0.5f) * celda,
+                ((blanco.Y + 0.5f) * celda) - (celda * 0.18f));
+
+            var color = ColorDeClase(d.DefenderClass);
+
+            int dx = System.Math.Abs(blanco.X - d.Cell.X);
+            int dy = System.Math.Abs(blanco.Y - d.Cell.Y);
+
+            if (System.Math.Max(dx, dy) <= 1)
+                DibujarTajo(desde, hasta, t, celda, color);
+            else
+                DibujarProyectil(desde, hasta, t, celda, color);
+        }
+    }
+
+    /// <summary>El proyectil: una estela corta con la cabeza adelante.</summary>
+    /// <remarks>
+    /// La estela es lo que hace legible la dirección. Un punto suelto a 144 Hz se
+    /// ve como un punto que aparece en otro lado; con la cola se lee de dónde
+    /// salió y hacia dónde va, que es la información que el jugador quiere —quién
+    /// le está pegando a quién—.
+    /// </remarks>
+    private void DibujarProyectil(Vector2 desde, Vector2 hasta, float t, int celda, Color color)
+    {
+        var cabeza = desde.Lerp(hasta, t);
+
+        // La cola se recorta contra el origen: en el primer cuadro el proyectil
+        // todavía no recorrió el largo de la estela y estirarla hacia atrás la
+        // sacaría del arma.
+        float largo = Mathf.Min(celda * 0.45f, desde.DistanceTo(cabeza));
+        var atras = cabeza - ((hasta - desde).Normalized() * largo);
+
+        DrawLine(atras, cabeza, color.Alpha(0.45f), 3f);
+        DrawCircle(cabeza, celda * 0.12f, color.Alpha(0.25f));
+        DrawCircle(cabeza, celda * 0.07f, color);
+    }
+
+    /// <summary>El tajo: un arco corto del lado del objetivo, que se apaga.</summary>
+    private void DibujarTajo(Vector2 desde, Vector2 hasta, float t, int celda, Color color)
+    {
+        // El arco vive a mitad de camino y del lado del bicho: pegado al defensor
+        // queda tapado por su propio cuerpo.
+        var centro = desde.Lerp(hasta, 0.62f);
+
+        float angulo = (hasta - desde).Angle();
+        float radio = celda * (0.18f + (0.10f * t));
+
+        // Se abre y se apaga: el tajo dura lo mismo que el vuelo de un proyectil,
+        // así que las dos clases de golpe tienen el mismo ritmo en pantalla.
+        var tinte = color.Alpha(0.85f * (1f - t));
+
+        DrawArc(centro, radio, angulo - 0.9f, angulo + 0.9f, 16, tinte, 4f);
+    }
+
+    /// <summary>
+    /// El color del disparo de cada clase.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es <b>solo del renderer</b> y no vive en <c>clases.json</c>: no es un
+    /// número de balance, no entra al hash y cambiarlo no invalida una corrida.</para>
+    ///
+    /// <para>Los colores no son decorativos — son cómo se lee un tablero lleno.
+    /// Salen de la paleta que ya usa el resto de la interfaz, para que el disparo
+    /// del mago sea del mismo azul que su tarjeta.</para>
+    /// </remarks>
+    private static Color ColorDeClase(DefenderClass clase) => clase switch
+    {
+        DefenderClass.Mage => Palette.Rare,
+        DefenderClass.Cleric => Palette.Legendary,
+        DefenderClass.Warrior => Palette.Danger,
+        DefenderClass.Assassin => Palette.Epic,
+        DefenderClass.Thief => Palette.Silver,
+        DefenderClass.Bard => Palette.Info,
+        DefenderClass.Druid => Palette.Success,
+        DefenderClass.Paladin => Palette.Warning,
+        DefenderClass.Hunter => Palette.Uncommon,
+        _ => Palette.TextPrimary,
+    };
 
     /// <summary>
     /// Cuánto se achica el arte de disco al dibujarlo en el mundo.

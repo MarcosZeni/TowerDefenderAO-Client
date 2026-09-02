@@ -66,7 +66,11 @@ public static class UiWidgets
             }
         }
 
-        UiTooltip.Over(r, $"{Loc.Perk(perk)} · {Loc.Effect(perk.Effect)} {perk.Magnitude}%");
+        // Dos renglones: el nombre arriba y QUÉ HACE abajo. «Sobrepenetración ·
+        // sobrepenetra 40%» decía dos veces lo mismo y ninguna de las dos decía
+        // qué pasa al golpear, y este es el único lugar donde el jugador ve los
+        // perks YA EQUIPADOS sin abrir la mochila.
+        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}");
 
         if (nivel > 0)
         {
@@ -152,8 +156,21 @@ public static class UiWidgets
     /// El efecto de un perk con su icono: <b>icono, hueco, texto</b>.
     /// </summary>
     /// <remarks>
-    /// El mismo formato que <see cref="UiStyle.StatIcon"/>, para que una tarjeta
-    /// de perk y una de clase se lean con el mismo movimiento del ojo.
+    /// <para>El mismo formato que <see cref="UiStyle.StatIcon"/>, para que una
+    /// tarjeta de perk y una de clase se lean con el mismo movimiento del ojo.</para>
+    ///
+    /// <para>⚠ <b>Y declara el cartel con la frase entera.</b> El renglón dice
+    /// «sobrepenetra 40%», que es un nombre y un número sin unidad: ni qué hace,
+    /// ni sobre qué es ese 40. La frase completa vive en <c>lang\</c>
+    /// (<see cref="Loc.PerkText"/>) y sale al pasar el cursor por encima, así el
+    /// renglón sigue entrando en una tarjeta angosta y la explicación no se
+    /// pierde. Como lo declara <b>acá</b>, lo tienen las tres pantallas que
+    /// dibujan perks —mochila, tienda y jefe— sin tocar ninguna.</para>
+    ///
+    /// <para>⚠ El <c>%</c> <b>no se imprime siempre</b>: la magnitud de Golpe
+    /// Sísmico son milésimas de celda (500) y la de Drenaje son puntos de vida
+    /// de la Torre (2). «empuje 500%» y «drena 2%» eran las dos únicas líneas del
+    /// catálogo que decían un número falso.</para>
     /// </remarks>
     public static void EffectRow(this CanvasItem ci, Rect2 r, PerkDefinition perk, Color color)
     {
@@ -165,7 +182,26 @@ public static class UiWidgets
         int tamano = (int)Mathf.Min(15f, r.Size.Y * 0.78f);
 
         ci.Label(new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
-            $"{Loc.Effect(perk.Effect)} {perk.Magnitude}%", tamano, Palette.TextSecondary);
+            EffectLabel(perk), tamano, Palette.TextSecondary);
+
+        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}");
+    }
+
+    /// <summary>El renglón corto: el efecto y su número, con unidad o sin ella.</summary>
+    private static string EffectLabel(PerkDefinition perk)
+    {
+        string nombre = Loc.Effect(perk.Effect);
+
+        return perk.Effect switch
+        {
+            // Milésimas de celda: el número crudo no significa nada en pantalla.
+            PerkEffect.Seismic or PerkEffect.Strength => nombre,
+
+            // Puntos de vida de la Torre, no un porcentaje.
+            PerkEffect.Siphon => $"{nombre} {perk.Magnitude}",
+
+            _ => $"{nombre} {perk.Magnitude}%",
+        };
     }
 
     /// <summary>

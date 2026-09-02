@@ -308,13 +308,18 @@ public partial class BossDropScreen : Control
 
         this.EffectRow(cuerpo.Row(0f, 22f), def, acento);
 
+        // --- QUÉ HACE. Es la tarjeta donde más falta hacía: el jugador elige uno
+        //     de dos Oro, ocho veces en toda la corrida, y hasta acá lo único que
+        //     leía era «sobrepenetra 40%» — un nombre y un número sin unidad.
+        this.Paragraph(cuerpo.Row(26f, 48f), Loc.PerkText(def), 14, Palette.TextSecondary);
+
         // --- A quién le sirve. Un Oro que ninguna clase del roster puede equipar
         //     es una de las ocho oportunidades tirada a la basura, así que se dice
         //     con el color, no con un rótulo.
-        this.Label(cuerpo.Row(32f, 18f), Loc.Get("ui.jefe.le_sirve").ToUpperInvariant(), 12,
+        this.Label(cuerpo.Row(78f, 18f), Loc.Get("ui.jefe.le_sirve").ToUpperInvariant(), 12,
             Palette.TextMuted);
 
-        DibujarClases(p, def, cuerpo.Row(52f, 70f));
+        DibujarClases(p, def, cuerpo.Row(98f, 50f));
 
         this.Rule(r, r.Size.Y - 76f);
 

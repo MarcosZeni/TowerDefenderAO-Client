@@ -213,6 +213,62 @@
     "effect.Blindness.name": "ceguera",
     "effect.Strength.name": "fuerza",
     "effect.Invisibility.name": "invisibilidad",
+
+    // --- Qué hace cada efecto, en una línea --------------------------------
+    //
+    //  ⚠ Existe porque el nombre no dice nada. «Sobrepenetración 40%» es un
+    //  cartel que no se puede leer sin abrir el código: ni qué hace, ni sobre
+    //  qué es ese 40. Un Oro es una de las ocho oportunidades de toda la
+    //  corrida, y elegirlo a ciegas era la peor decisión que ofrecía el juego.
+    //
+    //  Tres reemplazos, todos opcionales por texto:
+    //    {m}  «magnitude» del perk
+    //    {b}  «magnitudeB», el segundo número de los Únicos y de los que
+    //         pegan distinto al primero y al segundo
+    //    {n}  el número que NO está en perks.json y vive en combate.json:
+    //         cada cuántos golpes dispara, o el umbral de vida del condicional
+    //
+    //  Se escriben en minúscula y sin punto final: el cartel los muestra
+    //  debajo del nombre, que ya es el título.
+    "effect.Damage.text": "+{m}% de daño",
+    "effect.Cadence.text": "+{m}% de cadencia: pega más seguido",
+    "effect.Range.text": "+{m}% de alcance",
+    "effect.Ricochet.text": "el golpe rebota a otro enemigo cercano, {m}% del daño",
+    "effect.Splash.text": "daña también a los que están cerca, {m}% del golpe",
+    "effect.Slow.text": "deja al golpeado {m}% más lento un rato",
+    "effect.CriticalHit.text": "cada {n} golpes, uno suma un impacto extra del {m}%",
+    "effect.Poison.text": "envenena por el {m}% del golpe, repartido en el tiempo",
+    "effect.Chain.text": "salta a otros dos enemigos: {m}% y {b}% del golpe",
+    "effect.Burn.text": "quema al objetivo ({m}% del golpe) y a los cercanos ({b}%)",
+    "effect.Weaken.text": "el golpeado le hace {m}% menos daño a la Torre",
+    "effect.Sunder.text": "cada {n} golpes deja al objetivo +{m}% vulnerable para todos",
+    "effect.Focus.text": "+{m}% de daño por cada golpe seguido al mismo objetivo",
+    "effect.HuntMark.text": "lo marca: las OTRAS clases le pegan +{m}%",
+    "effect.Bleed.text": "sangrado por el {m}% del golpe, repartido en el tiempo",
+    "effect.Root.text": "cada {n} golpes lo deja inmóvil un instante",
+    "effect.Seismic.text": "cada {n} golpes lo empuja media celda hacia atrás",
+    "effect.Inspire.text": "cada {n} ataques, +{m}% de cadencia a los aliados cercanos",
+    "effect.Loot.text": "si muere marcado, suelta +{m}% de oro",
+    "effect.Opportunist.text": "+{m}% de daño por debajo del {n}% de vida",
+    "effect.ThresholdGuard.text": "+{m}% de daño a los que ya están mordiendo la Torre",
+    "effect.ArcaneEcho.text": "cada {n} golpes, un eco diferido por el {m}% del daño",
+    "effect.Overpenetration.text": "al matar, el {m}% del daño sobrante salta al de al lado",
+    "effect.FirstStrike.text": "+{m}% de daño por encima del {n}% de vida",
+    "effect.Charge.text": "sin objetivo un rato, el próximo golpe pega +{m}%",
+    "effect.Marksman.text": "hasta +{m}% de daño, cuanto más lejos esté el objetivo",
+    "effect.Butchery.text": "hasta +{m}% de daño, cuanto más cerca esté el objetivo",
+    "effect.Bloodthirst.text": "+{m}% de daño por muerte de la oleada; arranca de cero en cada una",
+    "effect.TwinStrike.text": "un segundo golpe por el {m}% del daño",
+    "effect.Siphon.text": "cada tantos ticks le devuelve {m} de vida a la Torre",
+    "effect.Perforation.text": "+{m}% por golpe seguido y, al matar, {b}% del sobrante al de al lado",
+    "effect.FrostWave.text": "daña a los cercanos ({m}% del golpe) y los deja {b}% más lentos",
+    "effect.WrathOfGod.text": "+{m}% contra los que muerden la Torre; cada tantos golpes, +{b}% vulnerable",
+    "effect.Apocalypse.text": "sangrado del {m}% del golpe y +{b}% de daño a los heridos",
+    "effect.TerribleHunger.text": "quema al objetivo ({m}%) y a los cercanos ({b}%), y cada tantos golpes lo enraíza",
+    "effect.DivineStorm.text": "+{m}% de cadencia a los aliados y +{b}% vulnerable al objetivo",
+    "effect.Blindness.text": "+{m}% de cadencia a los aliados; el golpeado hace {b}% menos daño a la Torre",
+    "effect.Strength.text": "lo empuja hacia atrás y lo deja +{b}% vulnerable",
+    "effect.Invisibility.text": "+{m}% de oro si muere marcado y {b}% del sobrante al de al lado",
     "ui.principal.titulo": "Tower of Argentum",
     "ui.principal.continuar": "Continuar corrida",
     "ui.principal.jugar": "Jugar",
@@ -558,6 +614,16 @@
     "ui.mochila.elegi_algo": "elegí algo de la mochila",
     "ui.mochila.vacia": "no hay nada acá todavía",
     "ui.mochila.no_entra": "no entra en la clase mirada",
+
+    // Los cuatro motivos por los que un perk no entra, y por qué son cuatro y no
+    // uno: cada uno se arregla distinto. «No entra» servía para los cuatro y no
+    // servía para ninguno — sobre todo para el del comportamiento, que además NO
+    // estaba chequeado y dejaba el botón encendido.
+    "ui.mochila.no_es_de_esta_clase": "este perk no es de esta clase",
+    "ui.mochila.ya_tiene_comportamiento": "la ranura de comportamiento ya la ocupa",
+    "ui.mochila.sin_slots": "no le quedan slots: subí de nivel",
+    "ui.mochila.tope_de_apilado": "ya tiene todas las copias que admite",
+    "ui.mochila.desmarca_para_equipar": "desmarcá los otros para poder equipar",
     "ui.mochila.planos_conocidos": "las recetas que conocés",
     "ui.mochila.receta": "receta",
     "ui.fin.corrida_local": "corrida local: no se reportó al servidor",

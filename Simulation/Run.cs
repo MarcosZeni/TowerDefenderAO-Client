@@ -1358,6 +1358,27 @@ public sealed class Run
     }
 
     /// <summary>
+    /// El perk de comportamiento que esa clase tiene puesto, o <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es para que la interfaz pueda DECIRLO.</b> La ranura de
+    /// comportamiento es una sola y <see cref="EquipPerk"/> rebota el segundo,
+    /// pero lo hacía en silencio y con el botón EQUIPAR encendido: el jugador
+    /// apretaba, no pasaba nada y no había forma de saber por qué. Con esto la
+    /// mochila apaga el botón y nombra al perk que está ocupando la ranura, que
+    /// es además el que hay que sacar —y sacarlo lo destruye—.</para>
+    ///
+    /// <para>Es de solo lectura y no toca el tick: no entra al log ni cambia el
+    /// hash.</para>
+    /// </remarks>
+    public PerkDefinition? BehaviorPerkOf(DefenderClass clase)
+    {
+        var ficha = Roster.Find(clase);
+
+        return ficha is null ? null : ComportamientoDe(ficha);
+    }
+
+    /// <summary>
     /// La clase tiene un comportamiento puesto <b>y</b> un arma con habilidad, así
     /// que uno de los dos está mudo.
     /// </summary>
@@ -2077,6 +2098,11 @@ public sealed class Run
 
             ApplyBehavior(stats, d, objetivo, dano, overkill);
             ApplyWeaponAbility(stats, d, objetivo, dano);
+
+            // Solo render: de acá sale el proyectil que se dibuja volando. Va
+            // junto al tick del golpe y no en `AimedAt`, que se pisa todos los
+            // ticks. Ver Defender.LastHitAt.
+            d.LastHitAt = _ruta.CellAt(objetivo.DistanceTravelled);
 
             d.LastHitTick = Tick;
             d.RemainingCooldown = CadenciaConAura(d, stats);

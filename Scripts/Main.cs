@@ -26,6 +26,12 @@ public partial class Main : Node2D
 
     public override void _Ready()
     {
+        // ⚠ VA PRIMERO, antes incluso de las herramientas. Decide de dónde sale el
+        // arte —la carpeta suelta del editor o el arte.pck de una build exportada—
+        // y todo lo que dibuja lee esa decisión. Las herramientas también la
+        // necesitan: --verificar-arte mira los píxeles de las mismas hojas.
+        ArtPack.Mount();
+
         // Las herramientas headless (--determinismo, --balance, --validar,
         // --importar-npcs) cortan acá: corren y salen sin armar nada.
         if (Tools.HeadlessRunner.HandleArguments())
@@ -218,6 +224,7 @@ public partial class Main : Node2D
         GD.Print($"  .NET    : {System.Environment.Version}");
         GD.Print($"  Lienzo  : {lienzo.X} x {lienzo.Y}");
         GD.Print($"  Cell   : {Canvas.CellSide} px  ·  campo {Canvas.CellsWide} x {Canvas.CellsHigh}");
+        GD.Print($"  Arte    : {ArtPack.Source}  ({ArtPack.Root})");
         GD.Print("───────────────────────────────────────────────────");
 
         if (!Mathf.IsEqualApprox(lienzo.X, Canvas.CanvasWidth) ||

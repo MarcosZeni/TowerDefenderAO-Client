@@ -31,14 +31,13 @@ namespace TowerOfArgentum;
 public static class IconLoader
 {
     /// <summary>
-    /// Dónde está el arte de iconos, relativo al ejecutable.
+    /// Dónde está el arte de iconos. Lo decide <see cref="ArtPack"/> al arrancar.
     /// </summary>
     /// <remarks>
-    /// Mismo criterio que <see cref="GraphicsLoader"/>: <c>Resources\</c> es
-    /// hermana de <c>Client\</c> y no la importa Godot, así que no se puede usar
-    /// <c>res://</c> y hay que cargar los PNG a mano desde disco.
+    /// Mismo criterio que <see cref="GraphicsLoader"/>: la carpeta suelta en el
+    /// editor, el <c>arte.pck</c> montado en una build exportada.
     /// </remarks>
-    private const string Carpeta = "res://../Resources/perks";
+    private static string Carpeta => $"{ArtPack.Root}/perks";
 
     /// <summary>key del perk → ruta relativa del recorte.</summary>
     private static readonly Dictionary<string, string> _porPerk = new(System.StringComparer.Ordinal);
@@ -68,7 +67,9 @@ public static class IconLoader
             return null;
         }
 
-        var imagen = Image.LoadFromFile(ProjectSettings.GlobalizePath(ruta));
+        // ⚠ Por ArtPack, no por Image.LoadFromFile: en una build exportada esto
+        // sale de adentro del arte.pck y no tiene ruta del sistema de archivos.
+        var imagen = ArtPack.LoadImage(ruta);
 
         if (imagen is null)
             return null;

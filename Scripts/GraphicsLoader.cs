@@ -38,9 +38,10 @@ public sealed record TileGrid(
 /// <remarks>
 /// <para>⚠ <c>Resources\</c> es <b>hermana</b> de <c>Client\</c>, no está adentro
 /// del proyecto Godot. Es a propósito: así Godot no la importa, no genera
-/// <c>.import</c> ahí, el <c>.pck</c> queda chico y el arte se puede parchear
-/// aparte. La contra es que no se puede usar <c>res://</c> y hay que cargar los
-/// PNG a mano desde disco.</para>
+/// <c>.import</c> ahí, el <c>.pck</c> principal queda chico y el arte se puede
+/// parchear aparte. La contra es que los PNG se cargan a mano, nunca con
+/// <c>GD.Load</c>: en el editor salen de la carpeta suelta y en una build
+/// exportada del <c>arte.pck</c> que monta <see cref="ArtPack"/>.</para>
 ///
 /// <para>Un <c>N.PNG</c> no es un sprite: es una <b>hoja</b> con 8,7 regiones en
 /// promedio. Por eso cada gráfico es una <see cref="AtlasTexture"/> sobre la hoja
@@ -49,14 +50,15 @@ public sealed record TileGrid(
 public static class GraphicsLoader
 {
     /// <summary>
-    /// Dónde está el arte, relativo al ejecutable.
+    /// Dónde está el arte. Lo decide <see cref="ArtPack"/> al arrancar.
     /// </summary>
     /// <remarks>
-    /// En el editor, <c>res://</c> apunta a <c>Client\</c>, así que
-    /// <c>../Resources</c> es la carpeta hermana. En una build exportada el arte
-    /// se copia al lado del ejecutable.
+    /// En el editor es <c>res://../Resources</c>, la carpeta hermana del proyecto.
+    /// En una build exportada es <c>res://Art</c>, el punto de montaje del
+    /// <c>arte.pck</c> — y ahí las dos son indistinguibles para esta clase, que es
+    /// justamente lo que hace que Android funcione sin tocar nada de acá abajo.
     /// </remarks>
-    private const string Carpeta = "res://../Resources";
+    private static string Carpeta => ArtPack.Root;
 
     private static readonly Dictionary<string, Graphic> _indice = new(System.StringComparer.Ordinal);
     private static readonly Dictionary<int, Texture2D> _hojas = [];
@@ -234,10 +236,9 @@ public static class GraphicsLoader
         {
             string ruta = $"{Carpeta}/{fileNum}{extension}";
 
-            if (!ArchivoGodot.FileExists(ruta))
-                continue;
-
-            var imagen = Image.LoadFromFile(ProjectSettings.GlobalizePath(ruta));
+            // ⚠ Va por ArtPack y no por Image.LoadFromFile: adentro de un .pck no
+            // hay ruta del sistema de archivos que darle.
+            var imagen = ArtPack.LoadImage(ruta);
 
             if (imagen is null)
                 continue;

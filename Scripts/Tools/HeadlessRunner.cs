@@ -138,6 +138,13 @@ public static class HeadlessRunner
                     ArtChecker.Execute();
                     return true;
 
+                case "--empaquetar-arte":
+                    // Sin destino va a ..\build\arte.pck, que es el de escritorio.
+                    // Para Android se pasa res://arte.pck, así queda adentro del
+                    // proyecto y el exportador lo mete en el APK.
+                    ArtPacker.Execute(i + 1 < args.Length ? args[i + 1] : "");
+                    return true;
+
                 case "--presupuesto-arte":
                     GraphicsInspector.Budget();
                     return true;

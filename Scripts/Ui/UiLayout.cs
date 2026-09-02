@@ -193,6 +193,18 @@ public static class UiLayout
     public static readonly Rect2 DetailIcon = R(1180, 228, 85, 85);
     public static readonly Rect2 DetailDescription = R(1138, 332, 171, 72);
     public static readonly Rect2 DetailStats = R(1138, 414, 171, 112);
+
+    /// <summary>
+    /// Las clases que pueden equipar el perk, abajo de los stats.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Vive en el hueco que dejan las tres filas de <see cref="DetailStats"/>
+    /// —usan 66 de 112— y no en <see cref="DetailDescription"/>, que pasó a ser
+    /// <b>qué hace el perk</b>. Las dos cosas son necesarias y ninguna reemplaza
+    /// a la otra: una dice qué compra el jugador, la otra a quién se lo puede
+    /// poner. Solo lo usa la ficha de un perk; la de un arma no lo dibuja.
+    /// </remarks>
+    public static readonly Rect2 DetailClasses = R(1138, 484, 171, 44);
     public static readonly Rect2 DetailPrice = R(1138, 535, 171, 38);
     public static readonly Rect2 DetailBuy = R(1140, 588, 162, 40);
     public static readonly Rect2 DetailEquip = R(1140, 638, 162, 38);

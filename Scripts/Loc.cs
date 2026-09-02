@@ -219,6 +219,72 @@ public static class Loc
         => a == WeaponAbility.None ? "" : Get($"ability.{a}.text", magnitud);
 
     /// <summary>
+    /// Qué hace un perk, en una línea, con sus números ya puestos.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>El nombre y la magnitud NO alcanzan.</b> «Sobrepenetración
+    /// 40%» no dice qué hace ni sobre qué es ese 40, y un Oro es una de las ocho
+    /// oportunidades de toda la corrida: elegirlo a ciegas era la peor decisión
+    /// que ofrecía el juego. Esto es lo que la vuelve una decisión informada.</para>
+    ///
+    /// <para>Los tres reemplazos salen de dos lugares distintos, y esa es toda la
+    /// gracia: <c>{m}</c> y <c>{b}</c> son las magnitudes del perk
+    /// (<c>perks.json</c>), y <c>{n}</c> es el número que el catálogo NO tiene
+    /// —cada cuántos golpes dispara, el umbral de vida del condicional— y que
+    /// vive en <c>combate.json</c>. Sin <c>{n}</c> la frase tendría que decir
+    /// «cada tantos golpes», que es justo lo que el jugador necesita saber.</para>
+    ///
+    /// <para>Es texto, no balance: si el número de <c>combate.json</c> cambia, la
+    /// frase lo sigue sola.</para>
+    /// </remarks>
+    public static string PerkText(PerkDefinition p)
+    {
+        string texto = Get($"effect.{p.Effect}.text");
+
+        // Sin traducir devuelve la clave cruda, y una clave cruda con los
+        // números pegados adentro es ilegible. Se muestra pelada, como todo lo
+        // que falta en `lang\`.
+        if (texto.EndsWith(".text", System.StringComparison.Ordinal))
+            return texto;
+
+        return texto
+            .Replace("{m}", Numero(p.Magnitude), System.StringComparison.Ordinal)
+            .Replace("{b}", Numero(p.MagnitudeB), System.StringComparison.Ordinal)
+            .Replace("{n}", Numero(TerceroDe(p.Effect)), System.StringComparison.Ordinal);
+    }
+
+    private static string Numero(int n)
+        => n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// El <c>{n}</c> de cada efecto: el número que está en <c>combate.json</c> y
+    /// no en el catálogo.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Se lee de los datos cargados y no se escribe acá: son los mismos campos
+    /// que consulta el tick, así que la frase no se puede separar de lo que
+    /// realmente pasa. Un efecto que no tenga tercer número devuelve 0, y su
+    /// texto simplemente no usa <c>{n}</c>.
+    /// </remarks>
+    private static int TerceroDe(PerkEffect efecto)
+    {
+        var b = DataLoader.Current.Combat.Behaviors;
+
+        return efecto switch
+        {
+            PerkEffect.CriticalHit => b.HitsPerCritical,
+            PerkEffect.Sunder => b.SunderEveryHits,
+            PerkEffect.Root => b.RootEveryHits,
+            PerkEffect.Seismic => b.SeismicEveryHits,
+            PerkEffect.Inspire => b.InspireEveryHits,
+            PerkEffect.ArcaneEcho => b.EchoEveryHits,
+            PerkEffect.Opportunist => b.OpportunistThresholdPercent,
+            PerkEffect.FirstStrike => b.FirstStrikeThresholdPercent,
+            _ => 0,
+        };
+    }
+
+    /// <summary>
     /// El nombre de un arma generada.
     /// </summary>
     /// <remarks>

@@ -483,6 +483,24 @@ public sealed class Defender
     public Cell? AimedAt { get; set; }
 
     /// <summary>
+    /// Dónde estaba lo que golpeó la última vez. <b>Solo render.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>Es el destino del proyectil que se dibuja. Existe aparte de
+    /// <see cref="AimedAt"/> porque ese se pisa todos los ticks con el objetivo
+    /// actual: un disparo tarda seis ticks en llegar en pantalla, y con
+    /// <see cref="AimedAt"/> el proyectil ya salido se desviaría hacia el
+    /// siguiente objetivo o desaparecería si el defensor se queda sin nadie a
+    /// tiro —justo cuando acaba de matar, que es cuando el jugador más está
+    /// mirando—.</para>
+    ///
+    /// <para>⚠ <b>La simulación no lo lee</b>, igual que <see cref="AimedAt"/>:
+    /// se escribe en el mismo lugar donde se cobra el golpe y no entra en ninguna
+    /// cuenta del tick. No toca el determinismo ni el hash de datos.</para>
+    /// </remarks>
+    public Cell? LastHitAt { get; set; }
+
+    /// <summary>
     /// El tick en que se lo puso. Va al log de acciones y sirve para la
     /// devolución al venderlo.
     /// </summary>

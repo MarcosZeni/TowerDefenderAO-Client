@@ -557,28 +557,49 @@ public partial class BackpackScreen : Control
     }
 
     /// <summary>
-    /// ¿Lo que está en ese lugar de la mochila entra en esta clase?
+    /// Por qué NO se puede equipar lo elegido en esa clase, o <c>null</c> si sí.
     /// </summary>
     /// <remarks>
-    /// Marca en verde dónde se puede soltar, <b>antes</b> del click. Para un perk
-    /// hay que mirar tres cosas —que la clase lo acepte, que haya slot abierto y
-    /// que no se pase del tope de apilado—; el equipo siempre entra, porque su
-    /// ranura se pisa y lo anterior vuelve a la mochila.
+    /// <para>⚠ <b>Devuelve el motivo y no un booleano.</b> El botón apagado con
+    /// un «no entra» genérico es lo mismo que nada: los cuatro motivos se
+    /// arreglan de maneras distintas —esperar un nivel, sacar el que está,
+    /// equiparlo en otra clase— y el jugador no puede elegir cuál sin saber
+    /// cuál es.</para>
+    ///
+    /// <para>⚠ Y el de la RANURA DE COMPORTAMIENTO no estaba chequeado acá.
+    /// <c>Run.EquipPerk</c> lo rebota —una clase no puede tener dos Oro, ni un
+    /// Oro y un Único— pero la mochila dejaba el botón EQUIPAR encendido: se
+    /// apretaba, no pasaba nada y el juego no decía una palabra. Era el peor
+    /// bug de la pantalla, porque el jugador no tenía forma de saber si el
+    /// problema era el perk, la clase o un click que no había entrado.</para>
     /// </remarks>
-    private static bool Acepta(Run partida, RosterClass ficha, int indice)
+    private static string? MotivoParaNoEquipar(Run partida, RosterClass ficha, int indice)
     {
         if (indice < 0 || indice >= partida.Backpack.Items.Count)
-            return false;
+            return Loc.Get("ui.mochila.no_entra");
 
         var cosa = partida.Backpack.Items[indice];
 
+        // El arma va a su propio slot y siempre entra: lo que estaba puesto
+        // vuelve a la mochila.
         if (cosa.Kind == ItemType.Weapon)
-            return true;
+            return null;
 
         var def = DataLoader.Current.Perks.Get(cosa.Id);
 
-        if (!def.WorksFor(ficha.DefenderClass) || !ficha.HasFreeSlot)
-            return false;
+        if (!def.WorksFor(ficha.DefenderClass))
+            return Loc.Get("ui.mochila.no_es_de_esta_clase");
+
+        // La ranura de comportamiento se chequea ANTES que los slots libres: con
+        // seis slots vacíos y un Oro puesto, «no hay lugar» sería mentira.
+        if (def.Tier is PerkTier.Gold or PerkTier.Unique &&
+            partida.BehaviorPerkOf(ficha.DefenderClass) is { } puesto)
+        {
+            return $"{Loc.Get("ui.mochila.ya_tiene_comportamiento")} {Loc.Perk(puesto)}";
+        }
+
+        if (!ficha.HasFreeSlot)
+            return Loc.Get("ui.mochila.sin_slots");
 
         int yaTiene = 0;
 
@@ -588,8 +609,13 @@ public partial class BackpackScreen : Control
                 yaTiene++;
         }
 
-        return yaTiene < def.MaxStacked;
+        return yaTiene < def.MaxStacked
+            ? null
+            : Loc.Get("ui.mochila.tope_de_apilado");
     }
+
+    private static bool Acepta(Run partida, RosterClass ficha, int indice)
+        => MotivoParaNoEquipar(partida, ficha, indice) is null;
 
     // =====================================================================
     // Geometría propia de la columna derecha
@@ -964,29 +990,22 @@ public partial class BackpackScreen : Control
                 (int)(icono.Size.X * 0.5f), color, HorizontalAlignment.Center);
         }
 
-        // ⚠ La descripción son las CLASES QUE LO PUEDEN EQUIPAR, no una frase de
-        // sabor. Los perks no tienen texto propio en `lang\` —y no deberían
-        // tenerlo: la magnitud ya está abajo, en los stats— así que el lugar de
-        // la descripción se usa para lo único que el jugador no puede deducir
-        // mirando el icono. Es la misma regla de información total que la tienda:
-        // un Oro que solo pueden usar dos de las nueve clases equipado en la que
-        // no es, es un slot perdido.
-        var sirve = new System.Text.StringBuilder();
+        // ⚠ ACÁ VA QUÉ HACE, y es lo que faltaba.
+        //
+        // Antes este lugar lo ocupaban las clases que lo pueden equipar, con
+        // este argumento: «los perks no tienen texto propio y la magnitud ya
+        // está abajo, en los stats». El argumento no se sostiene con un Oro en
+        // la mano: «sobrepenetra 40%» no dice qué hace ni sobre qué es ese 40, y
+        // el jugador equipaba una de las ocho oportunidades de la corrida sin
+        // saber qué compró.
+        //
+        // Las clases no se perdieron: bajaron abajo de los stats, que es donde
+        // hay lugar y donde igual se leen antes de apretar EQUIPAR.
+        this.Paragraph(UiLayout.DetailDescription, Loc.PerkText(def), 13, Palette.TextSecondary);
 
-        foreach (var c in ChoiceBuilder.All)
-        {
-            if (!def.WorksFor(c))
-                continue;
-
-            if (sirve.Length > 0)
-                sirve.Append(" · ");
-
-            sirve.Append(Loc.Class(c));
-        }
-
-        this.Paragraph(UiLayout.DetailDescription,
-            sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
-            13, Palette.TextSecondary);
+        // El cartel repite la frase entera: el párrafo se corta con «…» cuando no
+        // entra, y justo los Únicos —que combinan dos efectos— son los más largos.
+        UiTooltip.Over(UiLayout.DetailDescription, $"{Loc.Perk(def)}\n{Loc.PerkText(def)}");
 
         var stats = UiLayout.DetailStats;
         float alto = 22f;
@@ -1000,6 +1019,26 @@ public partial class BackpackScreen : Control
 
         this.StatRow(stats.Row(alto * 2f, alto), Loc.Get("ui.mochila.tab_perks"),
             $"{def.MaxStacked}×");
+
+        // ⚠ A QUÉ CLASES LES SIRVE. Es lo único de la ficha que no se puede
+        // deducir mirando el icono, y un Oro que solo pueden usar dos de las
+        // nueve equipado en la que no es, es un slot perdido.
+        var sirve = new System.Text.StringBuilder();
+
+        foreach (var c in ChoiceBuilder.All)
+        {
+            if (!def.WorksFor(c))
+                continue;
+
+            if (sirve.Length > 0)
+                sirve.Append(" · ");
+
+            sirve.Append(Loc.Class(c));
+        }
+
+        this.Paragraph(UiLayout.DetailClasses,
+            sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
+            13, Palette.TextMuted);
     }
 
     private void DetalleDeArma(Run partida, Weapon? arma)
@@ -1044,7 +1083,12 @@ public partial class BackpackScreen : Control
     private void BotonEquipar(Run partida)
     {
         var ficha = _claseElegida is { } clase ? partida.Roster.Find(clase) : null;
-        bool puede = ficha is not null && Acepta(partida, ficha, _cosaElegida) && _marcados.Count <= 1;
+
+        // ⚠ El motivo, no un booleano: es el renglón que se dibuja abajo cuando
+        // el botón queda apagado. Ver MotivoParaNoEquipar.
+        string? motivo = ficha is null ? null : MotivoParaNoEquipar(partida, ficha, _cosaElegida);
+
+        bool puede = ficha is not null && motivo is null && _marcados.Count <= 1;
 
         this.Button(UiLayout.DetailBuy, Loc.Get("ui.mochila.equipar"),
             puede ? Palette.Success : Palette.TextDisabled, habilitado: puede);
@@ -1063,11 +1107,18 @@ public partial class BackpackScreen : Control
             return;
         }
 
-        if (!puede)
-        {
-            this.Label(UiLayout.DetailEquip, Loc.Get("ui.mochila.no_entra"), 13,
-                Palette.Danger, HorizontalAlignment.Center);
-        }
+        if (puede)
+            return;
+
+        // Con varios marcados para mejorar, el motivo no es del perk: es que
+        // equipar y mejorar son dos gestos y hay uno a medias.
+        string texto = motivo ?? Loc.Get("ui.mochila.desmarca_para_equipar");
+
+        // Dos renglones: el motivo de la ranura de comportamiento nombra al perk
+        // que la ocupa y no entra en uno solo.
+        this.Paragraph(UiLayout.DetailEquip, texto, 13, Palette.Danger);
+
+        UiTooltip.Over(UiLayout.DetailEquip, texto);
     }
 
     /// <summary>
