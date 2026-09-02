@@ -500,8 +500,26 @@
     "ui.mochila.marcar_para_mejorar": "mark several of the same tier to upgrade them",
     "ui.mochila.tope_oro": "crafted Gold cap:",
 
-    "ui.mochila.confirmar_titulo": "REMOVING A PERK DESTROYS IT",
-    "ui.mochila.confirmar_detalle": "It does not go back to the backpack. This cannot be undone.",
+    // The six reasons UPGRADE bounces. They exist because it used to fail in
+    // silence: the simulation had eight exits and the screen mirrored three.
+    "ui.mochila.mejora.faltan": "not enough marks to complete the recipe",
+    "ui.mochila.mejora.mezclado": "mixed tiers: mark them all from the same one",
+    "ui.mochila.mejora.no_mejorable": "this tier cannot be upgraded",
+    "ui.mochila.mejora.seleccion_invalida": "the selection no longer matches the backpack",
+    "ui.mochila.mejora.sin_clases": "you have no class available yet",
+    "ui.mochila.mejora.sin_oro_util": "no Gold in the pool works for your classes",
+    "ui.mochila.mejora.tope_de_oro": "crafted Gold cap:",
+
+    "ui.mochila.confirmar_sacar_titulo": "REMOVING A PERK DESTROYS IT",
+    "ui.mochila.confirmar_sacar_detalle": "It does not go back to the backpack. This cannot be undone.",
+
+    "ui.mochila.confirmar_tirar_titulo": "THROWING THIS PERK AWAY DESTROYS IT",
+    "ui.mochila.confirmar_tirar_detalle": "No gold back. If it is spare, try UPGRADE: it moves up a tier.",
+
+    "ui.mochila.tirar": "throw away",
+    "ui.mochila.tirar_ayuda": "destroys it and pays nothing; to get something for it, UPGRADE",
+    "ui.mochila.vender": "sell",
+    "ui.mochila.vender_ayuda": "gives back the gold the weapon is worth",
     "ui.mochila.destruir": "destroy",
     "ui.mochila.cancelar": "cancel",
     "ui.mochila.esc_cerrar": "esc to close",
@@ -530,6 +548,14 @@
     "ui.mochila.tope_de_apilado": "it already has every copy it allows",
     "ui.mochila.desmarca_para_equipar": "unmark the others to equip",
     "ui.mochila.planos_conocidos": "the recipes you know",
+
+    // FUSE. The button is new: until 2026-09-02 the blueprints tab was a poster —
+    // the action existed in the simulation and no screen ever fired it.
+    "ui.mochila.fusionar": "fuse",
+    "ui.mochila.fusion.listo": "consumes both Gold perks and leaves the Unique in a single slot",
+    "ui.mochila.fusion.falta_pieza": "you are missing one of the two Gold perks",
+    "ui.mochila.fusion.sin_la_clase": "you do not have the class that can use it yet",
+    "ui.mochila.fusion.sin_plano": "you do not know this recipe",
     "ui.mochila.receta": "recipe",
     "ui.fin.corrida_local": "local run: it was not reported to the server",
     "ui.fin.reportando": "reporting…",

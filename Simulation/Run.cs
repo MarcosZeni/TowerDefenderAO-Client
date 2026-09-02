@@ -694,7 +694,10 @@ public sealed class Run
                 break;
 
             case ActionType.Fuse:
-                Fuse(accion.A, accion.B, (DefenderClass)accion.C);
+                // ⚠ A es el índice del PLANO, no un lugar de mochila. Cambió al
+                // permitir fusionar un Oro equipado: un slot no tiene índice de
+                // mochila. B quedó sin uso. Ver Run.Fuse.
+                Fuse(accion.A, (DefenderClass)accion.C);
                 break;
 
             case ActionType.Upgrade:
@@ -1074,7 +1077,120 @@ public sealed class Run
     }
 
     /// <summary>
-    /// Fusiona dos perks de Oro de la mochila en un Único, y lo equipa.
+    /// De dónde sale una pieza de la receta: de la mochila o de un slot equipado.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Las dos formas existen desde que fusionar dejó de exigir que los dos Oro
+    /// estuvieran en la mochila. Ver <see cref="Fuse"/>.
+    /// </remarks>
+    private readonly record struct FuseSource(bool InBackpack, int Index, DefenderClass Owner);
+
+    /// <summary>
+    /// La clase que puede usar el Único de esa receta, o <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Cada Único es de <b>una sola</b> clase —es la mitad de lo que lo hace
+    /// único—, así que el destino de una fusión no es una decisión: se deriva. Por
+    /// eso la pantalla no pregunta a quién equipárselo.
+    /// </remarks>
+    public DefenderClass? UniqueClassOf(int indicePlano)
+    {
+        if (indicePlano < 0 || indicePlano >= _datos.Blueprints.All.Count)
+            return null;
+
+        var unico = _datos.Perks.Get(_datos.Blueprints.All[indicePlano].ResultingUnique);
+
+        foreach (var c in System.Enum.GetValues<DefenderClass>())
+        {
+            if (unico.WorksFor(c))
+                return c;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Por qué NO se puede fusionar esa receta, o <c>null</c> si se puede.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ Misma regla que la mejora: <b>el motivo lo decide un solo lugar</b>
+    /// y lo consultan los dos, <see cref="Fuse"/> para rebotar y la pantalla para
+    /// dibujar. Un botón encendido que rebota en silencio es peor que uno apagado.</para>
+    ///
+    /// <para>No consume RNG: lo llama el renderer una vez por cuadro.</para>
+    /// </remarks>
+    public string? FuseBlockedKey(int indicePlano)
+    {
+        if (!KnowsBlueprint(indicePlano))
+            return "ui.mochila.fusion.sin_plano";
+
+        if (UniqueClassOf(indicePlano) is not { } clase)
+            return "ui.mochila.fusion.sin_plano";
+
+        if (Roster.Find(clase) is null)
+            return "ui.mochila.fusion.sin_la_clase";
+
+        var plano = _datos.Blueprints.All[indicePlano];
+        var tomados = new List<FuseSource>(2);
+
+        if (!BuscarComponente(plano.GoldA, tomados, out var a))
+            return "ui.mochila.fusion.falta_pieza";
+
+        tomados.Add(a);
+
+        return BuscarComponente(plano.GoldB, tomados, out _)
+            ? null
+            : "ui.mochila.fusion.falta_pieza";
+    }
+
+    /// <summary>
+    /// Busca una copia de ese perk, primero en la mochila y después equipada.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>La mochila va primero, y el orden es fijo.</b> Fijo porque el
+    /// servidor re-simula el log y tiene que encontrar exactamente las mismas dos
+    /// piezas; la mochila primero porque consumir la que está guardada no le apaga
+    /// el comportamiento a un defensor que está peleando.</para>
+    ///
+    /// <para><paramref name="tomados"/> es lo que ya se eligió para esta misma
+    /// fusión: sin él, una receta cuyas dos mitades fueran el mismo perk tomaría
+    /// dos veces la misma copia física.</para>
+    /// </remarks>
+    private bool BuscarComponente(int idPerk, List<FuseSource> tomados, out FuseSource fuente)
+    {
+        for (int i = 0; i < Backpack.Items.Count; i++)
+        {
+            var cosa = Backpack.Items[i];
+
+            if (cosa.Kind != ItemType.Perk || cosa.Id != idPerk)
+                continue;
+
+            fuente = new FuseSource(InBackpack: true, i, default);
+
+            if (!tomados.Contains(fuente))
+                return true;
+        }
+
+        foreach (var ficha in Roster.Classes)
+        {
+            for (int s = 0; s < ficha.Perks.Count; s++)
+            {
+                if (ficha.Perks[s] != idPerk)
+                    continue;
+
+                fuente = new FuseSource(InBackpack: false, s, ficha.DefenderClass);
+
+                if (!tomados.Contains(fuente))
+                    return true;
+            }
+        }
+
+        fuente = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Fusiona los dos Oro de una receta en su Único, y se lo pone a su clase.
     /// </summary>
     /// <remarks>
     /// <para><b>Los Únicos no caen y no se compran: se fabrican.</b> Dos Oro se
@@ -1085,54 +1201,49 @@ public sealed class Run
     /// el menú principal y aprendido para siempre en esa cuenta. Junto con la
     /// billetera, es la única progresión permanente del proyecto — y la lista es
     /// finita, que es la condición que hace tolerable la ventaja del veterano.</para>
+    ///
+    /// <para>⚠ <b>UN ORO EQUIPADO TAMBIÉN SE PUEDE FUSIONAR</b> (2026-09-02), y
+    /// antes no: la acción tomaba dos índices de <b>mochila</b>, así que equipar el
+    /// primer Oro que caía era renunciar en silencio a la mitad de una receta. Y no
+    /// había salida, porque sacarlo del slot lo destruye. En la práctica eso pedía
+    /// dejar un Oro pudriéndose en el bolso durante cuarenta oleadas para poder
+    /// fusionar, con la mochila apretada, o resignar el Único.</para>
+    ///
+    /// <para>⚠ <b>La acción cambió de forma:</b> antes era «estos dos lugares de
+    /// mochila», ahora es «esta receta». Es lo que permite que una pieza salga de
+    /// un slot equipado —un slot no tiene índice de mochila— y de paso saca del log
+    /// una decisión que nunca fue del jugador: con la receta elegida, cuáles dos
+    /// copias se consumen no lo decide nadie. Las busca
+    /// <see cref="BuscarComponente"/> en un orden fijo, así que el servidor
+    /// encuentra las mismas.</para>
+    ///
+    /// <para>Cuando la pieza consumida estaba puesta en la clase de destino, el
+    /// Único entra <b>en el slot que acaba de liberar</b>: la ranura de
+    /// comportamiento quedó vacía al sacar el Oro. Es el caso normal y el que hace
+    /// que la mecánica se sienta como una mejora y no como un trámite.</para>
     /// </remarks>
-    private void Fuse(int indiceA, int indiceB, DefenderClass clase)
+    private void Fuse(int indicePlano, DefenderClass clase)
     {
-        if (indiceA == indiceB)
+        // El motivo lo decide un solo lugar, y se pregunta antes de tocar nada.
+        if (FuseBlockedKey(indicePlano) is not null)
             return;
 
-        if (indiceA < 0 || indiceA >= Backpack.Items.Count ||
-            indiceB < 0 || indiceB >= Backpack.Items.Count)
-        {
-            return;
-        }
-
-        var a = Backpack.Items[indiceA];
-        var b = Backpack.Items[indiceB];
-
-        if (a.Kind != ItemType.Perk || b.Kind != ItemType.Perk)
+        // La clase del log tiene que ser la que el plano manda. Un log manipulado
+        // que pida equipárselo a otra rebota entero.
+        if (UniqueClassOf(indicePlano) != clase)
             return;
 
-        if (_datos.Perks.Get(a.Id).Tier != PerkTier.Gold ||
-            _datos.Perks.Get(b.Id).Tier != PerkTier.Gold)
-        {
-            return;
-        }
+        var plano = _datos.Blueprints.All[indicePlano];
+        var ficha = Roster.Find(clase)!;
 
-        var plano = _datos.Blueprints.Find(a.Id, b.Id);
-        if (plano is null)
-            return;
+        var tomados = new List<FuseSource>(2);
 
-        // El plano tiene que estar aprendido, salvo los iniciales: sin al menos
-        // una receta conocida, un jugador nuevo nunca ve un Único y la mecánica
-        // le resulta invisible.
-        if (!plano.Initial && !_planosAprendidos.Contains(plano.Key))
-            return;
+        BuscarComponente(plano.GoldA, tomados, out var a);
+        tomados.Add(a);
+        BuscarComponente(plano.GoldB, tomados, out var b);
+        tomados.Add(b);
 
-        var ficha = Roster.Find(clase);
-        if (ficha is null)
-            return;
-
-        var resultante = _datos.Perks.Get(plano.ResultingUnique);
-        if (!resultante.WorksFor(clase))
-            return;
-
-        // Se sacan en orden descendente para que el primer índice siga siendo
-        // válido después de sacar el segundo.
-        int mayor = System.Math.Max(indiceA, indiceB);
-        int menor = System.Math.Min(indiceA, indiceB);
-        Backpack.RemoveAt(mayor);
-        Backpack.RemoveAt(menor);
+        Consumir(tomados);
 
         Metrics.UniquesCrafted++;
 
@@ -1142,7 +1253,7 @@ public sealed class Run
         if (Metrics.WaveOfFirstUnique == 0)
             Metrics.WaveOfFirstUnique = Wave;
 
-        // Si no hay slot libre —o si la clase ya tiene un comportamiento puesto—
+        // Si no hay slot libre —o si la clase ya tiene OTRO comportamiento puesto—
         // el Único va a la mochila y el jugador decide después. Perderlo por no
         // tener lugar sería castigar la mecánica que el juego quiere enseñar, y
         // meterlo pisando el Oro equipado destruiría un Oro sin preguntar.
@@ -1150,6 +1261,54 @@ public sealed class Run
             ficha.Perks.Add(plano.ResultingUnique);
         else
             Backpack.StorePerk(plano.ResultingUnique);
+    }
+
+    /// <summary>
+    /// Saca de la mochila y de los slots las piezas que se consumen.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Descendente por índice, dentro de cada lugar.</b> Sacar de abajo hacia
+    /// arriba corre los índices de los de arriba, y la segunda pieza terminaría
+    /// siendo otra cosa — un Oro que el jugador no eligió, destruido en silencio.
+    /// </remarks>
+    private void Consumir(List<FuseSource> fuentes)
+    {
+        var mochila = new List<int>(2);
+
+        foreach (var f in fuentes)
+        {
+            if (f.InBackpack)
+                mochila.Add(f.Index);
+        }
+
+        mochila.Sort();
+
+        for (int i = mochila.Count - 1; i >= 0; i--)
+            Backpack.RemoveAt(mochila[i]);
+
+        foreach (var clase in System.Enum.GetValues<DefenderClass>())
+        {
+            var slots = new List<int>(2);
+
+            foreach (var f in fuentes)
+            {
+                if (!f.InBackpack && f.Owner == clase)
+                    slots.Add(f.Index);
+            }
+
+            if (slots.Count == 0)
+                continue;
+
+            var ficha = Roster.Find(clase);
+
+            if (ficha is null)
+                continue;
+
+            slots.Sort();
+
+            for (int i = slots.Count - 1; i >= 0; i--)
+                ficha.Perks.RemoveAt(slots[i]);
+        }
     }
 
     /// <summary>Cuántos Oro se fabricaron mejorando en esta corrida.</summary>
@@ -1172,6 +1331,80 @@ public sealed class Run
 
     /// <summary>Cuántos perks de ese tier hacen uno del tier de arriba. 0 = no se puede.</summary>
     public int UpgradeCost(PerkTier tier) => _datos.Curves.Upgrades.CostOf(tier);
+
+    /// <summary>
+    /// Por qué NO se puede mejorar esa selección, o <c>null</c> si se puede.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Existe porque MEJORAR fallaba en silencio.</b>
+    /// <see cref="Upgrade"/> tenía ocho salidas sin decir nada y la pantalla
+    /// repetía tres de memoria: en las otras cinco el botón quedaba encendido,
+    /// el jugador lo apretaba, la mochila se le deseleccionaba entera —la
+    /// pantalla llama a <c>Forget</c> apenas encola la acción— y no pasaba nada.
+    /// Desde afuera eso no se distingue de un juego roto, y la selección que se
+    /// evapora hace pensar que además se perdieron los perks.</para>
+    ///
+    /// <para>Ahora el motivo lo decide <b>un solo lugar</b>: esto. La simulación
+    /// lo consulta antes de tocar nada y la pantalla lo consulta para dibujar,
+    /// así que el botón apagado y el rebote de la simulación no se pueden
+    /// separar nunca más.</para>
+    ///
+    /// <para>⚠ <b>No consume RNG y no puede consumirlo.</b> Lo llama el renderer
+    /// una vez por cuadro: si armara el pool de Oro —que sortea— el punto de
+    /// consumo dependería de a qué velocidad va el monitor, y la revalidación
+    /// del servidor fallaría. Por eso el chequeo del pool mira el que ya existe y
+    /// se abstiene cuando todavía no hay ninguno: en ese caso <c>Upgrade</c> lo
+    /// va a armar, y armado nunca queda vacío.</para>
+    /// </remarks>
+    public string? UpgradeBlockedKey(int mascara, PerkTier tier)
+    {
+        int cuantos = _datos.Curves.Upgrades.CostOf(tier);
+
+        if (cuantos < 2 || mascara <= 0)
+            return "ui.mochila.mejora.no_mejorable";
+
+        // El tope de Oro fabricado por corrida: lo que impide que la mejora
+        // reemplace al jefe como fuente de Oro.
+        if (tier == PerkTier.Silver && _oroFabricado >= _datos.Curves.Upgrades.MaxCraftedGoldPerRun)
+            return "ui.mochila.mejora.tope_de_oro";
+
+        // Un bit encendido más allá de lo que hay en la mochila es un log
+        // manipulado, no una selección: rebota entero en vez de ignorarlo.
+        int validos = Backpack.Items.Count >= 31 ? int.MaxValue : (1 << Backpack.Items.Count) - 1;
+
+        if ((mascara & ~validos) != 0)
+            return "ui.mochila.mejora.seleccion_invalida";
+
+        int marcados = 0;
+
+        for (int i = 0; i < Backpack.Items.Count; i++)
+        {
+            if ((mascara & (1 << i)) == 0)
+                continue;
+
+            var cosa = Backpack.Items[i];
+
+            if (cosa.Kind != ItemType.Perk || _datos.Perks.Get(cosa.Id).Tier != tier)
+                return "ui.mochila.mejora.seleccion_invalida";
+
+            marcados++;
+        }
+
+        if (marcados != cuantos)
+            return "ui.mochila.mejora.faltan";
+
+        var clases = Roster.Available();
+
+        if (clases.Count == 0)
+            return "ui.mochila.mejora.sin_clases";
+
+        // ⚠ Solo si el pool YA existe. Ver el remarks: consultarlo antes del
+        // primer jefe lo armaría, y armarlo sortea.
+        if (tier == PerkTier.Silver && _poolOro.Count > 0 && PoolDeOro(clases).Count == 0)
+            return "ui.mochila.mejora.sin_oro_util";
+
+        return null;
+    }
 
     /// <summary>
     /// Mejora varios perks de un tier en uno solo del tier de arriba.
@@ -1202,44 +1435,20 @@ public sealed class Run
     /// </remarks>
     private void Upgrade(int mascara, PerkTier tier)
     {
-        int cuantos = _datos.Curves.Upgrades.CostOf(tier);
-
-        if (cuantos < 2 || mascara <= 0)
+        // ⚠ TODOS los chequeos van antes de tocar el RNG: un rebote que hubiera
+        // consumido un número al azar desincronizaría la revalidación.
+        if (UpgradeBlockedKey(mascara, tier) is not null)
             return;
 
-        // El tope se mira antes que nada: si ya no hay cupo, no se consume nada.
-        if (tier == PerkTier.Silver && _oroFabricado >= _datos.Curves.Upgrades.MaxCraftedGoldPerRun)
-            return;
-
-        // Un bit encendido más allá de lo que hay en la mochila es un log
-        // manipulado, no una selección: rebota entero en vez de ignorarlo.
-        int validos = Backpack.Items.Count >= 31 ? int.MaxValue : (1 << Backpack.Items.Count) - 1;
-
-        if ((mascara & ~validos) != 0)
-            return;
-
-        var indices = new List<int>(cuantos);
+        var indices = new List<int>(_datos.Curves.Upgrades.CostOf(tier));
 
         for (int i = 0; i < Backpack.Items.Count; i++)
         {
-            if ((mascara & (1 << i)) == 0)
-                continue;
-
-            var cosa = Backpack.Items[i];
-
-            if (cosa.Kind != ItemType.Perk || _datos.Perks.Get(cosa.Id).Tier != tier)
-                return;
-
-            indices.Add(i);
+            if ((mascara & (1 << i)) != 0)
+                indices.Add(i);
         }
 
-        if (indices.Count != cuantos)
-            return;
-
         var clases = Roster.Available();
-
-        if (clases.Count == 0)
-            return;
 
         // ⚠ El pool se resuelve ANTES de consumir. Resolverlo después dejaría el
         // camino en que no hay ningún Oro que le sirva al roster: tres Plata
@@ -1250,6 +1459,9 @@ public sealed class Run
         {
             candidatos = PoolDeOro(clases);
 
+            // Puede pasar solo en el camino que UpgradeBlockedKey se abstiene de
+            // mirar: el pool no existía y se acaba de armar. Si igual quedó
+            // vacío, no se consume nada.
             if (candidatos.Count == 0)
                 return;
         }

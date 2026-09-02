@@ -1355,38 +1355,34 @@ public static class HeadlessRunner
         return true;
     }
 
+    /// <summary>
+    /// Fusiona la primera receta que se pueda, si se puede.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Ya no recorre pares de la mochila.</b> Recorre <b>recetas</b>, que es
+    /// la forma que tomó la acción cuando fusionar dejó de exigir que los dos Oro
+    /// estuvieran guardados: ahora una pieza puede salir de un slot equipado, y
+    /// eso un par de índices de mochila no lo puede nombrar.
+    ///
+    /// El motivo de por qué no se puede lo decide <c>Run.FuseBlockedKey</c>, el
+    /// mismo que consulta la pantalla. Una acción que rebota no saca nada de la
+    /// mochila, y el bucle de preparación —con el reloj congelado— la volvería a
+    /// emitir para siempre.
+    ///
+    /// La primera que sirve, no la mejor: la política elige QUÉ Oro juntar en la
+    /// pantalla del jefe, y con las piezas ya en la mano no hay nada que decidir.
+    /// </remarks>
     private static bool FusionarSiPuede(Run partida, ActionLog log)
     {
-        var cosas = partida.Backpack.Items;
-        var perks = DataLoader.Current.Perks;
-
-        for (int a = 0; a < cosas.Count; a++)
+        for (int i = 0; i < DataLoader.Current.Blueprints.All.Count; i++)
         {
-            if (cosas[a].Kind != ItemType.Perk || perks.Get(cosas[a].Id).Tier != PerkTier.Gold)
+            if (partida.FuseBlockedKey(i) is not null)
                 continue;
 
-            for (int b = a + 1; b < cosas.Count; b++)
-            {
-                if (cosas[b].Kind != ItemType.Perk || perks.Get(cosas[b].Id).Tier != PerkTier.Gold)
-                    continue;
+            log.Add(new PlayerAction(
+                partida.ActionTick, ActionType.Fuse, i, 0, (int)partida.UniqueClassOf(i)!.Value));
 
-                var plano = DataLoader.Current.Blueprints.Find(cosas[a].Id, cosas[b].Id);
-                if (plano is null)
-                    continue;
-
-                var unico = perks.Get(plano.ResultingUnique);
-
-                foreach (var ficha in partida.Roster.Classes)
-                {
-                    if (!unico.WorksFor(ficha.DefenderClass))
-                        continue;
-
-                    log.Add(new PlayerAction(
-                        partida.ActionTick, ActionType.Fuse, a, b, (int)ficha.DefenderClass));
-
-                    return true;
-                }
-            }
+            return true;
         }
 
         return false;
@@ -1620,9 +1616,16 @@ public static class HeadlessRunner
     /// ¿Este Oro conviene <b>guardarlo</b> en vez de equiparlo? Solo para el techo.
     /// </summary>
     /// <remarks>
-    /// <para>⚠ <b>Un Oro equipado ya no se puede fusionar</b>: <c>Run.Fuse</c> toma
-    /// índices de mochila, y sacarlo del slot lo destruye. Así que equipar el
-    /// primer Oro que cae es renunciar a la mitad de una receta sin decirlo.</para>
+    /// <para>⚠ <b>Esto dejó de ser obligatorio el 2026-09-02.</b> Decía: «un Oro
+    /// equipado ya no se puede fusionar, <c>Run.Fuse</c> toma índices de mochila»,
+    /// y por eso equipar el primer Oro que caía era renunciar a media receta sin
+    /// decirlo. Ahora la fusión toma la pieza del slot equipado, así que guardar
+    /// ya no es la única forma de llegar a un Único.</para>
+    ///
+    /// <para>Se conserva igual, y como <b>heurística</b>: un Oro guardado que es
+    /// media receta sigue valiendo más que uno puesto en la clase equivocada, y
+    /// cambiar la política movería las tres medias de <c>--balance</c> sin que lo
+    /// haya pedido ningún cambio de balance.</para>
     ///
     /// <para>La regla vieja era la presión de mochila —guardar mientras hubiera 3
     /// lugares libres—, y se rompió cuando la tienda empezó a llenar la mochila:

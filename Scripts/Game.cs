@@ -390,6 +390,54 @@ public partial class Game : Node2D
             Run.ActionTick, ActionType.Upgrade, mascara, (int)tier, 0));
 
     /// <summary>
+    /// Fusiona los dos Oro de una receta en su Único.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Este método no existía.</b> <c>ActionType.Fuse</c> estaba
+    /// implementada en la simulación y el bot headless la emitía, pero ninguna
+    /// pantalla del juego la disparaba: un jugador con los dos Oro en la mano no
+    /// tenía un solo gesto para fabricar el Único, y los planos —la única
+    /// progresión permanente del proyecto, pagados con la billetera— no servían
+    /// para nada jugando.</para>
+    ///
+    /// <para>Al log va el <b>índice del plano</b> y la clase, no cuáles dos copias
+    /// se consumen: eso lo resuelve la simulación en un orden fijo y el servidor
+    /// llega a las mismas dos. Ver <c>Run.Fuse</c>.</para>
+    /// </remarks>
+    public void Fuse(int indicePlano, DefenderClass clase)
+        => _log.Add(new PlayerAction(
+            Run.ActionTick, ActionType.Fuse, indicePlano, 0, (int)clase));
+
+    /// <summary>
+    /// Vende un arma de la mochila. El oro lo pone la simulación.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Al log va el LUGAR, nunca el precio.</b> El valor del arma lo regenera
+    /// el servidor de la seed: un cliente que mandara el oro podría venderse un
+    /// arma común por cien mil.
+    /// </remarks>
+    public void SellGear(int indiceMochila)
+        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.SellGear, indiceMochila, 0, 0));
+
+    /// <summary>
+    /// Tira un perk de la mochila. <b>Lo destruye</b> y no devuelve nada.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Este método no existía, y sin él la mochila no tenía salida.</b>
+    /// <c>ActionType.Discard</c> estaba en la simulación y la usaba el bot
+    /// headless; el juego no la disparaba nunca. Con quince lugares y del orden de
+    /// cien Bronce por corrida, eso es un bolso que se tapa y a partir de ahí come
+    /// todos los drops en silencio.</para>
+    ///
+    /// <para>No paga: un perk no tiene precio de venta en ningún dato, y ponerle
+    /// uno abriría una fuente de oro que ninguna medición vio. Lo que sí tiene
+    /// salida con premio es MEJORAR, que convierte las sobras en el tier de
+    /// arriba.</para>
+    /// </remarks>
+    public void Discard(int indiceMochila)
+        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.Discard, indiceMochila, 0, 0));
+
+    /// <summary>
     /// Compra un nivel de una clase del roster con el oro de la corrida.
     /// </summary>
     /// <remarks>

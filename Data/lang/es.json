@@ -593,8 +593,32 @@
     "ui.mochila.marcar_para_mejorar": "marcá varios del mismo tier para mejorarlos",
     "ui.mochila.tope_oro": "tope de Oro fabricado:",
 
-    "ui.mochila.confirmar_titulo": "SACAR UN PERK LO DESTRUYE",
-    "ui.mochila.confirmar_detalle": "No vuelve a la mochila. Esto no se puede deshacer.",
+    // Los seis motivos por los que MEJORAR rebota, y por qué existen: la mejora
+    // fallaba en SILENCIO. La simulación tenía ocho salidas sin decir nada, la
+    // pantalla repetía tres, y en las otras cinco el botón quedaba encendido —el
+    // jugador lo apretaba, la selección se le borraba entera y no pasaba nada—.
+    // Ahora el motivo lo decide Run.UpgradeBlockedKey y estas son sus respuestas.
+    "ui.mochila.mejora.faltan": "faltan marcas para completar la receta",
+    "ui.mochila.mejora.mezclado": "hay tiers mezclados: marcá todos del mismo",
+    "ui.mochila.mejora.no_mejorable": "este tier no se mejora",
+    "ui.mochila.mejora.seleccion_invalida": "la selección ya no coincide con la mochila",
+    "ui.mochila.mejora.sin_clases": "no tenés ninguna clase disponible todavía",
+    "ui.mochila.mejora.sin_oro_util": "no hay ningún Oro que le sirva a tus clases",
+    "ui.mochila.mejora.tope_de_oro": "tope de Oro fabricado:",
+
+    "ui.mochila.confirmar_sacar_titulo": "SACAR UN PERK LO DESTRUYE",
+    "ui.mochila.confirmar_sacar_detalle": "No vuelve a la mochila. Esto no se puede deshacer.",
+
+    // Tirar es la OTRA destrucción: esta es la del perk guardado. Dos carteles y
+    // no uno porque las dos son irreversibles, y con un texto común el jugador
+    // confirma sin saber cuál de los dos perks está por perder.
+    "ui.mochila.confirmar_tirar_titulo": "TIRAR ESTE PERK LO DESTRUYE",
+    "ui.mochila.confirmar_tirar_detalle": "No devuelve oro. Si te sobra, probá MEJORAR: sube de tier.",
+
+    "ui.mochila.tirar": "tirar",
+    "ui.mochila.tirar_ayuda": "lo destruye y no devuelve oro; para sacarle algo, MEJORAR",
+    "ui.mochila.vender": "vender",
+    "ui.mochila.vender_ayuda": "devuelve el oro que vale el arma",
     "ui.mochila.destruir": "destruir",
     "ui.mochila.cancelar": "cancelar",
     "ui.mochila.esc_cerrar": "esc para cerrar",
@@ -625,6 +649,16 @@
     "ui.mochila.tope_de_apilado": "ya tiene todas las copias que admite",
     "ui.mochila.desmarca_para_equipar": "desmarcá los otros para poder equipar",
     "ui.mochila.planos_conocidos": "las recetas que conocés",
+
+    // FUSIONAR. ⚠ El botón es nuevo: hasta el 2026-09-02 la pestaña de planos era
+    // una lámina —la acción existía en la simulación y ninguna pantalla la
+    // disparaba—, así que los planos, que son la única progresión permanente del
+    // proyecto y se pagan con la billetera, no se podían usar jugando.
+    "ui.mochila.fusionar": "fusionar",
+    "ui.mochila.fusion.listo": "consume los dos Oro y deja el Único en un solo slot",
+    "ui.mochila.fusion.falta_pieza": "te falta alguno de los dos Oro de la receta",
+    "ui.mochila.fusion.sin_la_clase": "todavía no tenés la clase que lo puede usar",
+    "ui.mochila.fusion.sin_plano": "no conocés esta receta",
     "ui.mochila.receta": "receta",
     "ui.fin.corrida_local": "corrida local: no se reportó al servidor",
     "ui.fin.reportando": "reportando…",

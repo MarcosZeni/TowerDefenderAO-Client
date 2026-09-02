@@ -72,7 +72,16 @@ public partial class BackpackScreen : Control
     /// </remarks>
     private int _slotMirado = -1;
 
-    /// <summary>Lo que hay que confirmar antes de hacerlo, porque destruye.</summary>
+    /// <summary>El lugar de la mochila que se está por TIRAR, o -1.</summary>
+    /// <remarks>
+    /// ⚠ Es otra confirmación y no la misma que <see cref="_confirmarSacar"/>:
+    /// aquella saca un perk EQUIPADO y esta destruye uno GUARDADO. Las dos
+    /// destruyen, así que las dos preguntan, pero el texto tiene que decir cuál
+    /// es — «sacar» y «tirar» se confunden justo cuando no hay vuelta atrás.
+    /// </remarks>
+    private int _confirmarTirar = -1;
+
+    /// <summary>Lo que hay que confirmar antes de sacarlo, porque destruye.</summary>
     private (DefenderClass DefenderClass, int Slot)? _confirmarSacar;
 
     public BackpackScreen(Game juego)
@@ -101,6 +110,7 @@ public partial class BackpackScreen : Control
         _cosaElegida = -1;
         _slotMirado = -1;
         _marcados.Clear();
+        _confirmarTirar = -1;
     }
 
     public override void _Ready()
@@ -259,6 +269,26 @@ public partial class BackpackScreen : Control
             return;
         }
 
+        // Tirar un perk GUARDADO. Mismo modal y misma regla: destruye, así que
+        // pregunta. Ver _confirmarTirar.
+        if (_confirmarTirar >= 0)
+        {
+            if (RectConfirmar().HasPoint(posicion))
+            {
+                _juego.Discard(_confirmarTirar);
+                _confirmarTirar = -1;
+
+                // Tirar corre los índices de arriba, igual que sacar.
+                Forget();
+            }
+            else if (RectCancelar().HasPoint(posicion))
+            {
+                _confirmarTirar = -1;
+            }
+
+            return;
+        }
+
         if (Pestanas(posicion) || Filtros(posicion))
             return;
 
@@ -332,7 +362,25 @@ public partial class BackpackScreen : Control
     /// <summary>Un hueco de la grilla, el botón de equipar o el de mejorar.</summary>
     private bool Grid(Run partida, Vector2 posicion)
     {
-        if (_pestana != Pestana.Blueprints)
+        if (_pestana == Pestana.Blueprints)
+        {
+            // El botón FUSIONAR de un renglón de receta. Es el único gesto que el
+            // juego tiene para fabricar un Único: antes esta pestaña no disparaba
+            // ninguna acción. Ver GrillaDePlanos.
+            int plano = PlanoEn(partida, posicion);
+
+            if (plano >= 0 && partida.FuseBlockedKey(plano) is null &&
+                partida.UniqueClassOf(plano) is { } paraQuien)
+            {
+                _juego.Fuse(plano, paraQuien);
+                Forget();
+
+                return true;
+            }
+
+            return false;
+        }
+
         {
             var visibles = Visibles(partida);
 
@@ -344,6 +392,25 @@ public partial class BackpackScreen : Control
                 Marcar(partida, visibles[i]);
                 return true;
             }
+        }
+
+        // Vender un arma o tirar un perk. Es el único gesto que saca algo de la
+        // mochila: sin él el bolso se tapa y todo drop posterior cae al vacío.
+        if (UiLayout.DetailPrice.HasPoint(posicion) &&
+            _cosaElegida >= 0 && _cosaElegida < partida.Backpack.Items.Count)
+        {
+            // Vender paga y no destruye, así que va derecho. Tirar pregunta.
+            if (partida.Backpack.Items[_cosaElegida].Kind == ItemType.Weapon)
+            {
+                _juego.SellGear(_cosaElegida);
+                Forget();
+            }
+            else
+            {
+                _confirmarTirar = _cosaElegida;
+            }
+
+            return true;
         }
 
         // El botón de equipar del detalle: equipa en la clase mirada. Es el
@@ -363,12 +430,7 @@ public partial class BackpackScreen : Control
 
         if (UiLayout.DetailEquip.HasPoint(posicion) && PuedeMejorar(partida))
         {
-            int mascara = 0;
-
-            foreach (int i in _marcados)
-                mascara |= 1 << i;
-
-            _juego.Upgrade(mascara, TierMarcado(partida)!.Value);
+            _juego.Upgrade(MascaraMarcada(), TierMarcado(partida)!.Value);
             Forget();
 
             return true;
@@ -438,28 +500,35 @@ public partial class BackpackScreen : Control
         return comun;
     }
 
+    /// <summary>La máscara de bits de lo marcado: un bit por lugar de mochila.</summary>
+    private int MascaraMarcada()
+    {
+        int mascara = 0;
+
+        foreach (int i in _marcados)
+            mascara |= 1 << i;
+
+        return mascara;
+    }
+
     /// <summary>
-    /// Si lo marcado alcanza para mejorar ahora mismo.
+    /// Por qué no se puede mejorar lo marcado, o <c>null</c> si se puede.
     /// </summary>
     /// <remarks>
-    /// Repite los chequeos de la simulación a propósito: la UI los usa para
-    /// <b>dibujar</b> —el botón apagado con «2/4» enseña la receta— y la
-    /// simulación los vuelve a hacer porque el log lo revalida el servidor.
+    /// ⚠ <b>Ya no repite los chequeos de la simulación.</b> Los repetía —tres de
+    /// los ocho— y por los otros cinco el botón quedaba encendido: el jugador lo
+    /// apretaba, la selección se le borraba entera y no pasaba nada. Ahora
+    /// pregunta, y muestra la respuesta.
     /// </remarks>
-    private bool PuedeMejorar(Run partida)
+    private string? MotivoParaNoMejorar(Run partida)
     {
         if (TierMarcado(partida) is not { } tier)
-            return false;
+            return "ui.mochila.mejora.mezclado";
 
-        int cuantos = partida.UpgradeCost(tier);
-
-        if (cuantos < 2 || _marcados.Count != cuantos)
-            return false;
-
-        // El tope de Oro fabricado por corrida: lo que impide que la mejora
-        // reemplace al jefe como fuente de Oro.
-        return tier != PerkTier.Silver || partida.CraftedGold < partida.MaxCraftedGold;
+        return partida.UpgradeBlockedKey(MascaraMarcada(), tier);
     }
+
+    private bool PuedeMejorar(Run partida) => MotivoParaNoMejorar(partida) is null;
 
     /// <summary>Una tarjeta de clase: la mira, o equipa lo elegido ahí.</summary>
     private bool Clases(Run partida, Vector2 posicion)
@@ -702,7 +771,7 @@ public partial class BackpackScreen : Control
         // explicar, y el cartel quedaría flotando arriba del cartel.
         UiTooltip.Draw(this);
 
-        if (_confirmarSacar is not null)
+        if (_confirmarSacar is not null || _confirmarTirar >= 0)
             DibujarConfirmacion();
     }
 
@@ -828,8 +897,18 @@ public partial class BackpackScreen : Control
     /// La pestaña de planos: las recetas de fusión que la cuenta conoce.
     /// </summary>
     /// <remarks>
-    /// Cada una se dibuja como <c>Gold + Gold = Único</c>, que es lo que hay que
-    /// mirar cuando un jefe ofrece dos Oro para elegir uno.
+    /// <para>Cada una se dibuja como <c>Gold + Gold = Único</c>, que es lo que hay
+    /// que mirar cuando un jefe ofrece dos Oro para elegir uno.</para>
+    ///
+    /// <para>⚠ <b>Y ACÁ SE FUSIONA.</b> Hasta el 2026-09-02 esta pestaña era una
+    /// lámina: <c>ActionType.Fuse</c> existía en la simulación, el bot headless la
+    /// emitía, y <b>ninguna pantalla del juego la disparaba nunca</b>. O sea que un
+    /// jugador con los dos Oro en la mano no tenía un solo gesto para fabricar el
+    /// Único — la única progresión permanente del proyecto, con su plano ya pagado
+    /// con la billetera, era inalcanzable jugando.</para>
+    ///
+    /// <para>No se pregunta a quién equipárselo: cada Único es de una sola clase,
+    /// así que el destino se deriva de la receta.</para>
     /// </remarks>
     private void GrillaDePlanos(Run partida)
     {
@@ -867,8 +946,14 @@ public partial class BackpackScreen : Control
 
             this.PerkSlot(destino, salida);
 
-            this.Label(new Rect2(destino.End.X + 12f, y, r.End.X - destino.End.X - 20f, alto),
+            // El nombre a la izquierda y el botón pegado al borde derecho: el
+            // renglón se lee «esto + esto = esto, y lo hago acá».
+            var boton = new Rect2(r.End.X - 132f, y + 12f, 120f, alto - 24f);
+
+            this.Label(new Rect2(destino.End.X + 12f, y, boton.Position.X - destino.End.X - 20f, alto),
                 Loc.Perk(salida), 17, Palette.Unique);
+
+            BotonFusionar(partida, i, boton);
 
             fila++;
         }
@@ -888,6 +973,59 @@ public partial class BackpackScreen : Control
         void Signo(float px, float py, string s)
             => this.Label(new Rect2(px, py - 12f, 16f, 24f), s, 20, Palette.TextMuted,
                 HorizontalAlignment.Center);
+    }
+
+    /// <summary>
+    /// El botón de fusionar de una receta, y por qué está apagado si lo está.
+    /// </summary>
+    /// <remarks>
+    /// El motivo sale de <see cref="Run.FuseBlockedKey"/>, el mismo que va a
+    /// consultar la simulación para rebotar: el botón apagado y el rebote no se
+    /// pueden separar. Va en el cartel y no en el renglón porque el renglón mide
+    /// 120 px y el motivo es una frase.
+    /// </remarks>
+    private void BotonFusionar(Run partida, int indicePlano, Rect2 r)
+    {
+        string? motivo = partida.FuseBlockedKey(indicePlano);
+        bool puede = motivo is null;
+
+        this.Button(r, Loc.Get("ui.mochila.fusionar"),
+            puede ? Palette.Unique : Palette.TextDisabled, habilitado: puede);
+
+        UiTooltip.Over(r, puede
+            ? Loc.Get("ui.mochila.fusion.listo")
+            : Loc.Get(motivo!));
+    }
+
+    /// <summary>El renglón de plano que cae bajo el cursor, o <c>-1</c>.</summary>
+    /// <remarks>
+    /// ⚠ Recorre las recetas <b>conocidas</b> y en el mismo orden que las dibuja
+    /// <see cref="GrillaDePlanos"/>: si los dos recorridos se separan, el click
+    /// fusiona una receta distinta de la que el jugador está mirando.
+    /// </remarks>
+    private static int PlanoEn(Run partida, Vector2 posicion)
+    {
+        var grilla = UiLayout.PerkGrid;
+        float alto = 62f;
+        int fila = 0;
+
+        for (int i = 0; i < DataLoader.Current.Blueprints.All.Count; i++)
+        {
+            if (!partida.KnowsBlueprint(i))
+                continue;
+
+            float y = grilla.Position.Y + (fila * (alto + 8f));
+
+            if (y + alto > grilla.End.Y)
+                break;
+
+            if (new Rect2(grilla.End.X - 132f, y + 12f, 120f, alto - 24f).HasPoint(posicion))
+                return i;
+
+            fila++;
+        }
+
+        return -1;
     }
 
     /// <summary>Un arma en un hueco de la grilla: marco de rareza y la estrella.</summary>
@@ -967,6 +1105,7 @@ public partial class BackpackScreen : Control
             DetalleDeArma(partida, partida.Backpack.WeaponById(cosa.Id));
 
         BotonEquipar(partida);
+        BotonSacarDeLaMochila(partida);
     }
 
     private void DetalleDePerk(Run partida, PerkDefinition def)
@@ -1076,7 +1215,59 @@ public partial class BackpackScreen : Control
         this.StatTrio(stats.Row(0f, alto + 4f),
             Loc.Damage(arma.Damage), Loc.Range(arma.Range), arma.Cadence.ToString());
 
-        this.Price(UiLayout.DetailPrice, arma.Value);
+    }
+
+    /// <summary>
+    /// El botón de deshacerse de lo elegido: <b>vender</b> si es un arma,
+    /// <b>tirar</b> si es un perk.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>No existía ninguno de los dos.</b> <c>ActionType.SellGear</c> y
+    /// <c>ActionType.Discard</c> estaban implementadas en la simulación y las usaba
+    /// el bot headless, pero <b>ninguna pantalla del juego las disparaba</b>: no
+    /// había un solo gesto para sacar algo de la mochila. Con quince lugares, del
+    /// orden de cien Bronce por corrida y la tienda llenando el bolso, eso es una
+    /// mochila que se tapa a la oleada 20 y no se destapa nunca — y a partir de
+    /// ahí cada drop cae al vacío en silencio.</para>
+    ///
+    /// <para><b>Vender paga y tirar no</b>, y la diferencia no es un descuido: el
+    /// equipo se vende por su valor —ya lo dice su ficha— y un perk no tiene
+    /// precio de venta en ningún lado. Inventarle uno sería abrir una fuente de oro
+    /// que ninguna medición de <c>--balance</c> vio nunca.</para>
+    ///
+    /// <para>Vender no pregunta: devuelve oro y el arma valía eso. Tirar sí, porque
+    /// destruye — la misma regla que sacar un perk equipado.</para>
+    ///
+    /// <para>Va en la fila del precio y no en una nueva: para un perk esa fila
+    /// estaba <b>vacía</b>, y para un arma decía el valor, que es justo el número
+    /// que el botón necesita mostrar.</para>
+    /// </remarks>
+    private void BotonSacarDeLaMochila(Run partida)
+    {
+        if (_cosaElegida < 0 || _cosaElegida >= partida.Backpack.Items.Count)
+            return;
+
+        var cosa = partida.Backpack.Items[_cosaElegida];
+
+        if (cosa.Kind == ItemType.Weapon)
+        {
+            var arma = partida.Backpack.WeaponById(cosa.Id);
+
+            if (arma is null)
+                return;
+
+            this.Button(UiLayout.DetailPrice,
+                $"{Loc.Get("ui.mochila.vender")}  {arma.Value}", Palette.Gold);
+
+            UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.vender_ayuda"));
+
+            return;
+        }
+
+        this.Button(UiLayout.DetailPrice, Loc.Get("ui.mochila.tirar"), Palette.Danger,
+            relleno: false);
+
+        UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.tirar_ayuda"));
     }
 
     /// <summary>El botón de equipar, que necesita una clase mirada y que entre.</summary>
@@ -1145,23 +1336,36 @@ public partial class BackpackScreen : Control
         if (cuantos < 2)
             return false;
 
-        bool tope = tier == PerkTier.Silver && partida.CraftedGold >= partida.MaxCraftedGold;
-        bool listo = !tope && _marcados.Count == cuantos;
+        // ⚠ El motivo lo decide la simulación, no esta pantalla. Ver
+        // MotivoParaNoMejorar: repetir los chequeos acá es lo que dejaba el
+        // botón encendido en cinco casos en los que la mejora iba a rebotar.
+        string? motivo = MotivoParaNoMejorar(partida);
+        bool listo = motivo is null;
 
-        var color = tope ? Palette.Danger : Palette.Rarity(tier + 1);
+        // Faltan marcas no es un problema: es la receta a medias, y el contador
+        // ya lo dice. Se dibuja apagado y sin cartel, como siempre.
+        bool aMedias = motivo == "ui.mochila.mejora.faltan";
+
+        var color = listo || aMedias ? Palette.Rarity(tier + 1) : Palette.Danger;
 
         this.Button(UiLayout.DetailEquip,
             $"{Loc.Get("ui.mochila.mejorar")} {_marcados.Count}/{cuantos}",
             listo ? color : Palette.TextDisabled, habilitado: listo);
 
-        if (tope)
-        {
-            this.Label(
-                new Rect2(UiLayout.DetailEquip.Position.X, UiLayout.DetailEquip.End.Y + 2f,
-                    UiLayout.DetailEquip.Size.X, 18f),
-                $"{Loc.Get("ui.mochila.tope_oro")} {partida.CraftedGold}/{partida.MaxCraftedGold}",
-                12, Palette.Danger, HorizontalAlignment.Center);
-        }
+        if (listo || aMedias)
+            return true;
+
+        // El renglón de abajo dice POR QUÉ. El del tope lleva además el contador,
+        // que es la única forma de saber cuánto cupo queda sin abrir un manual.
+        string texto = motivo == "ui.mochila.mejora.tope_de_oro"
+            ? $"{Loc.Get(motivo)} {partida.CraftedGold}/{partida.MaxCraftedGold}"
+            : Loc.Get(motivo!);
+
+        var pie = new Rect2(UiLayout.DetailEquip.Position.X, UiLayout.DetailEquip.End.Y + 2f,
+            UiLayout.DetailEquip.Size.X, 34f);
+
+        this.Paragraph(pie, texto, 12, Palette.Danger);
+        UiTooltip.Over(UiLayout.DetailEquip, texto);
 
         return true;
     }
@@ -1351,10 +1555,15 @@ public partial class BackpackScreen : Control
         this.Glow(panel, Palette.Danger, 2f, 6);
         DrawRect(panel, Palette.Danger, filled: false, width: 3f);
 
-        this.Label(panel.Row(40f, 40f), Loc.Get("ui.mochila.confirmar_titulo"), 27,
+        // ⚠ El texto dice CUÁL de las dos destrucciones es. Sacar un perk puesto
+        // y tirar uno guardado son irreversibles las dos, y con un cartel común
+        // el jugador confirma sin saber cuál de los dos perks va a perder.
+        string clave = _confirmarTirar >= 0 ? "tirar" : "sacar";
+
+        this.Label(panel.Row(40f, 40f), Loc.Get($"ui.mochila.confirmar_{clave}_titulo"), 27,
             Palette.Danger, HorizontalAlignment.Center);
 
-        this.Label(panel.Row(84f, 30f), Loc.Get("ui.mochila.confirmar_detalle"), 17,
+        this.Label(panel.Row(84f, 30f), Loc.Get($"ui.mochila.confirmar_{clave}_detalle"), 17,
             Palette.TextSecondary, HorizontalAlignment.Center);
 
         this.Button(RectConfirmar(), Loc.Get("ui.mochila.destruir"), Palette.Danger);

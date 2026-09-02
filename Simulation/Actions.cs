@@ -41,7 +41,16 @@ public enum ActionType
     /// <summary>Comprar algo en la tienda de la corrida.</summary>
     Buy = 7,
 
-    /// <summary>Fusionar dos perks de Oro en un Único, con un plano aprendido.</summary>
+    /// <summary>
+    /// Fusionar los dos Oro de una receta en su Único, con un plano aprendido.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>A es el índice del PLANO</b> y C la clase; B no se usa. Antes A y B
+    /// eran dos lugares de <b>mochila</b>, y eso era lo que impedía fusionar un
+    /// Oro ya equipado —un slot no tiene índice de mochila—. Con la receta
+    /// elegida, cuáles dos copias se consumen no lo decide el jugador: las busca
+    /// la simulación en un orden fijo, así que el servidor encuentra las mismas.
+    /// </remarks>
     Fuse = 8,
 
     /// <summary>
