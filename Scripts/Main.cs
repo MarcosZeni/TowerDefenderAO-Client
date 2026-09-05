@@ -1,4 +1,5 @@
 using Godot;
+using TowerOfArgentum.Audio;
 using TowerOfArgentum.Simulation;
 
 namespace TowerOfArgentum;
@@ -73,6 +74,13 @@ public partial class Main : Node2D
         Resolution.ApplySaved();
         Settings.Load();
         Loc.Load(Settings.Language);
+
+        // ⚠ DESPUÉS de Settings.Load(), que es lo que baja el volumen guardado a
+        // los buses «Musica» y «Sonido». Al revés, el primer sonido saldría al
+        // volumen por defecto — y el jugador que dejó todo en 10 % se comería un
+        // click a todo trapo cada vez que abre el juego.
+        Sfx.Init(this);
+        Music.Init(this);
 
         // ⚠ Antes de armar el login, y en este orden: engancha el guardado de la
         // sesión a los cambios del cliente de red, y recién después lee el disco.
@@ -240,6 +248,13 @@ public partial class Main : Node2D
     {
         _login.Visible = false;
         _menu.Visible = true;
+
+        // La música del menú arranca al ENTRAR, no en `_Ready`. En el login el
+        // juego todavía puede estar por saltar solo al menú con la sesión
+        // guardada, y una pista que arranca y se corta a los dos segundos se oye
+        // como un error.
+        Music.Play(MusicTrack.Menu);
+
         _ = _menu.RefreshAsync();
     }
 
@@ -366,6 +381,12 @@ public partial class Main : Node2D
     {
         _corrida?.QueueFree();
         _corrida = null;
+
+        // ⚠ Los efectos se cortan a mano. La corrida se va con `QueueFree`, pero
+        // el pool de `Sfx` cuelga de Main y sobrevive: sin esto, el último rugido
+        // de la oleada sigue sonando arriba de la música del menú.
+        Sfx.StopAll();
+        Music.Play(MusicTrack.Menu);
 
         _capaMenu.Visible = true;
         _ = _menu.RefreshAsync();

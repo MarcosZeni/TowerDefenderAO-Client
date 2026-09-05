@@ -1,4 +1,5 @@
 using Godot;
+using TowerOfArgentum.Audio;
 using TowerOfArgentum.Simulation;
 using TowerOfArgentum.Ui;
 
@@ -188,6 +189,12 @@ public partial class Game : Node2D
 
         _ultimoUs = FineClock.Us;
 
+        // ⚠ Arranca en blanco, sí o sí. Con Retomar, la corrida que llega ya
+        // viene re-simulada desde el tick 0 —oleada 40 con cuarenta oleadas de
+        // muertes y disparos ya ocurridos—: sin esto, el primer tick del juego
+        // retomado emitiría de golpe todo lo que "cambió" desde la nada.
+        _cues.Reset();
+
         GD.Print($"RunCurve iniciada · seed {Seed} · run {RunId} · " +
                  $"ruta de {mapa.Route.Length / Ints.ThousandthsPerCell} celdas");
     }
@@ -290,6 +297,16 @@ public partial class Game : Node2D
         _oleadaGuardada = partida.Wave;
     }
 
+    /// <summary>
+    /// El traductor de simulación a sonido.
+    /// </summary>
+    /// <remarks>
+    /// Vive acá porque acá es donde corre el tick, y porque es la única clase que
+    /// toca las dos cosas. La simulación no lo conoce y no puede conocerlo: el
+    /// servidor la corre sin Godot.
+    /// </remarks>
+    private readonly AudioCues _cues = new();
+
     /// <summary>La clase que se va a poner con el próximo click.</summary>
     private DefenderClass _claseElegida = DefenderClass.Hunter;
 
@@ -317,7 +334,11 @@ public partial class Game : Node2D
     /// lo regenera el servidor de la seed; si se guardara el contenido, un
     /// cliente modificado podría reclamar que le ofrecieron algo mejor.
     /// </remarks>
-    public void Choose(int indice) => Encolar(t => PlayerAction.Choose(t, indice));
+    public void Choose(int indice)
+    {
+        Encolar(t => PlayerAction.Choose(t, indice));
+        Sfx.Play(SoundId.TowerUnlock);
+    }
 
     /// <summary>
     /// Arranca la oleada que espera. Lo llama el botón y el fin de los 30 s.
@@ -333,6 +354,7 @@ public partial class Game : Node2D
             return;
 
         Encolar(t => new PlayerAction(t, ActionType.CallNextWave, 0, 0, 0));
+        Sfx.Play(SoundId.WaveStart);
     }
 
     /// <summary>El id de la corrida del lado del servidor. 0 = corrida local.</summary>
@@ -368,13 +390,24 @@ public partial class Game : Node2D
         var tipo = cosa.Kind == ItemType.Perk ? ActionType.EquipPerk : ActionType.Equip;
 
         _log.Add(new PlayerAction(Run.ActionTick, tipo, indice, (int)clase, 0));
+
+        // Equipar suena a metal y no a click: es lo que dice que la cosa entró en
+        // la ficha, no que se apretó un botón.
+        Sfx.Play(SoundId.TowerUpgrade);
     }
 
     /// <summary>
     /// Saca un perk equipado. <b>Lo destruye.</b> La UI ya pidió confirmación.
     /// </summary>
     public void RemovePerk(DefenderClass clase, int slot)
-        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.RemovePerk, (int)clase, slot, 0));
+    {
+        _log.Add(new PlayerAction(Run.ActionTick, ActionType.RemovePerk, (int)clase, slot, 0));
+
+        // Sacar un perk lo DESTRUYE, y el sonido tiene que decir eso. Va el de
+        // cancelar y no el de confirmar: es una pérdida, aunque el jugador la
+        // haya elegido.
+        Sfx.Play(SoundId.UiCancel);
+    }
 
     /// <summary>
     /// Mejora los perks marcados en uno del tier de arriba.
@@ -386,8 +419,12 @@ public partial class Game : Node2D
     /// haber fabricado el Oro que quisiera.
     /// </remarks>
     public void Upgrade(int mascara, PerkTier tier)
-        => _log.Add(new PlayerAction(
+    {
+        _log.Add(new PlayerAction(
             Run.ActionTick, ActionType.Upgrade, mascara, (int)tier, 0));
+
+        Sfx.Play(SoundId.TowerUpgrade);
+    }
 
     /// <summary>
     /// Fusiona los dos Oro de una receta en su Único.
@@ -405,8 +442,16 @@ public partial class Game : Node2D
     /// llega a las mismas dos. Ver <c>Run.Fuse</c>.</para>
     /// </remarks>
     public void Fuse(int indicePlano, DefenderClass clase)
-        => _log.Add(new PlayerAction(
+    {
+        _log.Add(new PlayerAction(
             Run.ActionTick, ActionType.Fuse, indicePlano, 0, (int)clase));
+
+        // ⚠ El más importante del archivo. Fusionar pasa un puñado de veces en
+        // toda la corrida, cuesta dos Oro y un plano comprado con la billetera, y
+        // los planos son la única progresión permanente del proyecto. Por eso
+        // suena el de recompensa y no el de mejora.
+        Sfx.Play(SoundId.UiReward);
+    }
 
     /// <summary>
     /// Vende un arma de la mochila. El oro lo pone la simulación.
@@ -417,7 +462,10 @@ public partial class Game : Node2D
     /// arma común por cien mil.
     /// </remarks>
     public void SellGear(int indiceMochila)
-        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.SellGear, indiceMochila, 0, 0));
+    {
+        _log.Add(new PlayerAction(Run.ActionTick, ActionType.SellGear, indiceMochila, 0, 0));
+        Sfx.Play(SoundId.UiCoins);
+    }
 
     /// <summary>
     /// Tira un perk de la mochila. <b>Lo destruye</b> y no devuelve nada.
@@ -435,7 +483,12 @@ public partial class Game : Node2D
     /// arriba.</para>
     /// </remarks>
     public void Discard(int indiceMochila)
-        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.Discard, indiceMochila, 0, 0));
+    {
+        _log.Add(new PlayerAction(Run.ActionTick, ActionType.Discard, indiceMochila, 0, 0));
+
+        // Tirar no paga nada. Suena a cancelar, igual que sacar un perk.
+        Sfx.Play(SoundId.UiCancel);
+    }
 
     /// <summary>
     /// Compra un nivel de una clase del roster con el oro de la corrida.
@@ -446,7 +499,15 @@ public partial class Game : Node2D
     /// y ahí se valida, porque el log es lo que revalida el servidor.
     /// </remarks>
     public void BuyLevel(DefenderClass clase)
-        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.BuyLevel, (int)clase, 0, 0));
+    {
+        _log.Add(new PlayerAction(Run.ActionTick, ActionType.BuyLevel, (int)clase, 0, 0));
+
+        // Dos sonidos encimados: se pagó y algo subió. Es el sumidero de oro de
+        // la corrida y el gesto que más se repite en la tienda, así que tiene que
+        // leerse distinto de comprar un perk.
+        Sfx.Play(SoundId.UiBuy);
+        Sfx.Play(SoundId.TowerUpgrade);
+    }
 
     /// <summary>
     /// Compra una oferta de la tienda rotativa.
@@ -457,7 +518,10 @@ public partial class Game : Node2D
     /// modificado reclamara haber comprado algo que no estaba a la venta.
     /// </remarks>
     public void Buy(int indice)
-        => _log.Add(new PlayerAction(Run.ActionTick, ActionType.Buy, indice, 0, 0));
+    {
+        _log.Add(new PlayerAction(Run.ActionTick, ActionType.Buy, indice, 0, 0));
+        Sfx.Play(SoundId.UiBuy);
+    }
 
     /// <summary>
     /// Le cambia el modo de targeting a un defensor puesto.
@@ -469,8 +533,12 @@ public partial class Game : Node2D
     /// de colocación es la mitad del valor de la mecánica.
     /// </remarks>
     public void SetTargetingMode(int idColocacion, TargetingMode modo)
-        => _log.Add(new PlayerAction(
+    {
+        _log.Add(new PlayerAction(
             Run.ActionTick, ActionType.SetTargeting, idColocacion, (int)modo, 0));
+
+        Sfx.Play(SoundId.TowerSelect);
+    }
 
     /// <summary>
     /// Elige cuál de los dos comportamientos de una clase está activo.
@@ -483,8 +551,12 @@ public partial class Game : Node2D
     /// costó dos jefes y un plano.
     /// </remarks>
     public void SetBehavior(DefenderClass clase, bool preferirElPerk)
-        => _log.Add(new PlayerAction(
+    {
+        _log.Add(new PlayerAction(
             Run.ActionTick, ActionType.SetBehavior, (int)clase, preferirElPerk ? 1 : 0, 0));
+
+        Sfx.Play(SoundId.UiConfirm);
+    }
 
     /// <summary>La clase que se pone con el próximo click, para la UI.</summary>
     public DefenderClass ChosenClass => _claseElegida;
@@ -596,6 +668,11 @@ public partial class Game : Node2D
             _distanciaPrevia[e.SpawnId] = e.DistanceTravelled;
 
         Run.Advance();
+
+        // ⚠ Después de avanzar y no antes: las señales que mira son diferencias
+        // contra el tick anterior, y son exactamente las mismas dos fotos que ya
+        // usa el render. El audio no llama a la simulación, la mira.
+        _cues.AfterTick(Run);
     }
 
     public override void _Process(double delta)
@@ -698,6 +775,7 @@ public partial class Game : Node2D
             return;
 
         _claseElegida = clase;
+        Sfx.Play(SoundId.TowerSelect);
         QueueRedraw();
     }
 
@@ -717,9 +795,16 @@ public partial class Game : Node2D
         var celda = ACelda(posicion);
 
         if (celda is null || !Run.CanPlace(_claseElegida, celda.Value))
+        {
+            // ⚠ El «no» tiene que sonar. `CanPlace` rebota en silencio —celda
+            // ocupada, sin oro, clase sellada— y el click que no hace nada es el
+            // peor no de todos: el que no dice que dijo que no.
+            Sfx.Play(SoundId.UiError);
             return false;
+        }
 
         Encolar(t => PlayerAction.Place(t, _claseElegida, celda.Value));
+        Sfx.Play(SoundId.TowerPlace);
         return true;
     }
 
@@ -732,7 +817,10 @@ public partial class Game : Node2D
     /// y con el reloj congelado.
     /// </remarks>
     public void SkipChoice()
-        => Encolar(t => new PlayerAction(t, ActionType.SkipChoice, 0, 0, 0));
+    {
+        Encolar(t => new PlayerAction(t, ActionType.SkipChoice, 0, 0, 0));
+        Sfx.Play(SoundId.UiCancel);
+    }
 
     /// <summary>
     /// Vende una ficha puesta. Devuelve el <c>defenderSellPercent</c> del costo.
@@ -743,7 +831,10 @@ public partial class Game : Node2D
     /// fácil de hacer sin querer borraba una unidad puesta y su oro.
     /// </remarks>
     public void Sell(int idColocacion)
-        => Encolar(t => PlayerAction.Sell(t, idColocacion));
+    {
+        Encolar(t => PlayerAction.Sell(t, idColocacion));
+        Sfx.Play(SoundId.TowerSell);
+    }
 
     /// <summary>
     /// Mueve una ficha ya puesta a otra celda. Ocupada, las dos se intercambian.
@@ -754,8 +845,12 @@ public partial class Game : Node2D
     /// que la ficha se está moviendo.
     /// </remarks>
     public void MoveDefender(int idColocacion, Cell destino)
-        => Encolar(t => new PlayerAction(
+    {
+        Encolar(t => new PlayerAction(
             t, ActionType.MoveDefender, idColocacion, destino.X, destino.Y));
+
+        Sfx.Play(SoundId.TowerPlace);
+    }
 
     // =====================================================================
     // Arrastrar una ficha por el tablero
@@ -1269,7 +1364,14 @@ public partial class Game : Node2D
     /// Seis ticks son 200 ms al 1×: se ve salir y llegar, y a la cadencia más
     /// rápida del juego todavía no se superponen dos disparos del mismo defensor.
     /// </remarks>
-    private const int TicksDeVuelo = 6;
+    /// <remarks>
+    /// ⚠ <c>internal</c> y no <c>private</c> porque <see cref="AudioCues"/> encola
+    /// el sonido del impacto contra este mismo número: el golpe tiene que sonar
+    /// cuando el proyectil <b>llega</b>, no cuando salió. Dos constantes iguales
+    /// en dos archivos es una que alguien cambia y la otra no, y el síntoma sería
+    /// un audio corrido un cuarto de segundo que nadie sabe de dónde sale.
+    /// </remarks>
+    internal const int TicksDeVuelo = 6;
 
     /// <summary>
     /// Los disparos que están en el aire y los golpes cuerpo a cuerpo.

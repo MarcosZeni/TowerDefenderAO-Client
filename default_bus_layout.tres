@@ -1,0 +1,28 @@
+[gd_resource type="AudioBusLayout" format=3]
+
+; Los buses de audio.
+;
+; ⚠ Este archivo existe porque `Settings.AplicarVolumenes` busca los buses
+; «Musica» y «Sonido» POR NOMBRE. Sin él Godot arranca con un solo bus (Master),
+; `AudioServer.GetBusIndex` devuelve -1 en los dos, y las dos barras del menú de
+; opciones se guardan bien pero no mueven nada: el bug más silencioso posible.
+;
+; La ruta es la que Godot mira por defecto (`audio/buses/default_bus_layout`),
+; así que no hace falta tocar project.godot.
+;
+; Los tres van a 0 dB: el volumen lo pone el jugador desde Opciones, y el balance
+; entre música y efectos ya está puesto sonido por sonido en Data/audio/audio.json.
+
+[resource]
+bus/1/name = &"Musica"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = 0.0
+bus/1/send = &"Master"
+bus/2/name = &"Sonido"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = 0.0
+bus/2/send = &"Master"

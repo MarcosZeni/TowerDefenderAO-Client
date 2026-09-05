@@ -1,0 +1,248 @@
+{
+  // El índice de audio: qué archivo suena en cada evento, a qué volumen y con
+  // cuánta variación.
+  //
+  // ⚠ NO ENTRA AL HASH DE /run/start, y no puede entrar. El hash lo arma
+  // `DataLoader._archivos`, que es una lista fija de siete archivos de balance
+  // más los layouts; este archivo no está ahí. Es la misma razón que deja
+  // afuera a `Data/lang/`: bajar el volumen de un sonido no cambia la
+  // simulación, y si entrara al hash, corregir un decibel invalidaría la
+  // temporada del ranking (regla de oro 5 del CLAUDE.md).
+  //
+  // ⚠ TODOS los archivos referenciados acá son CC0. La evidencia de licencia
+  // está en `Resources\Audio\Licenses\` y el resumen, en `LICENSES.md`, al lado
+  // de este archivo. Antes de agregar un sonido nuevo, verificar la licencia y
+  // anotarla ahí — es lo que se muestra si algún día llega un reclamo.
+  //
+  // Cómo se lee cada campo:
+  //
+  //   files     variantes del mismo evento. Se elige una al azar en cada
+  //             reproducción. Es lo que evita que 40 disparos por segundo
+  //             suenen como una ametralladora de un solo sample.
+  //   vol       decibeles sobre el bus «Sonido». Negativo siempre: 0 dB es el
+  //             archivo tal como vino, y los packs vienen normalizados al pico.
+  //   pitch     variación de tono, en centésimas. 8 = ±8 %. La segunda mitad de
+  //             la defensa contra la repetición, y la más barata: dos variantes
+  //             con pitch suenan como seis.
+  //   throttle  milisegundos mínimos entre dos disparos de esta misma clave.
+  //             ⚠ Es el número que hace que el juego sea escuchable: con nueve
+  //             defensores tirando a 30 Hz, sin esto se superponen 40 voces por
+  //             segundo y el resultado es ruido blanco.
+  //   voices    cuántas voces simultáneas de esta clave como máximo.
+  //
+  // Los valores están pensados para PARLANTE DE CELULAR: nada por debajo de
+  // -18 dB (se pierde) ni por encima de -3 dB (satura), y los eventos que se
+  // repiten mucho van más abajo que los que pasan una vez por oleada.
+  "version": 1,
+
+  "sfx": {
+    // ---------------------------------------------------------------- ataques
+    // Los nueve de la lista. Suenan una vez por disparo, así que son los que
+    // llevan el throttle más agresivo y el volumen más bajo de todo el juego.
+    "AttackBow": {
+      "files": ["attack/bow_1.wav", "attack/bow_2.wav"],
+      "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
+    },
+    "AttackSword": {
+      "files": ["attack/sword_1.ogg", "attack/sword_2.ogg", "attack/sword_3.ogg"],
+      "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
+    },
+    "AttackMagic": {
+      "files": ["attack/magic_1.ogg", "attack/magic_2.ogg", "attack/magic_3.wav"],
+      "vol": -13, "pitch": 8, "throttle": 80, "voices": 3
+    },
+    "AttackFire": {
+      "files": ["attack/fire_1.ogg", "attack/fire_2.ogg", "attack/fire_3.ogg"],
+      "vol": -13, "pitch": 8, "throttle": 80, "voices": 3
+    },
+    "AttackIce": {
+      "files": ["attack/ice_1.ogg", "attack/ice_2.ogg", "attack/ice_3.ogg"],
+      "vol": -13, "pitch": 8, "throttle": 80, "voices": 3
+    },
+    "AttackLightning": {
+      "files": ["attack/lightning_1.ogg", "attack/lightning_2.ogg"],
+      "vol": -14, "pitch": 12, "throttle": 80, "voices": 3
+    },
+    "AttackPoison": {
+      "files": ["attack/poison_1.ogg", "attack/poison_2.ogg"],
+      "vol": -13, "pitch": 10, "throttle": 90, "voices": 2
+    },
+    // El cañón es el único grave de la lista, y por eso es el único con
+    // throttle largo: en un parlante de celular los graves no se oyen pero sí
+    // consumen headroom, y encimados enturbian todo lo demás.
+    "AttackCannon": {
+      "files": ["attack/cannon_1.ogg", "attack/cannon_2.ogg"],
+      "vol": -11, "pitch": 6, "throttle": 140, "voices": 2
+    },
+    "AttackMelee": {
+      "files": ["attack/melee_1.wav", "attack/melee_2.wav"],
+      "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
+    },
+
+    // --------------------------------------------------------------- impactos
+    // Suenan 6 ticks después del disparo (`Game.TicksDeVuelo`), que es cuando
+    // el proyectil dibujado llega. Van 3 dB por debajo del ataque: el par
+    // ataque+impacto tiene que leerse como UN evento, no como dos.
+    "ImpactArrow": {
+      "files": ["impact/arrow_1.ogg", "impact/arrow_2.ogg"],
+      "vol": -15, "pitch": 12, "throttle": 60, "voices": 4
+    },
+    "ImpactSword": {
+      "files": ["impact/sword_1.ogg", "impact/sword_2.ogg"],
+      "vol": -15, "pitch": 12, "throttle": 60, "voices": 4
+    },
+    "ImpactMagic": {
+      "files": ["impact/magic_1.ogg", "impact/magic_2.ogg"],
+      "vol": -16, "pitch": 12, "throttle": 60, "voices": 4
+    },
+    "ImpactFire": {
+      "files": ["impact/fire_1.ogg", "impact/fire_2.ogg"],
+      "vol": -16, "pitch": 10, "throttle": 70, "voices": 3
+    },
+    "ImpactIce": {
+      "files": ["impact/ice_1.ogg", "impact/ice_2.ogg"],
+      "vol": -15, "pitch": 10, "throttle": 70, "voices": 3
+    },
+    "ImpactSoft": {
+      "files": ["impact/soft_1.ogg", "impact/soft_2.ogg"],
+      "vol": -16, "pitch": 12, "throttle": 60, "voices": 4
+    },
+
+    // ---------------------------------------------------------------- torres
+    // Acciones del jugador: pasan de a una y tienen que confirmarse, así que
+    // van más fuerte y sin throttle real.
+    "TowerPlace": {
+      "files": ["tower/place_1.wav", "tower/place_2.wav"],
+      "vol": -7, "pitch": 6, "throttle": 0, "voices": 2
+    },
+    "TowerUpgrade": {
+      "files": ["tower/upgrade_1.ogg"],
+      "vol": -8, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    "TowerSell": {
+      "files": ["tower/sell_1.ogg"],
+      "vol": -8, "pitch": 4, "throttle": 0, "voices": 2
+    },
+    "TowerUnlock": {
+      "files": ["tower/unlock_1.ogg"],
+      "vol": -7, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    // Seleccionar pasa muchísimo —cada vez que se cambia de clase en la barra—
+    // así que es el más bajo del archivo. Tiene que confirmar, no anunciarse.
+    "TowerSelect": {
+      "files": ["tower/select_1.ogg"],
+      "vol": -18, "pitch": 6, "throttle": 40, "voices": 2
+    },
+
+    // -------------------------------------------------------------- enemigos
+    // ⚠ `EnemyHurt` NO se dispara por golpe. Se dispara como mucho una vez cada
+    // 180 ms para TODA la pantalla: con 60 bichos recibiendo daño de nueve
+    // defensores, un sonido por golpe son cientos de voces por segundo.
+    "EnemyHurt": {
+      "files": ["enemy/hurt_1.ogg", "enemy/hurt_2.ogg", "enemy/hurt_3.wav"],
+      "vol": -16, "pitch": 14, "throttle": 180, "voices": 2
+    },
+    "EnemyDeath": {
+      "files": ["enemy/death_1.ogg", "enemy/death_2.wav", "enemy/death_3.wav"],
+      "vol": -13, "pitch": 12, "throttle": 90, "voices": 3
+    },
+    // El rugido del jefe suena una vez por aparición y es de los pocos eventos
+    // que puede permitirse ser protagonista.
+    "EnemyBoss": {
+      "files": ["enemy/boss_1.ogg", "enemy/boss_2.ogg"],
+      "vol": -5, "pitch": 4, "throttle": 500, "voices": 1
+    },
+    // Un enemigo llegó a la Torre. Es la peor noticia del juego y tiene que
+    // cortar por encima de todo lo demás: es el más fuerte del archivo.
+    "EnemyLeak": {
+      "files": ["enemy/leak_1.ogg"],
+      "vol": -4, "pitch": 0, "throttle": 250, "voices": 2
+    },
+
+    // --------------------------------------------------------------------- UI
+    "UiClick": {
+      "files": ["ui/click_1.ogg", "ui/click_2.ogg"],
+      "vol": -12, "pitch": 6, "throttle": 30, "voices": 3
+    },
+    // El hover es el sonido más fácil de volver insoportable del juego entero:
+    // el mouse cruza diez botones sin que el jugador quiera hacer nada. Va muy
+    // bajo y con throttle largo.
+    "UiHover": {
+      "files": ["ui/hover_1.ogg", "ui/hover_2.ogg"],
+      "vol": -22, "pitch": 8, "throttle": 90, "voices": 2
+    },
+    "UiConfirm": {
+      "files": ["ui/confirm_1.ogg", "ui/confirm_2.ogg"],
+      "vol": -9, "pitch": 4, "throttle": 0, "voices": 2
+    },
+    "UiCancel": {
+      "files": ["ui/cancel_1.ogg", "ui/cancel_2.ogg"],
+      "vol": -11, "pitch": 4, "throttle": 0, "voices": 2
+    },
+    "UiError": {
+      "files": ["ui/error_1.ogg", "ui/error_2.ogg"],
+      "vol": -9, "pitch": 0, "throttle": 120, "voices": 1
+    },
+    "UiBuy": {
+      "files": ["ui/buy_1.ogg"],
+      "vol": -8, "pitch": 5, "throttle": 0, "voices": 2
+    },
+    "UiCoins": {
+      "files": ["ui/coins_1.ogg", "ui/coins_2.ogg"],
+      "vol": -12, "pitch": 10, "throttle": 60, "voices": 3
+    },
+    "UiReward": {
+      "files": ["ui/reward_1.ogg"],
+      "vol": -7, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    "UiMenuOpen": {
+      "files": ["ui/menu_open_1.ogg"],
+      "vol": -11, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    "UiMenuClose": {
+      "files": ["ui/menu_close_1.ogg"],
+      "vol": -11, "pitch": 0, "throttle": 0, "voices": 1
+    },
+
+    // ------------------------------------------------------------------ juego
+    "WaveStart": {
+      "files": ["game/wave_start_1.ogg"],
+      "vol": -6, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    // ⚠ El de fin de oleada es el que pedía el hilo de trabajo: es lo único que
+    // avisa que la fase de preparación se abrió. Sin él, el jugador descubre que
+    // el reloj se paró recién cuando mira el HUD.
+    "WaveEnd": {
+      "files": ["game/wave_end_1.ogg"],
+      "vol": -6, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    "SkillReady": {
+      "files": ["game/skill_ready_1.ogg"],
+      "vol": -10, "pitch": 0, "throttle": 0, "voices": 1
+    },
+    "CooldownReady": {
+      "files": ["game/cooldown_ready_1.ogg"],
+      "vol": -13, "pitch": 0, "throttle": 200, "voices": 1
+    }
+  },
+
+  "music": {
+    // Las siete pistas. Todas CC0, todas de la misma serie salvo el jefe, que es
+    // lo que hace que suenen como un soundtrack y no como una recopilación.
+    //
+    // ⚠ El volumen de la música va MUY por debajo del de los efectos —el más
+    // alto acá es -14 dB contra los -4 dB del peor aviso—. Es un tower defense:
+    // la música es fondo y los efectos son información. Si empatan, el jugador
+    // deja de oír que se le está filtrando un bicho.
+    //
+    // `loop` en false solo para las dos que cierran la corrida: victoria y
+    // derrota suenan una vez y se callan.
+    "Menu":    { "file": "menu.mp3",    "vol": -14, "loop": true },
+    "Calm":    { "file": "calm.wav",    "vol": -17, "loop": true },
+    "Normal":  { "file": "normal.mp3",  "vol": -16, "loop": true },
+    "Intense": { "file": "intense.mp3", "vol": -15, "loop": true },
+    "Boss":    { "file": "boss.wav",    "vol": -14, "loop": true },
+    "Victory": { "file": "victory.mp3", "vol": -12, "loop": false },
+    "Defeat":  { "file": "defeat.mp3",  "vol": -12, "loop": false }
+  }
+}

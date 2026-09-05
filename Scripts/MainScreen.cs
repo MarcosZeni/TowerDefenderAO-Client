@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
+using TowerOfArgentum.Audio;
 using TowerOfArgentum.Simulation;
 using TowerOfArgentum.Ui;
 
@@ -200,6 +201,16 @@ public partial class MainScreen : Control
         this.RarityLegend(UiLayout.FooterLegend);
     }
 
+    /// <summary>
+    /// Un botón del menú. <b>Todos los del menú pasan por acá.</b>
+    /// </summary>
+    /// <remarks>
+    /// ⚠ El click suena en esta fábrica y no en cada <c>alApretar</c>, que es la
+    /// única forma de que no se olvide en el próximo botón que alguien agregue. Y
+    /// va antes de la acción a propósito: varias de esas acciones son
+    /// <c>async</c> y abren un panel después de una vuelta al servidor —el
+    /// sonido tiene que confirmar el click ya, no cuando conteste la API—.
+    /// </remarks>
     private static Button Boton(string texto, System.Action alApretar)
     {
         var b = new Button
@@ -208,7 +219,13 @@ public partial class MainScreen : Control
             CustomMinimumSize = new Vector2(UiLayout.HeroesPanel.Size.X - 32f, 46),
         };
 
-        b.Pressed += alApretar;
+        b.Pressed += () =>
+        {
+            Sfx.Click();
+            alApretar();
+        };
+
+        b.MouseEntered += () => Sfx.Play(SoundId.UiHover);
 
         return b;
     }
