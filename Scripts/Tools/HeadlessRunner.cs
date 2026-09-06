@@ -138,6 +138,15 @@ public static class HeadlessRunner
                     ArtChecker.Execute();
                     return true;
 
+                // Sin argumentos corta Resources\ui\pieces\sheet.png. El segundo
+                // es la tolerancia contra el color de fondo, y solo se toca si el
+                // recorte deja halo o se come el borde.
+                case "--recortar-ui":
+                    UiSlicer.Execute(
+                        i + 1 < args.Length ? args[i + 1] : "",
+                        (i + 2 < args.Length && int.TryParse(args[i + 2], out int tol)) ? tol : 0);
+                    return true;
+
                 case "--empaquetar-arte":
                     // Sin destino va a ..\build\arte.pck, que es el de escritorio.
                     // Para Android se pasa res://arte.pck, así queda adentro del

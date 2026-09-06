@@ -354,6 +354,15 @@ public static class UiStyle
     {
         var relleno = elevado ? Palette.PanelElevated : Palette.Panel;
 
+        // ⚠ La textura primero, y si está, no se dibuja nada más: el marco, la
+        // franja de luz de arriba y las escuadras ya vienen pintados adentro de
+        // la pieza. Superponerles los de abajo daba un panel con doble borde.
+        if (ci.Piece(elevado ? UiPiece.PanelElevated : UiPiece.Panel,
+                    r, Colors.White.Alpha(opacidad)))
+        {
+            return;
+        }
+
         ci.DrawRect(r, relleno.Alpha(opacidad));
 
         // Una franja apenas más clara arriba: la luz cae de arriba en todo el
@@ -417,8 +426,30 @@ public static class UiStyle
     {
         if (vacio)
         {
-            ci.DrawRect(r, Palette.BackgroundAlt.Alpha(0.85f));
-            ci.DrawRect(r, Palette.BorderSoft, filled: false, width: 1.5f);
+            if (!ci.Piece(UiPiece.Slot, r))
+            {
+                ci.DrawRect(r, Palette.BackgroundAlt.Alpha(0.85f));
+                ci.DrawRect(r, Palette.BorderSoft, filled: false, width: 1.5f);
+            }
+
+            return;
+        }
+
+        // ⚠ Cada rareza tiene su propia textura, con su metal. Se elige por
+        // COLOR y no por un enum porque este método recibe un color: lo llaman
+        // tanto la mochila —que sí sabe la rareza— como la tienda y el panel del
+        // defensor, que solo tienen el color ya resuelto.
+        if (ci.Piece(UiPieces.SlotFor(rareza), r))
+        {
+            // El resplandor y la marca de elegido siguen yendo por encima: son
+            // estado, no material, y tienen que poder aparecer y desaparecer sin
+            // cambiar la textura.
+            if (elegido)
+            {
+                ci.Glow(r, rareza, 1.8f, 5);
+                ci.ChosenMark(r, rareza);
+            }
+
             return;
         }
 
@@ -486,18 +517,41 @@ public static class UiStyle
     {
         var c = habilitado ? acento : Palette.TextDisabled;
 
-        ci.DrawRect(r, Palette.BackgroundMain.Alpha(0.9f));
+        // La pieza correspondiente al estado. `relleno: false` es el botón
+        // secundario —el que no llama la atención— y para eso está el apretado,
+        // que es el más hundido de los cuatro.
+        var pieza = !habilitado ? UiPiece.ButtonDisabled
+                  : encima ? UiPiece.ButtonHover
+                  : !relleno ? UiPiece.ButtonPressed
+                  : UiPiece.Button;
 
-        if (relleno)
-            ci.DrawRect(r, c.Alpha(encima ? 0.45f : 0.28f));
-        else if (encima)
-            ci.DrawRect(r, c.Alpha(0.14f));
+        // ⚠ Se tiñe con el acento a media fuerza, no a full: la textura ya trae
+        // su propio metal azulado, y multiplicarla por un acento saturado —el
+        // violeta de épico, el rojo de único— la deja del color del acento y
+        // pierde el relieve. La mezcla con blanco conserva el metal y deja que
+        // se lea de qué color es el botón.
+        var tinte = habilitado ? Colors.White.Lerp(c, 0.35f) : Colors.White.Darkened(0.25f);
 
-        if (habilitado && encima)
-            ci.Glow(r, c, 1.2f, 3);
+        if (ci.Piece(pieza, r, tinte))
+        {
+            if (habilitado && encima)
+                ci.Glow(r, c, 0.7f, 2);
+        }
+        else
+        {
+            ci.DrawRect(r, Palette.BackgroundMain.Alpha(0.9f));
 
-        ci.DrawRect(r, c, filled: false, width: 2f);
-        ci.Corners(r, c.Alpha(0.85f), 2f);
+            if (relleno)
+                ci.DrawRect(r, c.Alpha(encima ? 0.45f : 0.28f));
+            else if (encima)
+                ci.DrawRect(r, c.Alpha(0.14f));
+
+            if (habilitado && encima)
+                ci.Glow(r, c, 1.2f, 3);
+
+            ci.DrawRect(r, c, filled: false, width: 2f);
+            ci.Corners(r, c.Alpha(0.85f), 2f);
+        }
 
         ci.Label(r, texto.ToUpperInvariant(),
             (int)Mathf.Min(19f, r.Size.Y * 0.46f),
@@ -510,14 +564,17 @@ public static class UiStyle
     /// </summary>
     public static void Tab(this CanvasItem ci, Rect2 r, string texto, bool activa)
     {
-        ci.DrawRect(r, activa ? Palette.PanelElevated : Palette.BackgroundAlt.Alpha(0.85f));
-        ci.DrawRect(r, activa ? Palette.BorderNormal : Palette.BorderSoft, filled: false, width: 1.5f);
+        if (!ci.Piece(activa ? UiPiece.TabActive : UiPiece.TabInactive, r))
+        {
+            ci.DrawRect(r, activa ? Palette.PanelElevated : Palette.BackgroundAlt.Alpha(0.85f));
+            ci.DrawRect(r, activa ? Palette.BorderNormal : Palette.BorderSoft, filled: false, width: 1.5f);
 
-        // La barra de arriba es lo que dice cuál está elegida. Va arriba y no
-        // abajo porque abajo está el contenido: una línea inferior se leería
-        // como el borde del panel.
-        if (activa)
-            ci.DrawRect(r.Row(0, 3f), Palette.Info);
+            // La barra de arriba es lo que dice cuál está elegida. Va arriba y no
+            // abajo porque abajo está el contenido: una línea inferior se leería
+            // como el borde del panel.
+            if (activa)
+                ci.DrawRect(r.Row(0, 3f), Palette.Info);
+        }
 
         ci.Label(r, texto.ToUpperInvariant(),
             (int)Mathf.Min(17f, r.Size.Y * 0.44f),
