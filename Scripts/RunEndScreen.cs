@@ -111,6 +111,12 @@ public partial class RunEndScreen : Control
 
         bool gano = partida.State == RunState.Won;
 
+        // ⚠ Esta pantalla también explica, y es donde más falta hace: es el único
+        // momento en que el jugador ve las tres cifras con las que lo va a ordenar
+        // el ranking. Entender acá por qué quedó donde quedó es lo que hace que la
+        // próxima corrida se juegue distinto.
+        UiTooltip.Begin(GetGlobalMousePosition());
+
         this.Scrim();
 
         var panel = new Rect2((Canvas.CanvasWidth / 2f) - 420f, (Canvas.CanvasHeight / 2f) - 220f,
@@ -143,15 +149,22 @@ public partial class RunEndScreen : Control
         int segundos = partida.Tick / Ints.TicksPerSecond;
 
         Cifra(0, Loc.Get("ui.fin.area"),
-            DataLoader.Current.Areas.OfWave(partida.Wave).ToString(), Palette.TextPrimary);
+            DataLoader.Current.Areas.OfWave(partida.Wave).ToString(), Palette.TextPrimary,
+            "ui.ayuda.fin_area");
 
-        Cifra(1, Loc.Get("ui.preparacion.wave"), partida.Wave.ToString(), Palette.TextPrimary);
+        Cifra(1, Loc.Get("ui.preparacion.wave"), partida.Wave.ToString(), Palette.TextPrimary,
+            "ui.ayuda.fin_oleada");
 
-        Cifra(2, Loc.Get("ui.fin.ticks"), $"{segundos / 60:00}:{segundos % 60:00}", Palette.Info);
+        Cifra(2, Loc.Get("ui.fin.ticks"), $"{segundos / 60:00}:{segundos % 60:00}", Palette.Info,
+            "ui.ayuda.fin_ticks");
 
         // Los ticks son el desempate del ranking, así que se dice para qué sirven.
-        this.Label(panel.Row(300f, 24f), Loc.Get("ui.fin.desempate"), 16, Palette.TextMuted,
+        var desempate = panel.Row(300f, 24f);
+
+        this.Label(desempate, Loc.Get("ui.fin.desempate"), 16, Palette.TextMuted,
             HorizontalAlignment.Center);
+
+        UiTooltip.Help(desempate, "ui.ayuda.ranking");
 
         if (_oroGanado >= 0)
         {
@@ -161,6 +174,12 @@ public partial class RunEndScreen : Control
 
             this.Label(panel.Row(366f, 24f), Loc.Get("ui.fin.de_oro_a_la_billetera"), 16,
                 Palette.Gold, HorizontalAlignment.Center);
+
+            // ⚠ Este oro SÍ es permanente, al revés del de la corrida. Es la
+            // única vez que los dos oros aparecen cerca, y confundirlos es lo que
+            // hace que alguien guarde oro adentro de la corrida creyendo que se
+            // lo lleva.
+            UiTooltip.Over(oro, UiStyle.Thousands((int)_oroGanado), "ui.ayuda.oro_ganado");
         }
 
         this.Label(panel.Row(panel.Size.Y - 62f, 24f), _estadoEnvio, 16, Palette.TextMuted,
@@ -169,7 +188,10 @@ public partial class RunEndScreen : Control
         this.Label(panel.Row(panel.Size.Y - 36f, 24f), Loc.Get("ui.fin.esc_volver"), 15,
             Palette.TextDisabled, HorizontalAlignment.Center);
 
-        void Cifra(int i, string etiqueta, string valor, Color color)
+        // Último de todo, como en el resto de las pantallas: el cartel va encima.
+        UiTooltip.Draw(this);
+
+        void Cifra(int i, string etiqueta, string valor, Color color, string ayuda)
         {
             float ancho = panel.Size.X / 3f;
             var celda = new Rect2(panel.Position.X + (i * ancho), panel.Position.Y + 200f, ancho, 90f);
@@ -178,6 +200,8 @@ public partial class RunEndScreen : Control
                 HorizontalAlignment.Center);
 
             this.Label(celda.Row(24f, 46f), valor, 40, color, HorizontalAlignment.Center);
+
+            UiTooltip.Over(celda, $"{etiqueta}: {valor}", ayuda);
         }
     }
 }

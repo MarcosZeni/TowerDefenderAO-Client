@@ -673,6 +673,169 @@
     "ui.fin.ticks": "ticks",
     "ui.fin.desempate": "el ranking desempata por ticks: menos es mejor",
     "ui.fin.de_oro_a_la_billetera": "de oro a la billetera",
-    "ui.fin.esc_volver": "esc para volver al menú"
+    "ui.fin.esc_volver": "esc para volver al menú",
+
+    // --- Los carteles del HUD que faltaban ----------------------------------
+    "ui.hud.pausar": "Pausar",
+    "ui.hud.reanudar": "Reanudar",
+
+    // --- El interruptor de las ayudas ---------------------------------------
+    "ui.opciones.ayudas": "Ayudas",
+    "ui.opciones.explicaciones": "Explicar las reglas en los carteles",
+    "ui.opciones.explicaciones_detalle": "apaga la explicación, nunca el dato: los stats y los nombres se siguen viendo",
+
+    // =========================================================================
+    //  LAS AYUDAS
+    // =========================================================================
+    //
+    // ⚠ Es la MITAD DE ABAJO de un cartel, no el cartel entero. Arriba va el dato
+    // —cuánto pega, cómo se llama, cuántos vienen— y acá abajo la regla del juego
+    // que hay detrás. El jugador las apaga en Opciones y el dato queda.
+    //
+    // Se escriben para alguien que NO leyó nada: nada de «como ya sabés», nada de
+    // referencias a otras pantallas por su nombre interno. Y explican la REGLA,
+    // no el control: «esto destruye el perk» sirve, «hacé doble click acá» ya lo
+    // dice el renglón que está al lado.
+    //
+    // ⚠ Van cortas. El cartel corta a 420 px y se lee de pasada, con el mouse
+    // quieto y la oleada esperando: tres renglones es el techo real.
+
+    // --- La barra de arriba ---------------------------------------------------
+    "ui.ayuda.oleada": "La corrida son 100 oleadas y termina ahí: matás al jefe final del área 8 y ganaste. No hay modo sin fin.",
+    "ui.ayuda.vida_de_torre": "La Torre es lo que defendés. Todo enemigo que llega hasta ella le pega, y si llega a cero se terminó la corrida.",
+    "ui.ayuda.oro": "El oro de la corrida: se gasta en la tienda cada 3 oleadas y en subir de nivel. NO es la billetera de tu cuenta — este muere con la corrida, así que guardarlo no sirve de nada.",
+    "ui.ayuda.menu": "Guarda y sale. La corrida queda para continuar: se retoma en la preparación de la oleada donde la dejaste.",
+    "ui.ayuda.pausa": "Frena el reloj para mirar. No deja actuar: el ranking desempata por tiempo, así que pensar con el reloj parado sería tiempo gratis.",
+
+    // --- El roster ------------------------------------------------------------
+    "ui.ayuda.roster": "Tus clases. Se arrastran al mapa para poner defensores, y cada ficha puesta cuesta oro aparte.",
+    "ui.ayuda.roster_vacio": "Las clases te tocan al azar: la primera tienda te ofrece 3 y te quedás con 2, gratis. De ahí en más se reclutan comprándolas.",
+    "ui.ayuda.tarjeta_de_clase": "Todo —nivel, perks y arma— es de la CLASE, no de la ficha: subir el nivel mejora a todos los defensores de esta clase que tengas puestos.",
+    "ui.ayuda.clase_sellada": "La segunda clase gratis entra sellada: sube de nivel y equipa, pero no se puede poner en el tablero hasta la tienda de la oleada 3. El sello se levanta solo.",
+
+    // --- La barra de build ----------------------------------------------------
+    "ui.ayuda.perks_equipados": "Los perks de la clase elegida. Los slots se abren al subir de nivel: el nivel abre capacidad y los drops la llenan.",
+    "ui.ayuda.arma_equipada": "El arma de la clase. Si trae habilidad, pelea con el perk de Oro por la única ranura de comportamiento — elegís cuál habla en la mochila.",
+    "ui.ayuda.planos_activos": "Los planos que conocés: son las recetas para fusionar dos perks de Oro en un Único.",
+    "ui.ayuda.mochila": "Lo que te cayó y todavía no equipaste. Tiene tope, y lo que no entra se pierde en silencio.",
+    "ui.ayuda.mochila_lugar": "Lo que cae de los enemigos espera acá. Cuando se llena, el próximo drop se pierde: marcá varios perks del mismo tier y apretá MEJORAR para hacer lugar.",
+    "ui.ayuda.mochila_llena": "Está llena: todo lo que caiga ahora se pierde sin avisar. Mejorá las sobras —4 bronces hacen 1 plata, 3 platas hacen 1 oro— o tirá lo que no vayas a usar.",
+    "ui.ayuda.mochila_llena_jefe": "Con la mochila llena, el Oro que elijas se pierde. Cerrá esto, hacé lugar en la mochila y volvé: la elección te espera.",
+
+    // --- El pie ---------------------------------------------------------------
+    "ui.ayuda.rarezas": "Bronce y plata son números y se apilan. Oro y Único son comportamientos: de esos entra UNO solo por clase.",
+    "ui.ayuda.atajos": "Todo lo que se puede hacer con el teclado. Las teclas se cambian en Opciones.",
+
+    // --- Los perks ------------------------------------------------------------
+    "ui.ayuda.perk_numero": "Bronce y plata son NÚMEROS: los puede usar cualquier clase y se apilan entre ellos. Cuatro bronces se mejoran a una plata, y tres platas a un oro.",
+    "ui.ayuda.perk_oro": "Un Oro es un COMPORTAMIENTO, y una clase equipa uno solo — el segundo rebota. Dos Oro se fusionan en un Único si conocés el plano.",
+    "ui.ayuda.perk_unico": "Los Únicos no caen ni se compran: se fusionan a partir de dos perks de Oro y un plano. Ocupan un solo slot, y hace exactamente lo que hacían los dos juntos.",
+
+    // --- La preparación -------------------------------------------------------
+    "ui.ayuda.preparacion": "El reloj está detenido y no hay límite de tiempo: acá se pone, se equipa y se compra. Quedarte pensando no te cuesta ticks.",
+    "ui.ayuda.ver_oleada": "Muestra qué viene: cuántos de cada bicho, cuáles traen perk y cuánto oro deja la oleada. Contra un jefe conviene lo contrario que contra treinta hormigas.",
+    "ui.ayuda.comenzar_oleada": "Suelta la oleada tras una cuenta de 3 segundos. Poné todo lo que el oro te permita antes: el tablero armado es la diferencia entre llegar a la oleada 15 y llegar a la 35.",
+    "ui.ayuda.adelantar": "Todavía quedan enemigos vivos: llamar a la siguiente ahora paga oro por cada uno que siga en pie. Es el riesgo de apilar dos oleadas, y es lo que baja tus ticks en el ranking.",
+    "ui.ayuda.cuenta_regresiva": "Ya viene. La cuenta es reloj de pared, no ticks: no cuenta para el ranking.",
+    "ui.ayuda.mercado_pendiente": "Quedó una tienda sin mirar. No se repone: si arrancás la oleada, esas siete ofertas se pierden hasta dentro de 3 oleadas.",
+    "ui.ayuda.tarjeta_bicho": "Un tipo de enemigo de la oleada que viene, con cuántos vienen y cuánto oro dejan entre todos.",
+    "ui.ayuda.jefe": "Un jefe: mucha vida y resiste el control a la mitad. Al morir te ofrece dos perks de Oro y elegís uno.",
+
+    // --- La tienda ------------------------------------------------------------
+    "ui.ayuda.tienda": "Siete ofertas, cada 3 oleadas. Lo que ofrece lo decide la semilla de la corrida: no se acumula y no se repone al comprar.",
+    "ui.ayuda.stock": "Lo que compres no se reemplaza, y lo que no compres no vuelve. La tienda que viene trae siete ofertas nuevas y distintas.",
+    "ui.ayuda.cupo_gratis": "Lo único gratis de toda la corrida. Elegís 2 de estas 3 clases; la tercera queda a la venta a su precio. La segunda que elijas entra sellada hasta la oleada 3.",
+    "ui.ayuda.sello_abierto": "Se levantó el sello: esta clase ya se puede poner en el tablero. Pasa solo, sin gastar nada.",
+    "ui.ayuda.oferta_clase": "Suma la clase al roster en nivel 1. Es lo que compra ancho de tablero, y cuesta unas ocho fichas — pero sin ella esa clase no existe en esta corrida.",
+    "ui.ayuda.oferta_nivel": "Sube de nivel a una clase: más stats y un slot de perk cada tantos niveles. El precio crece al cuadrado, así que el próximo va a costar bastante más.",
+    "ui.ayuda.oferta_plano": "Una receta de fusión, y vale SOLO para esta corrida. El permanente se compra con la billetera desde el menú principal.",
+    "ui.ayuda.oferta_arma": "Un arma para equipar. Si trae habilidad, ocupa la misma ranura que un perk de Oro — los stats del arma quedan igual, elijas cuál elijas.",
+
+    // --- El defensor ----------------------------------------------------------
+    "ui.ayuda.targeting": "Lo único que es de ESTA ficha y no de la clase: dos defensores de la misma clase pueden apuntar distinto según dónde estén parados.",
+    "ui.ayuda.targeting.First": "El que más avanzó por la ruta. Es el que primero llega a la Torre, y sirve casi siempre.",
+    "ui.ayuda.targeting.Strongest": "El de más vida. Para concentrar fuego en el jefe o en el líder de la oleada.",
+    "ui.ayuda.targeting.Weakest": "El de menos vida. Remata lo que quedó herido y evita gastar dos golpes en el mismo bicho.",
+    "ui.ayuda.targeting.NearestTower": "El más cerca de la Torre en línea recta. Es la última defensa: lo que se filtró.",
+    "ui.ayuda.vender_defensor": "Saca esta ficha del tablero y devuelve parte del oro. La CLASE no se pierde: nivel, perks y arma quedan intactos. Para reacomodar el tablero no hace falta vender, se arrastra.",
+    "ui.ayuda.aura": "Los aliados adentro del radio reciben este efecto. Un aura no se ve en el tablero: este renglón es la única forma de saber a cuántos está llegando.",
+    "ui.ayuda.conflicto_comportamiento": "La ranura de comportamiento es una sola y hay dos cosas peleándola. Elegís cuál habla; los stats del arma se conservan en los dos casos.",
+
+    // --- El jefe --------------------------------------------------------------
+    "ui.ayuda.eleccion_del_jefe": "Ocho jefes por corrida, un Oro elegido por jefe: son las ocho decisiones de comportamiento que vas a tomar. El jefe final no suelta nada — con él termina la corrida.",
+
+    // --- La mochila -----------------------------------------------------------
+    "ui.ayuda.mejorar": "Marcá varios perks del mismo tier y esto los funde en uno mejor: 4 bronces hacen 1 plata. Es la salida de las sobras cuando la mochila se llena.",
+    "ui.ayuda.mejorar_a_oro": "Tres platas hacen un Oro, y hay tope: como mucho dos Oro fabricados por corrida. Los otros salen de los jefes o de la tienda.",
+    "ui.ayuda.equipar": "Lo equipa en la CLASE, no en la ficha: lo van a tener todos los defensores de esa clase. Ojo, sacarlo después lo destruye.",
+    "ui.ayuda.sacar_destruye": "Sacar un perk equipado LO DESTRUYE: no vuelve a la mochila. Equipar es gastarlo, no prestarlo.",
+    "ui.ayuda.tirar_perk": "Los perks no se venden, se tiran: no devuelven oro. Antes de tirar, fijate si se puede mejorar con otros del mismo tier.",
+    "ui.ayuda.vender_arma": "Las armas sí devuelven oro al venderlas. Es la única cosa de la mochila que se convierte en plata.",
+    "ui.ayuda.subir_nivel": "El precio crece con el cuadrado del nivel: cada uno cuesta bastante más que el anterior. Es el sumidero de oro de la corrida — terminar con oro sin gastar es haber jugado a medias.",
+    "ui.ayuda.fusionar": "Consume dos perks de Oro y devuelve un Único en un solo slot. El Único hace lo de los dos juntos, y el slot que libera es la mitad del premio.",
+    "ui.ayuda.planos": "Las recetas que conoce tu cuenta. Se compran una vez con la billetera y quedan para siempre: son la única progresión permanente del juego, y la lista es finita.",
+
+    // --- El menú principal ----------------------------------------------------
+    "ui.ayuda.continuar": "Retoma la corrida que dejaste a medias, en la preparación de la oleada donde la cerraste.",
+    "ui.ayuda.jugar": "Abre una corrida nueva de 100 oleadas. Si tenías una a medias, esto la abandona: una sola corrida abierta por cuenta.",
+    "ui.ayuda.tienda_de_planos": "Los planos se compran con la billetera de tu cuenta y quedan aprendidos para siempre. Es lo único que sobrevive a una corrida.",
+    "ui.ayuda.ranking": "Tabla global: primero los que ganaron y entre ellos el más rápido, después los que no, por distancia. Por eso existe adelantar oleada.",
+    "ui.ayuda.plano_permanente": "Comprado acá queda aprendido para siempre en esta cuenta. El que vende la tienda adentro de una corrida vale solo esa corrida.",
+    "ui.ayuda.plano_aprendido": "Ya lo tenés: la receta está disponible en todas tus corridas, para siempre.",
+    "ui.ayuda.billetera": "La billetera de tu cuenta. Se llena al terminar corridas y solo compra planos: no se puede gastar adentro de una partida.",
+
+    // --- El tablero -----------------------------------------------------------
+    //
+    // ⚠ El motivo corto lo devuelve Run.PlaceBlockedKey y va en el renglón de
+    // arriba del cartel; esto es la explicación de abajo. Los dos textos existen
+    // porque el de arriba se sigue viendo con las ayudas apagadas.
+    "ui.mapa.clase_no_reclutada": "no tenés esta clase",
+    "ui.mapa.clase_sellada": "clase sellada",
+    "ui.mapa.es_ruta": "por acá caminan",
+    "ui.mapa.no_colocable": "acá no se puede construir",
+    "ui.mapa.sin_oro": "no te alcanza el oro",
+    "ui.mapa.ocupada": "celda ocupada",
+
+    "ui.ayuda.celda_libre": "Arrastrá una clase desde la columna de la izquierda hasta acá para poner un defensor. Un click sobre una celda vacía no pone nada, a propósito.",
+    "ui.ayuda.celda_ruta": "Por las celdas de la ruta caminan los enemigos, y ahí no se construye. Poné al lado: lo que decide es el alcance, que se ve como un círculo al apuntar.",
+    "ui.ayuda.celda_bloqueada": "Esta celda no admite defensores: es pared o borde del mapa. Cada uno de los 12 mapas tiene sus lugares, y la semilla decide cuál te toca.",
+    "ui.ayuda.celda_sin_oro": "Te falta oro para poner esta clase. El oro entra matando enemigos y adelantando oleadas.",
+    "ui.ayuda.celda_ocupada": "Ya hay un defensor acá. Arrastralo a otra celda para moverlo — mover es gratis; vender devuelve solo una parte.",
+    "ui.ayuda.defensor_puesto": "Click para abrir su panel: ahí se elige a quién apunta y se lo vende. Arrastralo para moverlo, que no cuesta nada.",
+    "ui.ayuda.clases_de_mas": "Tenés más clases de las que entran en la columna. Se siguen viendo y equipando desde la mochila.",
+
+    // --- La mochila, lo que faltaba -------------------------------------------
+    "ui.ayuda.tab_perks": "Los perks que te cayeron y todavía no equipaste. Ocupan lugar en la mochila.",
+    "ui.ayuda.tab_armas": "Las armas sueltas. También ocupan lugar, pero se pueden vender por oro.",
+    "ui.ayuda.tab_planos": "Las recetas de fusión. No ocupan lugar en la mochila: son de tu cuenta, no de esta corrida.",
+    "ui.ayuda.filtro": "Muestra solo lo que la clase elegida puede equipar, o todo. Un perk de Oro suele servirle a dos o tres clases y no a las nueve.",
+    "ui.ayuda.orden": "Ordena la grilla por rareza o por orden de llegada. Por rareza es lo cómodo para buscar qué mejorar.",
+    "ui.ayuda.arma": "Un arma para equipar en una clase. Reemplaza el arma que tenga puesta, y la vieja vuelve a la mochila.",
+    "ui.ayuda.arma_con_habilidad": "Trae habilidad, y eso pelea por la única ranura de comportamiento de la clase: si además tiene un perk de Oro, elegís cuál de los dos habla. Los stats del arma quedan igual.",
+    "ui.ayuda.slot_cerrado": "Este slot se abre cuando la clase llegue a ese nivel. Es para lo que sirve pagar niveles: el nivel abre capacidad y los drops la llenan.",
+    "ui.ayuda.slot_vacio": "Slot abierto y vacío. Elegí un perk de la grilla del medio y apretá EQUIPAR.",
+    "ui.ayuda.golpe_directo": "Solo el golpe directo dispara efectos. El daño en área, la cadena, el rebote y el veneno restan vida y nada más: no aplican estados ni encadenan con otro perk.",
+    "ui.ayuda.estados": "Los estados no se suman: manda el más fuerte y cada aplicación renueva la duración. Dos defensores con el mismo buff no dan el doble.",
+
+    // --- La tienda, lo que faltaba --------------------------------------------
+    "ui.ayuda.vendido": "Comprado. La ranura queda vacía: la tienda no repone lo que se vende, y estas ofertas se van con la próxima oleada.",
+    "ui.ayuda.ya_reclutada": "Ya tenés esta clase, así que la oferta se retiró. Para mejorarla, lo que se compra es nivel.",
+    "ui.ayuda.nivel_maximo": "Esta clase ya está en su nivel máximo: no queda nada más que comprarle. Lo que le sigue faltando son perks y arma.",
+
+    // --- El jefe, lo que faltaba ----------------------------------------------
+    "ui.ayuda.le_sirve": "Un perk de Oro sirve para dos o tres clases, nunca para las nueve. Estas son las que lo pueden equipar.",
+    "ui.ayuda.no_le_sirve_a_nadie": "Ninguna clase que tengas puede equiparlo hoy, y aun así puede convenir: se guarda en la mochila y sirve si reclutás esa clase más adelante, o para fusionar.",
+    "ui.ayuda.completa_receta": "Con este Oro cerrás una receta que ya tenés a medias: en la mochila lo fusionás y el Único te deja además la ranura de comportamiento libre.",
+
+    // --- El fin de la corrida -------------------------------------------------
+    "ui.ayuda.fin_area": "Hasta qué área de las ocho llegaste. Las áreas no se eligen: se llega o no se llega.",
+    "ui.ayuda.fin_oleada": "En qué oleada de las 100 terminó. Es lo primero que mira el ranking entre los que no ganaron.",
+    "ui.ayuda.fin_ticks": "Cuánto duró la corrida en tiempo de juego. Entre dos que ganaron, gana el más rápido — por eso conviene adelantar oleadas.",
+    "ui.ayuda.oro_ganado": "Este oro sí es permanente: va a la billetera de tu cuenta y sirve para comprar planos. El oro de la corrida, en cambio, se perdió con ella.",
+
+    // --- Las tres columnas de la tienda ---------------------------------------
+    "ui.ayuda.zona0": "Reclutar clases nuevas y subirles el nivel. Es lo que compra ancho de tablero y capacidad de perks.",
+    "ui.ayuda.zona1": "Perks sueltos y planos de fusión. Van a la mochila: no se equipan solos, y ocupan lugar.",
+    "ui.ayuda.zona2": "Armas. Cada clase equipa una, y las que traen habilidad pelean por la ranura de comportamiento."
   }
 }

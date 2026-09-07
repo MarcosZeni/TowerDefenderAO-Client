@@ -313,6 +313,7 @@ public partial class Game : Node2D
     /// <summary>Bajo qué celda está el mouse. Fuera de la grilla, <c>null</c>.</summary>
     private Cell? _celdaMouse;
 
+
     /// <summary>
     /// Registra una acción del jugador y la encola para el tick <b>siguiente</b>.
     /// </summary>
@@ -1111,6 +1112,21 @@ public partial class Game : Node2D
     /// columna del roster cae en coordenadas de mundo negativas, que
     /// <c>(int)</c> trunca <b>hacia cero</b> y convierte en la celda 0.</para>
     /// </remarks>
+    /// <summary>
+    /// La celda que hay en esa posición de pantalla, para quien dibuja encima.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ La usa el <see cref="Hud"/> para explicar el tablero. Va por acá y no
+    /// por el <c>_celdaMouse</c> guardado a propósito: ese campo lo actualiza un
+    /// evento de movimiento, y cualquier pantalla que se coma el evento lo deja
+    /// viejo — el cartel terminaría explicando una celda que el cursor abandonó.
+    /// Preguntado en el momento de dibujar, no puede desincronizarse.
+    ///
+    /// El mundo no puede explicarse solo: el cartel vive en coordenadas de
+    /// pantalla y el mundo está corrido y a escala adentro del marco.
+    /// </remarks>
+    public Cell? CellAt(Vector2 posicion) => ACelda(posicion);
+
     private Cell? ACelda(Vector2 posicion)
     {
         if (!UiLayout.InWorld(posicion))

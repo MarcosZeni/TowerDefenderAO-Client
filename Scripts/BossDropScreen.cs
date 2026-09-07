@@ -248,8 +248,16 @@ public partial class BossDropScreen : Control
             $"{p.OpenChoices.Length}",
             20, Palette.TextPrimary, HorizontalAlignment.Center);
 
-        this.Label(v.Row(84f, 22f), Loc.Get("ui.jefe.se_pierde"), 14, Palette.TextMuted,
+        var aviso = v.Row(84f, 22f);
+
+        this.Label(aviso, Loc.Get("ui.jefe.se_pierde"), 14, Palette.TextMuted,
             HorizontalAlignment.Center);
+
+        // ⚠ Ocho jefes por corrida y uno elegido por jefe: son las ocho
+        // decisiones de Oro de toda la partida, y el jefe final no suelta nada.
+        // Un jugador que trata esta pantalla como un drop más se entera de que
+        // era finita cuando ya no queda ninguna.
+        UiTooltip.Help(aviso, "ui.ayuda.eleccion_del_jefe");
     }
 
     private void Pie(Run p, Rect2 v)
@@ -257,13 +265,16 @@ public partial class BossDropScreen : Control
         // La mochila, porque tomar un Oro con la mochila llena lo tira. Es la
         // única acción útil que se puede hacer desde acá, así que se dice acá.
         int libres = p.Backpack.Cap - p.Backpack.Used;
+        var fila = v.Row(v.Size.Y - 44f, 24f);
 
-        this.Label(v.Row(v.Size.Y - 44f, 24f),
+        this.Label(fila,
             libres > 0
                 ? $"{Loc.Get("ui.jefe.mochila")} {libres}"
                 : Loc.Get("ui.jefe.mochila_llena"),
             15, libres > 0 ? Palette.TextMuted : Palette.Danger,
             HorizontalAlignment.Center);
+
+        UiTooltip.Help(fila, libres > 0 ? "ui.ayuda.mochila_lugar" : "ui.ayuda.mochila_llena_jefe");
     }
 
     /// <summary>
@@ -359,6 +370,12 @@ public partial class BossDropScreen : Control
         // sirve para nada hoy — y sigue pudiendo elegirlo, porque puede reclutar
         // la clase más adelante.
         this.Paragraph(r, texto.ToString(), 13, alguna ? Palette.TextMuted : Palette.Danger);
+
+        // El rojo dice «cuidado» y no dice qué. Que un Oro sirva solo para una
+        // clase que todavía no tenés no lo hace inútil: se puede reclutar
+        // después, y el perk espera en la mochila.
+        UiTooltip.Over(r, texto.ToString(),
+            alguna ? "ui.ayuda.le_sirve" : "ui.ayuda.no_le_sirve_a_nadie");
     }
 
     /// <summary>
@@ -398,6 +415,12 @@ public partial class BossDropScreen : Control
 
             this.Label(r.Row(18f, 22f), Loc.Perk(unico).ToUpperInvariant(), 17,
                 Palette.Legendary);
+
+            // ⚠ Es lo que convierte el sorteo del jefe en una decisión de build, y
+            // no se puede deducir de ninguna otra pantalla: entre dos Oro
+            // parecidos, el que cierra un Único vale el doble.
+            UiTooltip.Over(r, $"{Loc.Get("ui.jefe.completa")} {Loc.Perk(unico)}",
+                "ui.ayuda.completa_receta");
 
             return;
         }

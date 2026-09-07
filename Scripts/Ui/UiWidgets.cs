@@ -70,7 +70,7 @@ public static class UiWidgets
         // sobrepenetra 40%» decía dos veces lo mismo y ninguna de las dos decía
         // qué pasa al golpear, y este es el único lugar donde el jugador ve los
         // perks YA EQUIPADOS sin abrir la mochila.
-        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}");
+        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}", AyudaDeTier(perk.Tier));
 
         if (nivel > 0)
         {
@@ -184,7 +184,7 @@ public static class UiWidgets
         ci.Label(new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
             EffectLabel(perk), tamano, Palette.TextSecondary);
 
-        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}");
+        UiTooltip.Over(r, $"{Loc.Perk(perk)}\n{Loc.PerkText(perk)}", AyudaDeTier(perk.Tier));
     }
 
     /// <summary>El renglón corto: el efecto y su número, con unidad o sin ella.</summary>
@@ -203,6 +203,27 @@ public static class UiWidgets
             _ => $"{nombre} {perk.Magnitude}%",
         };
     }
+
+    /// <summary>
+    /// Qué regla del juego explica un perk, según su tier.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ La división no es de rareza, es de <b>naturaleza</b>: bronce y
+    /// plata son números y se apilan; oro y único son comportamientos y pelean
+    /// por la <b>única ranura de comportamiento</b> que tiene una clase. Un
+    /// jugador que no sabe eso equipa dos Oro, ve rebotar el segundo y no
+    /// entiende por qué.</para>
+    ///
+    /// <para>El Único además explica que no cae ni se compra: se fusiona. Es el
+    /// único poder del juego que hay que <b>fabricar</b>, y sin decirlo el
+    /// jugador espera que aparezca solo.</para>
+    /// </remarks>
+    private static string AyudaDeTier(PerkTier tier) => tier switch
+    {
+        PerkTier.Gold => "ui.ayuda.perk_oro",
+        PerkTier.Unique => "ui.ayuda.perk_unico",
+        _ => "ui.ayuda.perk_numero",
+    };
 
     /// <summary>
     /// Un hueco libre: marco apagado y un signo de más en el medio.
@@ -329,6 +350,15 @@ public static class UiWidgets
         // Y siempre con la oleada escrita. Un candado sin fecha se lee como un bug
         // o como contenido que no existe; con la fecha se lee como una promesa,
         // que es lo que es.
+        // ⚠ El cartel se declara ANTES de los dos casos que devuelven, porque los
+        // dos —sellada y normal— lo quieren. La sellada además pisa la ayuda con
+        // la del sello, que es la regla que nadie adivina: la clase se ve, sube
+        // de nivel y equipa, y aun así no se puede poner en el tablero.
+        UiTooltip.Over(r,
+            $"{Loc.Class(ficha.DefenderClass)}\n{Loc.Get("ui.hud.niv")} {ficha.Level} · " +
+            $"{ficha.Perks.Count}/{ficha.OpenSlots} {Loc.Get("ui.hud.perks")}",
+            ficha.Sealed ? "ui.ayuda.clase_sellada" : "ui.ayuda.tarjeta_de_clase");
+
         if (ficha.Sealed)
         {
             ci.DrawRect(r, Palette.BackgroundMain.Alpha(0.55f));
@@ -380,6 +410,10 @@ public static class UiWidgets
 
         ci.Label(r.Row(r.Size.Y * 0.55f, r.Size.Y * 0.3f), "?????", 17,
             Palette.TextDisabled.Alpha(0.6f), HorizontalAlignment.Center);
+
+        // El hueco del roster es lo primero que mira quien abre el juego por
+        // primera vez, y lo que no dice es de dónde salen las clases.
+        UiTooltip.Help(r, "ui.ayuda.roster_vacio");
     }
 
     // =====================================================================

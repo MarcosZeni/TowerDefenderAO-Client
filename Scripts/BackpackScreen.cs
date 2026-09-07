@@ -817,11 +817,27 @@ public partial class BackpackScreen : Control
         this.Tab(UiLayout.TabWeapons, Loc.Get("ui.mochila.tab_armas"), _pestana == Pestana.Armas);
         this.Tab(UiLayout.TabBlueprints, Loc.Get("ui.mochila.tab_planos"), _pestana == Pestana.Blueprints);
 
+        // ⚠ Las tres pestañas son TRES SISTEMAS distintos, no tres filtros de una
+        // misma lista: perks y armas ocupan lugar en la mochila y los planos no
+        // —son de la cuenta y no se guardan en ningún lado—. Sin decirlo, la
+        // tercera pestaña se lee como una categoría más que llena la mochila.
+        UiTooltip.Over(UiLayout.TabPerks, Loc.Get("ui.mochila.tab_perks"), "ui.ayuda.tab_perks");
+        UiTooltip.Over(UiLayout.TabWeapons, Loc.Get("ui.mochila.tab_armas"), "ui.ayuda.tab_armas");
+        UiTooltip.Over(UiLayout.TabBlueprints, Loc.Get("ui.mochila.tab_planos"), "ui.ayuda.tab_planos");
+
         this.Dropdown(UiLayout.FilterDropdown, "",
             _soloLoQueEntra ? Loc.Get("ui.mochila.le_entran") : Loc.Get("ui.mochila.todos"));
 
         this.Dropdown(UiLayout.SortDropdown, Loc.Get("ui.mochila.ordenar"),
             _ordenPorRareza ? Loc.Get("ui.mochila.por_rareza") : Loc.Get("ui.mochila.por_llegada"));
+
+        UiTooltip.Over(UiLayout.FilterDropdown,
+            Loc.Get(_soloLoQueEntra ? "ui.mochila.le_entran" : "ui.mochila.todos"),
+            "ui.ayuda.filtro");
+
+        UiTooltip.Over(UiLayout.SortDropdown,
+            Loc.Get(_ordenPorRareza ? "ui.mochila.por_rareza" : "ui.mochila.por_llegada"),
+            "ui.ayuda.orden");
 
         if (_pestana == Pestana.Blueprints)
         {
@@ -891,6 +907,9 @@ public partial class BackpackScreen : Control
                 caja.End.X - x - 80f, 12f),
             cap == 0 ? 0f : partida.Backpack.Used / (float)cap,
             llena ? Palette.Warning : Palette.Info);
+
+        UiTooltip.Over(caja, $"{partida.Backpack.Used} / {cap}",
+            llena ? "ui.ayuda.mochila_llena" : "ui.ayuda.mochila_lugar");
     }
 
     /// <summary>
@@ -967,6 +986,11 @@ public partial class BackpackScreen : Control
         this.Label(UiLayout.InventoryCapacity, Loc.Get("ui.mochila.planos_conocidos"), 15,
             Palette.TextMuted);
 
+        // ⚠ Los planos son la única progresión permanente del juego, y esta
+        // pestaña es donde se ve. La lista es finita a propósito: la ventaja del
+        // veterano tiene techo.
+        UiTooltip.Help(UiLayout.InventoryCapacity, "ui.ayuda.planos");
+
         void Ingrediente(float px, float py, float lado, int idPerk)
             => this.PerkSlot(new Rect2(px, py, lado, lado), DataLoader.Current.Perks.Get(idPerk));
 
@@ -992,9 +1016,9 @@ public partial class BackpackScreen : Control
         this.Button(r, Loc.Get("ui.mochila.fusionar"),
             puede ? Palette.Unique : Palette.TextDisabled, habilitado: puede);
 
-        UiTooltip.Over(r, puede
-            ? Loc.Get("ui.mochila.fusion.listo")
-            : Loc.Get(motivo!));
+        UiTooltip.Over(r,
+            puede ? Loc.Get("ui.mochila.fusion.listo") : Loc.Get(motivo!),
+            "ui.ayuda.fusionar");
     }
 
     /// <summary>El renglón de plano que cae bajo el cursor, o <c>-1</c>.</summary>
@@ -1058,6 +1082,19 @@ public partial class BackpackScreen : Control
             this.Icon(new Rect2(celda.End.X - 20f, celda.Position.Y + 3f, 16f, 16f),
                 UiStyle.Icono.Ability, color);
         }
+
+        // ⚠ La grilla de armas era la única que no tenía cartel: los perks lo
+        // traen desde `PerkSlot` y acá la celda muestra una inicial, un nombre
+        // cortado y, con suerte, un rayo. Los números viven en la columna de
+        // detalle, a un click de distancia — y comparar dos armas es exactamente
+        // lo que se hace antes de dar ese click.
+        if (arma is null)
+            return;
+
+        UiTooltip.Over(celda,
+            $"{Loc.Weapon(arma)}\n{Loc.Get("ui.tienda.dano")} {Loc.Damage(arma.Damage)} · " +
+            $"{Loc.Get("ui.tienda.alcance")} {Loc.Range(arma.Range)}",
+            arma.Ability == WeaponAbility.None ? "ui.ayuda.arma" : "ui.ayuda.arma_con_habilidad");
     }
 
     /// <summary>
@@ -1085,6 +1122,11 @@ public partial class BackpackScreen : Control
 
             this.Paragraph(UiLayout.DetailEquip, Loc.Get("ui.mochila.sacar_doble_click"), 12,
                 Palette.Danger);
+
+            // ⚠ Sacar un perk equipado LO DESTRUYE: no vuelve a la mochila. Es la
+            // acción irreversible más fácil de hacer sin querer del juego, y el
+            // renglón rojo de arriba mide 12 px.
+            UiTooltip.Help(UiLayout.DetailEquip, "ui.ayuda.sacar_destruye");
 
             return;
         }
@@ -1259,7 +1301,8 @@ public partial class BackpackScreen : Control
             this.Button(UiLayout.DetailPrice,
                 $"{Loc.Get("ui.mochila.vender")}  {arma.Value}", Palette.Gold);
 
-            UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.vender_ayuda"));
+            UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.vender_ayuda"),
+                "ui.ayuda.vender_arma");
 
             return;
         }
@@ -1267,7 +1310,10 @@ public partial class BackpackScreen : Control
         this.Button(UiLayout.DetailPrice, Loc.Get("ui.mochila.tirar"), Palette.Danger,
             relleno: false);
 
-        UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.tirar_ayuda"));
+        // ⚠ El perk NO se vende: se tira. Es la asimetría que sorprende, porque
+        // el arma de al lado sí devuelve oro.
+        UiTooltip.Over(UiLayout.DetailPrice, Loc.Get("ui.mochila.tirar_ayuda"),
+            "ui.ayuda.tirar_perk");
     }
 
     /// <summary>El botón de equipar, que necesita una clase mirada y que entre.</summary>
@@ -1283,6 +1329,11 @@ public partial class BackpackScreen : Control
 
         this.Button(UiLayout.DetailBuy, Loc.Get("ui.mochila.equipar"),
             puede ? Palette.Success : Palette.TextDisabled, habilitado: puede);
+
+        // ⚠ Equipar es de la CLASE, no de la ficha, y sacarlo después destruye el
+        // perk. Las dos mitades van juntas en el mismo cartel porque juntas son
+        // la decisión: equipar acá es gastar el perk, no prestarlo.
+        UiTooltip.Help(UiLayout.DetailBuy, "ui.ayuda.equipar");
 
         // La segunda ranura la disputan dos cosas, y manda la mejora: si lo
         // marcado es de un tier mejorable, ahí va el contador de la receta.
@@ -1352,6 +1403,13 @@ public partial class BackpackScreen : Control
             $"{Loc.Get("ui.mochila.mejorar")} {_marcados.Count}/{cuantos}",
             listo ? color : Palette.TextDisabled, habilitado: listo);
 
+        // ⚠ MEJORAR es la salida de las sobras, y es la mecánica que menos se
+        // descubre sola: hay que marcar varios en la grilla ANTES de que el
+        // botón exista. Sin esto, la mochila se llena de bronce que el jugador
+        // tira uno por uno.
+        UiTooltip.Help(UiLayout.DetailEquip,
+            tier == PerkTier.Silver ? "ui.ayuda.mejorar_a_oro" : "ui.ayuda.mejorar");
+
         if (listo || aMedias)
             return true;
 
@@ -1407,12 +1465,18 @@ public partial class BackpackScreen : Control
                 this.Label(r.Row(r.Size.Y - 20f, 18f), $"{Loc.Get("ui.hud.niv")} {s + 1}", 12,
                     Palette.TextDisabled, HorizontalAlignment.Center);
 
+                // ⚠ El candado con un número al lado no dice qué abre el número.
+                // Es el motivo entero por el que subir de nivel se paga, y estaba
+                // escrito en 12 px de gris sobre gris.
+                UiTooltip.Over(r, $"{Loc.Get("ui.hud.niv")} {s + 1}", "ui.ayuda.slot_cerrado");
+
                 continue;
             }
 
             if (s >= ficha.Perks.Count)
             {
                 this.EmptySlot(r);
+                UiTooltip.Help(r, "ui.ayuda.slot_vacio");
                 continue;
             }
 
@@ -1448,8 +1512,17 @@ public partial class BackpackScreen : Control
 
         if (habilidad.Length > 0)
         {
-            this.StatRow(new Rect2(x, y + alto + 8f, ancho, alto),
-                Loc.Get("ui.mochila.habilidad"), habilidad, Palette.Legendary);
+            var fila = new Rect2(x, y + alto + 8f, ancho, alto);
+
+            this.StatRow(fila, Loc.Get("ui.mochila.habilidad"), habilidad, Palette.Legendary);
+
+            // ⚠ Acá va la regla más contraintuitiva del juego: SOLO EL GOLPE
+            // DIRECTO PROCCEA. Este renglón es el único lugar donde el jugador ve
+            // qué comportamiento tiene activo, así que es donde tiene sentido
+            // decirle que el splash de ese comportamiento no vuelve a disparar
+            // nada. Sin eso, el que combina cadena con quemadura espera una
+            // multiplicación que el juego nunca va a hacer.
+            UiTooltip.Over(fila, habilidad, "ui.ayuda.golpe_directo");
         }
     }
 
@@ -1488,6 +1561,12 @@ public partial class BackpackScreen : Control
 
         this.Price(new Rect2(caja.Position.X, caja.End.Y + 4f, caja.Size.X, 22f),
             precio, alcanza, HorizontalAlignment.Center);
+
+        // ⚠ El precio es cuadrático y eso hay que decirlo: subir de nivel es el
+        // sumidero de oro de la corrida, y el que lo lee como «cuesta 1200» va a
+        // planear el siguiente en 1200 también.
+        UiTooltip.Over(caja, $"{Loc.Get("ui.mochila.nivel")} {ficha.Level + 1} · {precio}",
+            "ui.ayuda.subir_nivel");
     }
 
     /// <summary>
@@ -1521,9 +1600,17 @@ public partial class BackpackScreen : Control
             ficha.PreferPerkBehavior ? Palette.Legendary : Palette.BorderNormal,
             relleno: ficha.PreferPerkBehavior);
 
-        this.Button(RectComportamiento(elDelPerk: false), Loc.Get("ui.mochila.el_arma"),
+        UiTooltip.Over(izquierda, Loc.Get("ui.mochila.el_perk"),
+            "ui.ayuda.conflicto_comportamiento");
+
+        var derecha = RectComportamiento(elDelPerk: false);
+
+        this.Button(derecha, Loc.Get("ui.mochila.el_arma"),
             ficha.PreferPerkBehavior ? Palette.BorderNormal : Palette.Epic,
             relleno: !ficha.PreferPerkBehavior);
+
+        UiTooltip.Over(derecha, Loc.Get("ui.mochila.el_arma"),
+            "ui.ayuda.conflicto_comportamiento");
 
         var pie = new Rect2(izquierda.Position.X, izquierda.End.Y + 4f,
             UiLayout.ShopPanel.Size.X - 40f, 34f);

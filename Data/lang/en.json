@@ -570,6 +570,157 @@
     "ui.fin.ticks": "ticks",
     "ui.fin.desempate": "the leaderboard breaks ties by ticks: fewer is better",
     "ui.fin.de_oro_a_la_billetera": "gold to the wallet",
-    "ui.fin.esc_volver": "esc to go back to the menu"
+    "ui.fin.esc_volver": "esc to go back to the menu",
+
+    // --- HUD labels that were missing ---------------------------------------
+    "ui.hud.pausar": "Pause",
+    "ui.hud.reanudar": "Resume",
+
+    // --- The help switch ------------------------------------------------------
+    "ui.opciones.ayudas": "Help",
+    "ui.opciones.explicaciones": "Explain the rules in tooltips",
+    "ui.opciones.explicaciones_detalle": "turns off the explanation, never the data: stats and names still show",
+
+    // =========================================================================
+    //  THE HELP TEXTS
+    // =========================================================================
+    //
+    // ⚠ Es la MITAD DE ABAJO de un cartel. Arriba va el dato y acá la regla del
+    // juego. Se escriben para alguien que no leyó nada, explican la REGLA y no el
+    // control, y entran en tres renglones de 420 px.
+
+    // --- The top bar ----------------------------------------------------------
+    "ui.ayuda.oleada": "A run is 100 waves and ends there: kill the final boss of area 8 and you win. There is no endless mode.",
+    "ui.ayuda.vida_de_torre": "The Tower is what you defend. Every enemy that reaches it hits it, and at zero the run is over.",
+    "ui.ayuda.oro": "Run gold: spent in the shop every 3 waves and on levelling up. This is NOT your account wallet — it dies with the run, so hoarding it buys nothing.",
+    "ui.ayuda.menu": "Saves and quits. The run is kept: you come back to the preparation phase of the wave you left.",
+    "ui.ayuda.pausa": "Stops the clock so you can look. You cannot act: the leaderboard breaks ties by time, so thinking with the clock stopped would be free time.",
+
+    // --- The roster -----------------------------------------------------------
+    "ui.ayuda.roster": "Your classes. Drag one onto the map to place a defender; every placed unit costs gold on its own.",
+    "ui.ayuda.roster_vacio": "Classes come at random: the first shop offers 3 and you keep 2, free. After that you recruit them by buying them.",
+    "ui.ayuda.tarjeta_de_clase": "Everything — level, perks and weapon — belongs to the CLASS, not to the unit: levelling up improves every defender of this class on the board.",
+    "ui.ayuda.clase_sellada": "The second free class comes sealed: it levels up and equips, but cannot be placed until the wave 3 shop. The seal lifts by itself.",
+
+    // --- The build bar --------------------------------------------------------
+    "ui.ayuda.perks_equipados": "The perks of the selected class. Slots open as you level up: the level opens capacity, drops fill it.",
+    "ui.ayuda.arma_equipada": "The weapon of the class. If it has an ability, it fights a Gold perk for the single behavior slot — you pick which one speaks, in the backpack.",
+    "ui.ayuda.planos_activos": "The blueprints you know: the recipes to fuse two Gold perks into a Unique.",
+    "ui.ayuda.mochila": "What dropped and you have not equipped yet. It has a cap, and what does not fit is lost silently.",
+    "ui.ayuda.mochila_lugar": "Enemy drops wait here. Once it is full, the next drop is lost: mark several perks of the same tier and press UPGRADE to make room.",
+    "ui.ayuda.mochila_llena": "It is full: anything that drops now is lost without warning. Upgrade the leftovers — 4 bronze make 1 silver, 3 silver make 1 gold — or drop what you will not use.",
+    "ui.ayuda.mochila_llena_jefe": "With a full backpack the Gold you pick is lost. Close this, make room, and come back: the choice waits for you.",
+
+    // --- The footer -----------------------------------------------------------
+    "ui.ayuda.rarezas": "Bronze and silver are numbers and they stack. Gold and Unique are behaviors: only ONE of those per class.",
+    "ui.ayuda.atajos": "Everything you can do from the keyboard. Keys are remapped in Options.",
+
+    // --- Perks ----------------------------------------------------------------
+    "ui.ayuda.perk_numero": "Bronze and silver are NUMBERS: any class can use them and they stack. Four bronze upgrade into one silver, three silver into one gold.",
+    "ui.ayuda.perk_oro": "A Gold is a BEHAVIOR, and a class equips only one — the second one bounces. Two Golds fuse into a Unique if you know the blueprint.",
+    "ui.ayuda.perk_unico": "Uniques never drop and are never sold: you fuse them from two Gold perks and a blueprint. They take a single slot and do exactly what both did.",
+
+    // --- Preparation ----------------------------------------------------------
+    "ui.ayuda.preparacion": "The clock is stopped and there is no time limit: place, equip and buy here. Thinking costs you no ticks.",
+    "ui.ayuda.ver_oleada": "Shows what is coming: how many of each creature, which ones carry perks and how much gold the wave pays. A boss asks for the opposite of thirty ants.",
+    "ui.ayuda.comenzar_oleada": "Releases the wave after a 3 second countdown. Place everything your gold allows first: a built board is the difference between wave 15 and wave 35.",
+    "ui.ayuda.adelantar": "Enemies are still alive: calling the next wave now pays gold for each one still standing. That is the risk of stacking two waves, and what lowers your ticks.",
+    "ui.ayuda.cuenta_regresiva": "Here it comes. The countdown is wall clock, not ticks: it does not count for the leaderboard.",
+    "ui.ayuda.mercado_pendiente": "There is a shop you have not opened. It does not restock: start the wave and those seven offers are gone for 3 waves.",
+    "ui.ayuda.tarjeta_bicho": "One enemy type of the coming wave, with how many are coming and how much gold they pay altogether.",
+    "ui.ayuda.jefe": "A boss: lots of health, and it resists control at half strength. On death it offers two Gold perks and you keep one.",
+
+    // --- The shop -------------------------------------------------------------
+    "ui.ayuda.tienda": "Seven offers, every 3 waves. The run seed decides the stock: it does not carry over and it does not restock when you buy.",
+    "ui.ayuda.stock": "What you buy is not replaced, and what you skip does not come back. The next shop brings seven different offers.",
+    "ui.ayuda.cupo_gratis": "The only free thing in the whole run. Keep 2 of these 3 classes; the third stays on sale at its price. The second one you keep comes sealed until wave 3.",
+    "ui.ayuda.sello_abierto": "The seal lifted: this class can be placed now. It happens on its own and costs nothing.",
+    "ui.ayuda.oferta_clase": "Adds the class to your roster at level 1. This is what buys board width, and it costs about eight units — but without it that class does not exist this run.",
+    "ui.ayuda.oferta_nivel": "Levels a class up: more stats, and a perk slot every few levels. The price grows with the square of the level, so the next one costs a lot more.",
+    "ui.ayuda.oferta_plano": "A fusion recipe, and it lasts ONLY this run. The permanent one is bought with your wallet from the main menu.",
+    "ui.ayuda.oferta_arma": "A weapon to equip. If it has an ability it takes the same slot as a Gold perk — the weapon stats stay either way.",
+
+    // --- The defender ---------------------------------------------------------
+    "ui.ayuda.targeting": "The only thing that belongs to THIS unit and not to the class: two defenders of the same class can target differently depending on where they stand.",
+    "ui.ayuda.targeting.First": "The one furthest along the path. It is the one that reaches the Tower first, and it works almost always.",
+    "ui.ayuda.targeting.Strongest": "The one with the most health. To focus fire on the boss or on the wave leader.",
+    "ui.ayuda.targeting.Weakest": "The one with the least health. Finishes off the wounded and saves you a wasted second hit.",
+    "ui.ayuda.targeting.NearestTower": "The one closest to the Tower in a straight line. The last line of defense: whatever leaked.",
+    "ui.ayuda.vender_defensor": "Removes this unit from the board and refunds part of the gold. The CLASS is not lost: level, perks and weapon stay. To rearrange the board just drag, no need to sell.",
+    "ui.ayuda.aura": "Allies inside the radius get this effect. An aura is invisible on the board: this line is the only way to know how many it reaches.",
+    "ui.ayuda.conflicto_comportamiento": "There is a single behavior slot and two things fighting for it. You pick which one speaks; the weapon stats stay either way.",
+
+    // --- The boss -------------------------------------------------------------
+    "ui.ayuda.eleccion_del_jefe": "Eight bosses per run, one Gold kept per boss: those are the eight behavior decisions you get. The final boss drops nothing — killing it ends the run.",
+
+    // --- The backpack ---------------------------------------------------------
+    "ui.ayuda.mejorar": "Mark several perks of the same tier and this melts them into a better one: 4 bronze make 1 silver. It is the way out when the backpack fills up.",
+    "ui.ayuda.mejorar_a_oro": "Three silver make one Gold, and there is a cap: at most two crafted Golds per run. The rest come from bosses or from the shop.",
+    "ui.ayuda.equipar": "Equips it on the CLASS, not on the unit: every defender of that class gets it. Careful — taking it off later destroys it.",
+    "ui.ayuda.sacar_destruye": "Taking off an equipped perk DESTROYS it: it does not go back to the backpack. Equipping spends it, it does not lend it.",
+    "ui.ayuda.tirar_perk": "Perks are not sold, they are dropped: no gold back. Before dropping one, check whether it can be upgraded with others of the same tier.",
+    "ui.ayuda.vender_arma": "Weapons do refund gold when sold. They are the only thing in the backpack that turns into money.",
+    "ui.ayuda.subir_nivel": "The price grows with the square of the level: each one costs a lot more than the last. It is the gold sink of the run — finishing with unspent gold means you played at half strength.",
+    "ui.ayuda.fusionar": "Consumes two Gold perks and returns a Unique in a single slot. The Unique does what both did, and the freed slot is half the prize.",
+    "ui.ayuda.planos": "The recipes your account knows. Bought once with the wallet and kept forever: the only permanent progression in the game, and the list is finite.",
+
+    // --- The main menu --------------------------------------------------------
+    "ui.ayuda.continuar": "Resumes the run you left, at the preparation phase of the wave where you closed it.",
+    "ui.ayuda.jugar": "Opens a new 100 wave run. If you had one in progress, this abandons it: one open run per account.",
+    "ui.ayuda.tienda_de_planos": "Blueprints are bought with your account wallet and stay learned forever. It is the only thing that survives a run.",
+    "ui.ayuda.ranking": "Global table: winners first and the fastest among them, then the rest by how far they got. That is why calling waves early exists.",
+    "ui.ayuda.plano_permanente": "Bought here it is learned forever on this account. The one the in-run shop sells only lasts that run.",
+    "ui.ayuda.plano_aprendido": "You already have it: the recipe is available in every run, forever.",
+    "ui.ayuda.billetera": "Your account wallet. It fills up when you finish runs and only buys blueprints: it cannot be spent inside a game.",
+
+    // --- The board ------------------------------------------------------------
+    "ui.mapa.clase_no_reclutada": "you do not have this class",
+    "ui.mapa.clase_sellada": "sealed class",
+    "ui.mapa.es_ruta": "they walk through here",
+    "ui.mapa.no_colocable": "you cannot build here",
+    "ui.mapa.sin_oro": "not enough gold",
+    "ui.mapa.ocupada": "cell taken",
+
+    "ui.ayuda.celda_libre": "Drag a class from the left column onto this cell to place a defender. Clicking an empty cell places nothing, on purpose.",
+    "ui.ayuda.celda_ruta": "Enemies walk along the route cells, and you cannot build there. Place next to it: what matters is range, shown as a circle while you aim.",
+    "ui.ayuda.celda_bloqueada": "This cell takes no defenders: it is a wall or the edge of the map. Each of the 12 maps has its own spots, and the seed picks which one you get.",
+    "ui.ayuda.celda_sin_oro": "You are short on gold for this class. Gold comes from killing enemies and from calling waves early.",
+    "ui.ayuda.celda_ocupada": "There is already a defender here. Drag it to another cell to move it — moving is free; selling refunds only part.",
+    "ui.ayuda.defensor_puesto": "Click to open its panel: that is where you pick its target and sell it. Drag it to move it, which costs nothing.",
+    "ui.ayuda.clases_de_mas": "You have more classes than fit in the column. They still show up and equip from the backpack.",
+
+    // --- The backpack, the rest -----------------------------------------------
+    "ui.ayuda.tab_perks": "Perks that dropped and you have not equipped yet. They take backpack space.",
+    "ui.ayuda.tab_armas": "Loose weapons. They take space too, but they can be sold for gold.",
+    "ui.ayuda.tab_planos": "Fusion recipes. They take no backpack space: they belong to your account, not to this run.",
+    "ui.ayuda.filtro": "Shows only what the selected class can equip, or everything. A Gold perk usually fits two or three classes, not all nine.",
+    "ui.ayuda.orden": "Sorts the grid by rarity or by arrival. By rarity is the handy one when looking for what to upgrade.",
+    "ui.ayuda.arma": "A weapon to equip on a class. It replaces the one it has on, and the old one goes back to the backpack.",
+    "ui.ayuda.arma_con_habilidad": "It has an ability, and that fights for the class's single behavior slot: with a Gold perk on, you pick which one speaks. The weapon stats stay either way.",
+    "ui.ayuda.slot_cerrado": "This slot opens when the class reaches that level. That is what paying for levels buys: the level opens capacity, drops fill it.",
+    "ui.ayuda.slot_vacio": "Open and empty slot. Pick a perk from the middle grid and press EQUIP.",
+    "ui.ayuda.golpe_directo": "Only the direct hit triggers effects. Splash, chain, ricochet and damage over time subtract health and nothing else: no states, no chaining into another perk.",
+    "ui.ayuda.estados": "States do not stack: the strongest one wins and each application refreshes the timer. Two defenders with the same buff do not give double.",
+
+    // --- The shop, the rest ---------------------------------------------------
+    "ui.ayuda.vendido": "Bought. The slot stays empty: the shop does not restock what it sells, and these offers leave with the next wave.",
+    "ui.ayuda.ya_reclutada": "You already have this class, so the offer was withdrawn. To improve it, what you buy is levels.",
+    "ui.ayuda.nivel_maximo": "This class is at max level: there is nothing left to buy for it. What it can still be missing is perks and a weapon.",
+
+    // --- The boss, the rest ---------------------------------------------------
+    "ui.ayuda.le_sirve": "A Gold perk fits two or three classes, never all nine. These are the ones that can equip it.",
+    "ui.ayuda.no_le_sirve_a_nadie": "No class you own can equip it today, and it can still be worth taking: it waits in the backpack for when you recruit that class, or to fuse.",
+    "ui.ayuda.completa_receta": "This Gold closes a recipe you already have half of: fuse it in the backpack and the Unique also frees up the behavior slot.",
+
+    // --- The end of the run ---------------------------------------------------
+    "ui.ayuda.fin_area": "How far you got, of the eight areas. Areas are not chosen: you either reach them or you do not.",
+    "ui.ayuda.fin_oleada": "Which of the 100 waves it ended on. It is the first thing the leaderboard looks at among those who did not win.",
+    "ui.ayuda.fin_ticks": "How long the run took in game time. Between two winners the faster one wins — that is why calling waves early pays.",
+    "ui.ayuda.oro_ganado": "This gold is permanent: it goes to your account wallet and buys blueprints. The run gold, on the other hand, died with the run.",
+
+    // --- The three shop columns -----------------------------------------------
+    "ui.ayuda.zona0": "Recruiting new classes and levelling them up. This is what buys board width and perk capacity.",
+    "ui.ayuda.zona1": "Loose perks and fusion blueprints. They go to the backpack: they do not equip themselves, and they take space.",
+    "ui.ayuda.zona2": "Weapons. Each class equips one, and the ones with an ability fight for the behavior slot."
   }
 }

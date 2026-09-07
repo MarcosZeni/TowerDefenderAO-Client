@@ -58,6 +58,28 @@ public static class Settings
     public static bool AnimateEffects { get; set; } = true;
 
     /// <summary>
+    /// Si los carteles explican <b>además</b> la regla del juego que hay detrás.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Apaga la ayuda, nunca el dato.</b> Con esto en cero el cartel
+    /// sigue diciendo qué perk es y cuánto pega; lo que deja de decir es por qué
+    /// sacar ese perk lo destruye, o por qué la tienda no repone lo que se
+    /// compró. Un juego con nueve clases, cuatro tiers de perk, una tienda que no
+    /// repone y un sello que se levanta solo tiene más reglas de las que se
+    /// descubren jugando, y las que no se descubren solas se pagan con una
+    /// corrida entera.</para>
+    ///
+    /// <para>Prendido de fábrica, y esa es la decisión: el que ya sabe lo apaga
+    /// una vez y no vuelve, y el que no sabe no tiene que enterarse primero de
+    /// que existía una opción para enterarse.</para>
+    ///
+    /// <para>Vive en <see cref="Settings"/> y no en el guardado de la corrida
+    /// porque es del jugador, no de la partida: no toca la simulación y no entra
+    /// a ningún hash.</para>
+    /// </remarks>
+    public static bool ShowHelp { get; set; } = true;
+
+    /// <summary>
     /// Si el token de la sesión se guarda en disco para no volver a entrar.
     /// </summary>
     /// <remarks>
@@ -172,6 +194,7 @@ public static class Settings
 
         AnimateWeapons = (bool)config.GetValue("animaciones", "armas", true);
         AnimateEffects = (bool)config.GetValue("animaciones", "efectos", true);
+        ShowHelp = (bool)config.GetValue("ayudas", "mostrar", true);
         Language = (string)config.GetValue("idioma", "codigo", Loc.Reference);
         RememberSession = (bool)config.GetValue("cuenta", "recordar", true);
 
@@ -193,6 +216,7 @@ public static class Settings
 
         config.SetValue("animaciones", "armas", AnimateWeapons);
         config.SetValue("animaciones", "efectos", AnimateEffects);
+        config.SetValue("ayudas", "mostrar", ShowHelp);
         config.SetValue("idioma", "codigo", Language);
         config.SetValue("cuenta", "recordar", RememberSession);
 

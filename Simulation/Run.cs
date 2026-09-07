@@ -525,29 +525,55 @@ public sealed class Run
     /// casos, a propósito:</b> si la UI dijera que sí y la simulación que no, el
     /// jugador vería un click que no hace nada.
     /// </remarks>
-    public bool CanPlace(DefenderClass clase, Cell celda)
+    public bool CanPlace(DefenderClass clase, Cell celda) => PlaceBlockedKey(clase, celda) is null;
+
+    /// <summary>
+    /// Por qué NO se puede poner ahí, o <c>null</c> si se puede.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Misma regla que <see cref="FuseBlockedKey"/>: el motivo lo
+    /// decide un solo lugar.</b> <see cref="CanPlace"/> es esta función mirada
+    /// como booleano, así que la celda roja del tablero y el rebote de la
+    /// colocación no se pueden separar nunca.</para>
+    ///
+    /// <para>Devuelve una <b>clave de idioma</b> y no una frase: el texto del
+    /// jugador vive en <c>Data\lang\</c> (regla de oro 4), y acá adentro no puede
+    /// haber una sola palabra que se lea en pantalla.</para>
+    ///
+    /// <para>El orden de los chequeos es el que era y no es casual: primero lo
+    /// que pasa con la <b>clase</b> —que es igual en todo el tablero—, después lo
+    /// que pasa con la <b>celda</b>. Al jugador que arrastra una clase sellada hay
+    /// que decirle eso, no «esa celda es ruta».</para>
+    ///
+    /// <para>No consume RNG: lo llama el renderer una vez por cuadro.</para>
+    /// </remarks>
+    public string? PlaceBlockedKey(DefenderClass clase, Cell celda)
     {
         // Solo se puede poner una clase contratada. El roster arranca vacío y se
         // llena eligiendo, así que la primera elección es obligatoria antes de
         // poder jugar.
-        //
+        if (Roster.Find(clase) is not { } ficha)
+            return "ui.mapa.clase_no_reclutada";
+
         // ⚠ Y no alcanza con tenerla: una clase SELLADA está en el roster y
         // todavía no se puede poner. Es la segunda gratis del arranque, que se
         // abre en la oleada que dice `sealedUnlockWave`.
-        if (Roster.Find(clase) is not { Sealed: false })
-            return false;
+        if (ficha.Sealed)
+            return "ui.mapa.clase_sellada";
 
+        // La celda: primero por qué no es colocable —ruta o pared—, que es lo que
+        // el jugador ve dibujado y lo que más pregunta.
         if (!_mapa.IsPlaceable(celda))
-            return false;
+            return _mapa.IsRoute(celda) ? "ui.mapa.es_ruta" : "ui.mapa.no_colocable";
 
         if (Gold < _datos.StatsOf(clase).Cost)
-            return false;
+            return "ui.mapa.sin_oro";
 
         foreach (var d in _defensores)
             if (d.Cell == celda)
-                return false;
+                return "ui.mapa.ocupada";
 
-        return true;
+        return null;
     }
 
     /// <summary>El defensor que está en esa celda, si hay alguno.</summary>

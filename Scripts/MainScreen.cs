@@ -121,20 +121,31 @@ public partial class MainScreen : Control
         _billetera = new Label { Text = "…" };
         _billetera.AddThemeColorOverride("font_color", Palette.Gold);
         _billetera.AddThemeFontSizeOverride("font_size", 22);
+
+        // ⚠ Es el otro oro, y son el mismo dorado en pantalla. Este se gana al
+        // terminar corridas, solo compra planos, y no se puede gastar adentro de
+        // una partida. Un `Label` no recibe el mouse de fábrica.
+        _billetera.MouseFilter = Control.MouseFilterEnum.Stop;
+        _billetera.SetMeta("ayuda", "ui.ayuda.billetera");
+        _billetera.TooltipText = Settings.ShowHelp ? Loc.Get("ui.ayuda.billetera") : "";
         _billetera.Position = new Vector2(UiLayout.TowerHp.Position.X, UiLayout.TowerHp.Position.Y + 14f);
         AddChild(_billetera);
 
         // Continuar arriba de Jugar: si hay una corrida a medias, retomarla es
         // lo que el jugador vino a hacer — son horas de partida. Y Jugar con un
         // guardado presente ABANDONA esa corrida, así que el orden también avisa.
-        _continuar = Boton(Loc.Get("ui.principal.continuar"), () => ContinueRun?.Invoke());
+        _continuar = Boton(Loc.Get("ui.principal.continuar"), () => ContinueRun?.Invoke(),
+            "ui.ayuda.continuar");
         caja.AddChild(_continuar);
 
-        _jugar = Boton(Loc.Get("ui.principal.jugar"), () => _ = JugarAsync());
+        _jugar = Boton(Loc.Get("ui.principal.jugar"), () => _ = JugarAsync(),
+            "ui.ayuda.jugar");
         caja.AddChild(_jugar);
 
-        caja.AddChild(Boton(Loc.Get("ui.principal.tienda"), () => _ = MostrarTiendaAsync()));
-        caja.AddChild(Boton(Loc.Get("ui.principal.ranking"), () => _ = MostrarRankingAsync()));
+        caja.AddChild(Boton(Loc.Get("ui.principal.tienda"), () => _ = MostrarTiendaAsync(),
+            "ui.ayuda.tienda_de_planos"));
+        caja.AddChild(Boton(Loc.Get("ui.principal.ranking"), () => _ = MostrarRankingAsync(),
+            "ui.ayuda.ranking"));
         caja.AddChild(Boton(Loc.Get("ui.principal.opciones"), () => _opciones.Open()));
         caja.AddChild(Boton(Loc.Get("ui.principal.salir_cuenta"), () => _ = SalirAsync()));
 
@@ -169,6 +180,12 @@ public partial class MainScreen : Control
         // Último hijo: su _Input corre antes que el del resto y queda dibujado
         // encima de los botones, que es lo que un panel modal tiene que hacer.
         _opciones = new OptionsScreen { Name = "Opciones" };
+
+        // ⚠ Los carteles de estos botones son nodos y se fijan una sola vez, así
+        // que apagar las ayudas en Opciones no los apagaría hasta reiniciar. Se
+        // rearman al cerrar el panel, que es el único momento en que el
+        // interruptor pudo haber cambiado.
+        _opciones.Closed += RearmarAyudas;
         AddChild(_opciones);
     }
 
@@ -211,13 +228,26 @@ public partial class MainScreen : Control
     /// <c>async</c> y abren un panel después de una vuelta al servidor —el
     /// sonido tiene que confirmar el click ya, no cuando conteste la API—.
     /// </remarks>
-    private static Button Boton(string texto, System.Action alApretar)
+    /// <param name="ayuda">
+    /// Clave de la explicación, o vacío. ⚠ Acá el cartel es el de <b>Godot</b> y
+    /// no <see cref="UiTooltip"/>: estos son nodos <c>Button</c> de verdad, no
+    /// rectángulos dibujados a mano, y colgarles el cartel propio obligaría a
+    /// declarar sus rectángulos en un <c>_Draw</c> que no existe. Se apaga con el
+    /// mismo interruptor, que es lo que el jugador ve.
+    /// </param>
+    private static Button Boton(string texto, System.Action alApretar, string ayuda = "")
     {
         var b = new Button
         {
             Text = texto,
             CustomMinimumSize = new Vector2(UiLayout.HeroesPanel.Size.X - 32f, 46),
+            TooltipText = ayuda.Length > 0 && Settings.ShowHelp ? Loc.Get(ayuda) : "",
         };
+
+        // La clave queda guardada en el nodo: es lo que permite volver a armar el
+        // cartel cuando el interruptor de ayudas cambia, sin una tabla paralela.
+        if (ayuda.Length > 0)
+            b.SetMeta("ayuda", ayuda);
 
         b.Pressed += () =>
         {
@@ -228,6 +258,33 @@ public partial class MainScreen : Control
         b.MouseEntered += () => Sfx.Play(SoundId.UiHover);
 
         return b;
+    }
+
+    /// <summary>
+    /// Vuelve a poner —o a sacar— el cartel de cada botón, según el interruptor.
+    /// </summary>
+    /// <remarks>
+    /// Recorre el árbol y no una lista propia: los botones se crean en
+    /// <c>_Ready</c> y se agregan a un contenedor, y una lista paralela sería una
+    /// segunda verdad que hay que acordarse de actualizar al agregar el próximo.
+    /// </remarks>
+    private void RearmarAyudas()
+    {
+        Rearmar(this);
+
+        static void Rearmar(Node nodo)
+        {
+            foreach (var hijo in nodo.GetChildren())
+            {
+                // `Control` y no `Button`: la billetera es un Label con cartel, y
+                // buscar solo botones la dejaba con la explicación pegada después
+                // de apagar las ayudas.
+                if (hijo is Control c && c.HasMeta("ayuda"))
+                    c.TooltipText = Settings.ShowHelp ? Loc.Get((string)c.GetMeta("ayuda")) : "";
+
+                Rearmar(hijo);
+            }
+        }
     }
 
     public async Task RefreshAsync()
@@ -523,6 +580,8 @@ public partial class MainScreen : Control
         this.SectionTitle(caja.Row(0f, 30f), Loc.Get("ui.principal.tienda"), Palette.Unique);
         this.Label(caja.Row(32f, 20f), Loc.Get("ui.principal.tienda_ayuda"), 14, Palette.TextMuted);
 
+        UiTooltip.Help(caja.Row(0f, 52f), "ui.ayuda.tienda_de_planos");
+
         for (int i = 0; i < todos.Count; i++)
             DibujarPlano(todos[i], TarjetaPlano(i, todos.Count).Inset(4f), i == _bajoElCursor);
 
@@ -550,6 +609,13 @@ public partial class MainScreen : Control
 
         int precio = PrecioDe(plano.Key);
         bool alcanza = precio > 0 && _oro >= precio;
+
+        // ⚠ Comprado se aprende PARA SIEMPRE en esta cuenta, y es lo único junto
+        // con la billetera que sobrevive a la corrida. El de la tienda de adentro
+        // de una corrida, en cambio, vale solo esa corrida: son dos compras con el
+        // mismo nombre, y esta es la permanente.
+        UiTooltip.Over(r, Loc.Perk(unico),
+            tiene ? "ui.ayuda.plano_aprendido" : "ui.ayuda.plano_permanente");
         bool comprable = estado == EstadoPlano.EnVenta && alcanza && !_comprando;
 
         var acento =

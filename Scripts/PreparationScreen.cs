@@ -500,11 +500,20 @@ public partial class PreparationScreen : Control
         this.Paragraph(r.Row(74f, r.Size.Y - 74f), Loc.Get("ui.preparacion.instrucciones"), 12,
             Palette.TextMuted);
 
+        // ⚠ La ayuda de la fase entera cuelga de este bloque. Es lo que hay que
+        // saber una sola vez y cambia cómo se juega: el reloj está detenido, no
+        // hay apuro, y los ticks del ranking no corren mientras se piensa.
+        UiTooltip.Over(r,
+            $"{Loc.Get("ui.preparacion.wave")} {partida.NextWave} / {total}",
+            "ui.ayuda.preparacion");
+
         // El botón de volver a abrir la ventana, solo si está cerrada.
         if (!VentanaVisible)
         {
             this.Button(BotonVerOleada(), Loc.Get("ui.preparacion.ver_oleada"), Palette.Warning,
                 relleno: false);
+
+            UiTooltip.Help(BotonVerOleada(), "ui.ayuda.ver_oleada");
         }
 
         DibujarBoton();
@@ -621,6 +630,12 @@ public partial class PreparationScreen : Control
         var acento = fila.IsBoss ? Palette.Warning : Palette.BorderNormal;
 
         this.Slot(r, acento, elegido: fila.IsBoss);
+
+        // La tarjeta entera primero, y los renglones de adentro después: los que
+        // se dibujan más tarde son más específicos y ganan el cartel. Acá vale
+        // «qué es esto», adentro vale «qué es este número».
+        UiTooltip.Over(r, $"{fila.Amount}× {fila.Name}",
+            fila.IsBoss ? "ui.ayuda.jefe" : "ui.ayuda.tarjeta_bicho");
 
         // --- El sprite, arriba y apoyado en su base.
         var marco = new Rect2(r.Position.X + 8f, r.Position.Y + 8f, r.Size.X - 16f, 120f);
@@ -798,6 +813,7 @@ public partial class PreparationScreen : Control
             this.Button(caja, $"{Loc.Get("ui.preparacion.ahi_vienen")}  {cuenta}",
                 Palette.Warning, encima: true);
 
+            UiTooltip.Help(caja, "ui.ayuda.cuenta_regresiva");
             return;
         }
 
@@ -806,6 +822,8 @@ public partial class PreparationScreen : Control
         this.Label(new Rect2(caja.Position.X, caja.End.Y + 2f, caja.Size.X, 18f),
             Loc.Get("ui.preparacion.espacio_sin_apuro"), 12, Palette.TextMuted,
             HorizontalAlignment.Center);
+
+        UiTooltip.Help(caja, AyudaDelBoton());
     }
 
     private void DibujarBoton()
@@ -817,13 +835,17 @@ public partial class PreparationScreen : Control
         // resolver. Es un recordatorio: la tienda no se repone, así que lanzar la
         // oleada con ofertas sin mirar tira esa tienda entera.
         if (HayMercado())
+        {
             this.Button(BotonMercado(), Loc.Get("ui.preparacion.mercado"), Palette.Gold);
+            UiTooltip.Help(BotonMercado(), "ui.ayuda.mercado_pendiente");
+        }
 
         if (cuenta > 0)
         {
             this.Button(caja, $"{Loc.Get("ui.preparacion.ahi_vienen")}  {cuenta}",
                 Palette.Warning, encima: true);
 
+            UiTooltip.Help(caja, "ui.ayuda.cuenta_regresiva");
             return;
         }
 
@@ -832,5 +854,22 @@ public partial class PreparationScreen : Control
         this.Label(new Rect2(caja.Position.X, caja.End.Y - 24f, caja.Size.X, 20f),
             Loc.Get("ui.preparacion.espacio_sin_apuro"), 13, Palette.TextMuted,
             HorizontalAlignment.Center);
+
+        UiTooltip.Help(caja, AyudaDelBoton());
     }
+
+    /// <summary>
+    /// Qué explica el botón grande: comenzar la oleada, o adelantarla.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Son la misma acción y el mismo botón, y explican cosas opuestas.</b>
+    /// Con la oleada limpia arranca la que viene y no hay premio. Con bichos
+    /// todavía en pie es <b>adelantar</b>: paga oro por enemigo vivo, y esa es la
+    /// mecánica que sostiene el desempate por <c>ticks</c> del ranking. Un
+    /// jugador que nunca adelanta no está jugando peor: está jugando otro juego.
+    /// </remarks>
+    private string AyudaDelBoton()
+        => _juego.Run is { } p && p.Enemies.Count > 0
+            ? "ui.ayuda.adelantar"
+            : "ui.ayuda.comenzar_oleada";
 }

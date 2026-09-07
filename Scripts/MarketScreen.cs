@@ -467,10 +467,20 @@ public partial class MarketScreen : Control
 
         // El oro va arriba a la izquierda, del tamaño del título: es el número
         // contra el que se lee cada precio de la pantalla.
-        this.Price(new Rect2(MargenX, 92f, 260f, 44f), p.Gold, alcanza: true);
+        var billetera = new Rect2(MargenX, 92f, 260f, 44f);
+
+        this.Price(billetera, p.Gold, alcanza: true);
+
+        UiTooltip.Over(billetera, UiStyle.Thousands(p.Gold), "ui.ayuda.oro");
+        UiTooltip.Help(titulo, "ui.ayuda.tienda");
 
         this.Button(RectCerrar(), Loc.Get("ui.mercado.cerrar"), Palette.BorderNormal,
             relleno: false);
+
+        // Declara su propio cartel aunque sea obvio: el rótulo de arriba abarca
+        // el ancho entero de la pantalla, así que sin esto el botón de cerrar
+        // mostraría la explicación de la tienda.
+        UiTooltip.Over(RectCerrar(), Loc.Get("ui.mercado.esc_para_cerrar"));
     }
 
     /// <summary>
@@ -487,7 +497,14 @@ public partial class MarketScreen : Control
 
         this.Panel(col, opacidad: 1f);
 
-        this.SectionTitle(col.Row(8f, 34f), Loc.Get($"ui.mercado.zona{c}"), ColorDeZona(c));
+        var rotulo = col.Row(8f, 34f);
+
+        this.SectionTitle(rotulo, Loc.Get($"ui.mercado.zona{c}"), ColorDeZona(c));
+
+        // Las tres columnas son tres decisiones distintas —ancho de tablero,
+        // poder de una clase, equipo— y no tres cajones de una misma bolsa. La
+        // clave sale del índice, igual que el rótulo.
+        UiTooltip.Over(rotulo, Loc.Get($"ui.mercado.zona{c}"), $"ui.ayuda.zona{c}");
 
         int ranuras = System.Math.Max(RanurasMinimas, _columnas[c].Count);
 
@@ -525,6 +542,11 @@ public partial class MarketScreen : Control
             $"{Loc.Get("ui.tienda.proximas_ofertas")} {p.Shop.StockWave + 3}",
             14, Palette.TextMuted, HorizontalAlignment.Right);
 
+        // ⚠ «No se repone» es la regla que más plata cuesta ignorar: lo que no se
+        // compró hoy no vuelve, y lo que se compró no deja un hueco que se
+        // rellene. El renglón del pie lo dice; el cartel dice qué implica.
+        UiTooltip.Help(pie, "ui.ayuda.stock");
+
         AvisoDelSello(p, pie);
     }
 
@@ -551,6 +573,11 @@ public partial class MarketScreen : Control
                 Loc.Get("ui.tienda.elegi_gratis", p.Shop.FreeLeft),
                 15, Palette.Warning, HorizontalAlignment.Center);
 
+            // Pisa la ayuda del stock a propósito: en la primera tienda, lo que
+            // hay que entender no es que el stock no se repone, es que estas dos
+            // clases son lo ÚNICO gratis de la corrida entera y que la segunda
+            // entra sellada hasta la oleada 3.
+            UiTooltip.Help(pie, "ui.ayuda.cupo_gratis");
             return;
         }
 
@@ -570,6 +597,8 @@ public partial class MarketScreen : Control
         this.Label(pie.Inset(14f),
             $"{nombres} — {Loc.Get("ui.tienda.sello_abierto")}",
             15, Palette.Success, HorizontalAlignment.Center);
+
+        UiTooltip.Help(pie, "ui.ayuda.sello_abierto");
     }
 
     // =====================================================================
@@ -607,6 +636,13 @@ public partial class MarketScreen : Control
                 Loc.Get(yaLaTiene ? "ui.mercado.ya_reclutada" : "ui.tienda.vendido").ToUpperInvariant(),
                 18, Palette.TextDisabled, HorizontalAlignment.Center);
 
+            // ⚠ Una carta apagada es una pregunta —«¿se repone? ¿vuelve?»— y la
+            // respuesta es la regla del stock. La ranura queda vacía hasta la
+            // próxima tienda: eso es lo que hace que comprar sea una decisión.
+            UiTooltip.Over(r,
+                Loc.Get(yaLaTiene ? "ui.mercado.ya_reclutada" : "ui.tienda.vendido"),
+                yaLaTiene ? "ui.ayuda.ya_reclutada" : "ui.ayuda.vendido");
+
             return;
         }
 
@@ -630,6 +666,8 @@ public partial class MarketScreen : Control
             this.Label(new Rect2(nom.Position.X, r.End.Y - 44f, nom.Size.X, 22f),
                 Loc.Get("ui.tienda.nivel_maximo").ToUpperInvariant(), 15, Palette.TextDisabled);
 
+            UiTooltip.Over(r, Loc.Get("ui.tienda.nivel_maximo"), "ui.ayuda.nivel_maximo");
+
             return;
         }
 
@@ -641,6 +679,13 @@ public partial class MarketScreen : Control
         var (icono, titulo, nombre, cuerpo) = Partes(r);
 
         this.Label(titulo, EtiquetaDe(oferta).ToUpperInvariant(), 13, acento);
+
+        // ⚠ Cada tipo de oferta explica SU regla, no «esto es una tienda». Las
+        // cinco cosas que se venden se compran por motivos distintos: un nivel
+        // abre slots, un plano solo vale esta corrida, un arma pelea con el perk
+        // de comportamiento. Sin eso, siete cartas con precio se leen como siete
+        // formas de gastar lo mismo.
+        UiTooltip.Over(r, EtiquetaDe(oferta), AyudaDeOferta(oferta));
 
         switch (oferta.Kind)
         {
@@ -815,6 +860,24 @@ public partial class MarketScreen : Control
     // ⚠ Level TIENE que estar en los dos switch. El `_ =>` va a buscar un PERK con
     // el Id de la oferta, y en una de nivel ese Id es una CLASE: Perks.Get(3) por
     // «Asesino» devuelve un perk cualquiera y la tarjeta miente sin fallar.
+    /// <summary>Qué regla explica cada tipo de oferta.</summary>
+    /// <remarks>
+    /// El perk se parte por tier y no queda en una sola ayuda: un Bronce es un
+    /// número que se apila y un Oro es un comportamiento que pelea por la única
+    /// ranura de la clase. Comprar un segundo Oro sin saberlo es tirar el oro
+    /// más caro de la tienda.
+    /// </remarks>
+    private static string AyudaDeOferta(ShopOffer oferta) => oferta.Kind switch
+    {
+        ShopKind.Class => "ui.ayuda.oferta_clase",
+        ShopKind.Level => "ui.ayuda.oferta_nivel",
+        ShopKind.Blueprint => "ui.ayuda.oferta_plano",
+        ShopKind.Weapon => "ui.ayuda.oferta_arma",
+        _ => DataLoader.Current.Perks.Get(oferta.Id).Tier == PerkTier.Gold
+            ? "ui.ayuda.perk_oro"
+            : "ui.ayuda.perk_numero",
+    };
+
     private static string EtiquetaDe(ShopOffer oferta) => oferta.Kind switch
     {
         ShopKind.Class => Loc.Get("ui.tienda.reclutar"),

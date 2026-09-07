@@ -283,8 +283,18 @@ public partial class DefenderScreen : Control
 
         DibujarSoporte(defensor, stats, caja.Position.X + 16f, caja.Position.Y + 252f);
 
-        this.Label(new Rect2(caja.Position.X + 16f, caja.Position.Y + YTargeting - 26f, caja.Size.X - 32f, 22f),
-            Loc.Get("ui.defensor.apunta_a").ToUpperInvariant(), 13, Palette.TextMuted);
+        var rotulo = new Rect2(caja.Position.X + 16f, caja.Position.Y + YTargeting - 26f,
+            caja.Size.X - 32f, 22f);
+
+        this.Label(rotulo, Loc.Get("ui.defensor.apunta_a").ToUpperInvariant(), 13,
+            Palette.TextMuted);
+
+        // ⚠ Es lo ÚNICO del juego que es de la ficha y no de la clase, y por eso
+        // necesita cartel: todo lo demás que el jugador tocó hasta acá —nivel,
+        // perks, arma— vale para las nueve fichas de esa clase a la vez. Dos
+        // paladines de la misma clase quieren apuntar distinto según dónde estén
+        // parados.
+        UiTooltip.Help(rotulo, "ui.ayuda.targeting");
 
         for (int i = 0; i < _modos.Length; i++)
             DibujarModo(i, defensor.Targeting == _modos[i]);
@@ -328,6 +338,12 @@ public partial class DefenderScreen : Control
         this.Label(new Rect2(r.Position.X, r.Position.Y - 20f, r.Size.X, 18f),
             Loc.Get("ui.defensor.arrastrar_para_mover"), 12, Palette.TextMuted,
             HorizontalAlignment.Center);
+
+        // ⚠ Lo que se pierde al vender es la FICHA, no la clase: el nivel, los
+        // perks y el arma son de la clase y quedan intactos. Es la confusión que
+        // frena a un jugador nuevo de reacomodar el tablero.
+        UiTooltip.Over(r,
+            $"{Loc.Get("ui.defensor.vender")} · {devuelve}", "ui.ayuda.vender_defensor");
     }
 
     private void DibujarModo(int i, bool activo)
@@ -339,6 +355,11 @@ public partial class DefenderScreen : Control
         this.Button(r, Loc.Get($"ui.targeting.{_modos[i]}"),
             activo ? Palette.Success : Palette.BorderNormal,
             relleno: activo, encima: i == _bajoElCursor);
+
+        // Un modo por cartel, con la clave derivada del enum: agregar un quinto
+        // modo es agregar su renglón a los idiomas y nada más.
+        UiTooltip.Over(r, Loc.Get($"ui.targeting.{_modos[i]}"),
+            $"ui.ayuda.targeting.{_modos[i]}");
     }
 
     /// <summary>
@@ -377,7 +398,7 @@ public partial class DefenderScreen : Control
 
             Renglon($"{Loc.Effect(stats.Behavior)}  ·  {Loc.Get("ui.defensor.radio")} {radio}  ·  " +
                     $"{alcanzados} {Loc.Get("ui.defensor.aliados")}",
-                Palette.Success);
+                Palette.Success, "ui.ayuda.aura");
 
             y += 22;
         }
@@ -388,9 +409,13 @@ public partial class DefenderScreen : Control
         {
             int decimas = (defensor.CadenceBuffExpiryTick - partida.Tick) * 10 / Ints.TicksPerSecond;
 
+            // ⚠ Es el único lugar del juego donde se ve un estado con su duración,
+            // así que es donde va la regla de los estados: no se apilan, gana el
+            // más fuerte y cada aplicación renueva el reloj. Dos bardos no dan el
+            // doble de cadencia, y eso cambia qué conviene poner.
             Renglon($"{Loc.Get("ui.defensor.cadencia")} +{defensor.CadenceBuffPercent}%  ·  " +
                     $"{decimas / 10}.{decimas % 10}s",
-                Palette.Legendary);
+                Palette.Legendary, "ui.ayuda.estados");
 
             y += 22;
         }
@@ -404,10 +429,15 @@ public partial class DefenderScreen : Control
             bool ganaElPerk = partida.Roster.Find(defensor.DefenderClass)?.PreferPerkBehavior == true;
 
             Renglon(Loc.Get(ganaElPerk ? "ui.defensor.manda_el_perk" : "ui.defensor.manda_el_arma"),
-                ganaElPerk ? Palette.Legendary : Palette.Epic);
+                ganaElPerk ? Palette.Legendary : Palette.Epic, "ui.ayuda.conflicto_comportamiento");
         }
 
-        void Renglon(string texto, Color color)
-            => this.Label(new Rect2(x, y, Caja().Size.X - 32f, 22f), texto, 14, color);
+        void Renglon(string texto, Color color, string ayuda = "")
+        {
+            var caja = new Rect2(x, y, Caja().Size.X - 32f, 22f);
+
+            this.Label(caja, texto, 14, color);
+            UiTooltip.Over(caja, texto, ayuda);
+        }
     }
 }

@@ -75,6 +75,11 @@ public partial class OptionsScreen : Control
         TituloAnimaciones,
         AnimateWeapons,
         AnimateEffects,
+
+        // ⚠ Sección propia y no un renglón más de animaciones: lo que apaga no
+        // es un adorno, es la mitad explicativa de todos los carteles del juego.
+        TituloAyudas,
+        ShowHelp,
         TituloTeclas,
         // Los 8 atajos entran acá, uno por fila.
         PrimerAtajo,
@@ -235,6 +240,11 @@ public partial class OptionsScreen : Control
                 Settings.AnimateEffects = !Settings.AnimateEffects;
                 Settings.Store();
                 break;
+
+            case Fila.ShowHelp:
+                Settings.ShowHelp = !Settings.ShowHelp;
+                Settings.Store();
+                break;
         }
 
         QueueRedraw();
@@ -290,6 +300,17 @@ public partial class OptionsScreen : Control
         Titulo(IndiceDe(Fila.TituloAnimaciones), Loc.Get("ui.opciones.animaciones"));
         Interruptor(IndiceDe(Fila.AnimateWeapons), Loc.Get("ui.opciones.armas"), Settings.AnimateWeapons);
         Interruptor(IndiceDe(Fila.AnimateEffects), Loc.Get("ui.opciones.portal"), Settings.AnimateEffects);
+
+        Titulo(IndiceDe(Fila.TituloAyudas), Loc.Get("ui.opciones.ayudas"));
+        Interruptor(IndiceDe(Fila.ShowHelp), Loc.Get("ui.opciones.explicaciones"), Settings.ShowHelp);
+
+        // ⚠ Al lado del interruptor y no en un cartel: es la única fila de la
+        // pantalla cuyo efecto no se ve al apretarla —lo que apaga vive en las
+        // otras pantallas—, así que decir qué hace tiene que ser gratis.
+        this.Label(
+            new Rect2(X0 + 300f, RectFila(IndiceDe(Fila.ShowHelp)).Position.Y,
+                Width - 480f, AltoFila - 6f),
+            Loc.Get("ui.opciones.explicaciones_detalle"), 13, Palette.TextDisabled);
 
         Titulo(IndiceDe(Fila.TituloTeclas), Loc.Get("ui.opciones.teclas"));
 

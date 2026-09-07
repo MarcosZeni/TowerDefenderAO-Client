@@ -73,6 +73,12 @@ public partial class Hud : Control
 
         UiTooltip.Begin(GetGlobalMousePosition());
 
+        // ⚠ El tablero se declara PRIMERO de todo, y eso es lo que lo pone último
+        // en prioridad: gana el que declara al final, así que cualquier panel del
+        // HUD dibujado más abajo pisa este cartel. Es lo correcto — la barra de
+        // arriba tapa celdas del mundo, y ahí el jugador está señalando la barra.
+        ExplicarElTablero(p);
+
         // El bisel primero: tapa lo que se haya salido del mundo, y las paredes
         // se dibujan después encima de sus bordes.
         this.Bezel(UiLayout.WorldFrame, UiLayout.WorldOnScreen);
@@ -90,15 +96,128 @@ public partial class Hud : Control
 
         // Antes del fantasma: mientras se arrastra una ficha el cursor lleva un
         // muñeco pegado, y un cartel debajo de él no se lee.
-        if (!_arrastrando)
+        //
+        // ⚠ Y tampoco con un modal abierto. El mercado, la mochila y el drop del
+        // jefe dibujan un velo encima de todo esto: un cartel del HUD quedaría
+        // debajo del velo, medio apagado, explicando algo que en ese momento no
+        // se puede tocar. Los que no velan nada —la preparación y el panel del
+        // defensor— no cuentan: ahí el HUD se sigue usando.
+        if (!_arrastrando && !HayModal())
+        {
             UiTooltip.Draw(this);
-
-        if (_arrastrando)
+        }
+        else
+        {
+            // ⚠ Cancelar y no simplemente saltear el dibujo: el reloj de la
+            // demora es estado que vive entre cuadros, y dejarlo contando un
+            // ancla que el arrastre tapó hace que al soltar el botón aparezca de
+            // golpe el cartel de lo que había abajo.
+            UiTooltip.Cancel();
             DibujarFantasma(p);
+        }
 
         if (p.State != RunState.InProgress)
             Cartel(p);
     }
+
+    /// <summary>
+    /// Si hay una pantalla con velo encima del HUD.
+    /// </summary>
+    /// <remarks>
+    /// El drop del jefe no se pregunta por el nodo sino por la corrida —es la
+    /// misma condición que usa <c>BossDropScreen.IsOpen</c>—, porque el HUD no
+    /// tiene una referencia a esa pantalla y agregarla solo para esto sería atar
+    /// dos nodos que hoy no se conocen.
+    /// </remarks>
+    private bool HayModal()
+        => _juego.Market is { IsOpen: true }
+           || _juego.Backpack is { IsOpen: true }
+           || _juego.Run is { BossPicksLeft: > 0, OpenChoices.Length: > 0 };
+
+    // =====================================================================
+    // 0. El tablero
+    // =====================================================================
+
+    /// <summary>
+    /// Qué hay en la celda bajo el cursor, y por qué no se puede poner ahí.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>El tablero era lo único del juego que no explicaba nada</b>, y
+    /// es donde el jugador pasa la corrida entera. El mundo ya dice mucho con el
+    /// color —verde se puede, rojo no, ámbar ocupada— pero <b>el color no dice el
+    /// motivo</b>, y los motivos son cinco: la clase está sellada, no está
+    /// reclutada, la celda es ruta, la celda es pared o no alcanza el oro. Un
+    /// principiante que ve rojo sobre media pantalla concluye que el juego está
+    /// roto, no que eligió una clase que todavía no puede poner.</para>
+    ///
+    /// <para>El motivo sale de <see cref="Run.PlaceBlockedKey"/>, el mismo que
+    /// usa <c>CanPlace</c> para rebotar: el cartel y el rojo no se pueden separar
+    /// nunca.</para>
+    ///
+    /// <para>Sobre una ficha ya puesta explica <b>la ficha</b> y no la colocación:
+    /// ahí el próximo click abre su panel, no pone nada.</para>
+    /// </remarks>
+    private void ExplicarElTablero(Run p)
+    {
+        // ⚠ Se pregunta por la posición de AHORA y no por la celda que el mundo
+        // tenga guardada: ese campo lo escribe un evento de movimiento, y una
+        // pantalla que se coma el evento lo deja viejo. `CellAt` además devuelve
+        // null fuera del marco, que es lo que evita explicar una celda tapada por
+        // la barra de arriba.
+        if (_juego.CellAt(GetGlobalMousePosition()) is not { } c)
+            return;
+
+
+        float lado = UiLayout.CellOnScreen;
+
+        var enPantalla = new Rect2(
+            UiLayout.ToScreen(new Vector2(c.X * Canvas.CellSide, c.Y * Canvas.CellSide)),
+            new Vector2(lado, lado));
+
+        // Una ficha puesta: quién es, en qué nivel, y que se arrastra para mover.
+        if (p.DefenderAt(c) is { } puesto)
+        {
+            var ficha = p.Roster.Find(puesto.DefenderClass);
+
+            UiTooltip.Over(enPantalla,
+                ficha is null
+                    ? Loc.Class(puesto.DefenderClass)
+                    : $"{Loc.Class(puesto.DefenderClass)} · {Loc.Get("ui.hud.niv")} {ficha.Level}",
+                "ui.ayuda.defensor_puesto");
+
+            return;
+        }
+
+        string? motivo = p.PlaceBlockedKey(_juego.ChosenClass, c);
+
+        // Libre y pagable: lo que falta decir es el gesto, porque el click sobre
+        // una celda vacía dejó de poner nada a propósito.
+        if (motivo is null)
+        {
+            UiTooltip.Over(enPantalla, Loc.Class(_juego.ChosenClass), "ui.ayuda.celda_libre");
+            return;
+        }
+
+        UiTooltip.Over(enPantalla, Loc.Get(motivo), AyudaDelMotivo(motivo));
+    }
+
+    /// <summary>
+    /// La explicación larga de cada motivo de bloqueo.
+    /// </summary>
+    /// <remarks>
+    /// El renglón de arriba dice <b>qué pasa</b> —«esa celda es la ruta»— y esto
+    /// dice <b>qué hacer</b>. Son dos textos y no uno solo porque el de arriba se
+    /// sigue viendo con las ayudas apagadas.
+    /// </remarks>
+    private static string AyudaDelMotivo(string motivo) => motivo switch
+    {
+        "ui.mapa.clase_sellada" => "ui.ayuda.clase_sellada",
+        "ui.mapa.clase_no_reclutada" => "ui.ayuda.roster_vacio",
+        "ui.mapa.es_ruta" => "ui.ayuda.celda_ruta",
+        "ui.mapa.no_colocable" => "ui.ayuda.celda_bloqueada",
+        "ui.mapa.sin_oro" => "ui.ayuda.celda_sin_oro",
+        _ => "ui.ayuda.celda_ocupada",
+    };
 
     // =====================================================================
     // 1. La barra de arriba
@@ -139,6 +258,10 @@ public partial class Hud : Control
         this.Label(oleada.Row(20f, 30f), $"{segundos / 60:00}:{segundos % 60:00}", 16,
             Palette.TextMuted, HorizontalAlignment.Right, 6f);
 
+        // El chip entero es el blanco, no el número: quien no sabe qué es «18/100»
+        // tampoco sabe sobre qué dígito poner el cursor.
+        UiTooltip.Over(oleada, $"{p.Wave} / {total}", "ui.ayuda.oleada");
+
         // --- Vida de la Torre.
         var vida = UiLayout.TowerHp;
         int porcentaje = p.Tower.MaxHp == 0 ? 0 : p.Tower.Hp * 100 / p.Tower.MaxHp;
@@ -158,6 +281,9 @@ public partial class Hud : Control
             Palette.Health(porcentaje),
             $"{Loc.Points(p.Tower.Hp)} / {Loc.Points(p.Tower.MaxHp)}");
 
+        UiTooltip.Over(vida, $"{Loc.Points(p.Tower.Hp)} / {Loc.Points(p.Tower.MaxHp)}",
+            "ui.ayuda.vida_de_torre");
+
         // --- Oro. ⚠ NO es la billetera: la billetera es progresión permanente y
         //     vive en la cuenta; esto muere con la corrida.
         var oro = UiLayout.GoldStatus;
@@ -170,17 +296,28 @@ public partial class Hud : Control
         this.Label(oro.Row(20f, 30f), UiStyle.Thousands(p.Gold), 27, Palette.Gold,
             HorizontalAlignment.Left, EmblemaAncho);
 
+        // ⚠ La ayuda del oro dice que NO es la billetera. Es la confusión más
+        // cara de la corrida: quien cree estar juntando progresión permanente no
+        // gasta, y el oro que sobra al final no compró nada.
+        UiTooltip.Over(oro, UiStyle.Thousands(p.Gold), "ui.ayuda.oro");
+
         // --- Los tres botones.
         this.Button(UiLayout.SettingsButton, "", Palette.BorderLight,
             relleno: false, encima: _botonEncima == 0);
         Engranaje(UiLayout.SettingsButton);
+        UiTooltip.Over(UiLayout.SettingsButton, Loc.Get("ui.opciones.titulo"));
 
         this.Button(UiLayout.MenuButton, Loc.Get("ui.hud.menu"), Palette.BorderLight,
             relleno: false, encima: _botonEncima == 1);
+        UiTooltip.Help(UiLayout.MenuButton, "ui.ayuda.menu");
 
         this.Button(UiLayout.PauseButton, "", _juego.Pausado ? Palette.Warning : Palette.BorderLight,
             relleno: _juego.Pausado, encima: _botonEncima == 2);
         Pausa(UiLayout.PauseButton);
+
+        UiTooltip.Over(UiLayout.PauseButton,
+            Loc.Get(_juego.Pausado ? "ui.hud.reanudar" : "ui.hud.pausar"),
+            "ui.ayuda.pausa");
     }
 
     /// <summary>Cuánto lugar deja el icono a la izquierda de un chip de la barra.</summary>
@@ -308,6 +445,8 @@ public partial class Hud : Control
         this.Panel(UiLayout.RunRoster);
         this.SectionTitle(UiLayout.HeroesTitle, Loc.Get("ui.hud.heroes"));
 
+        UiTooltip.Help(UiLayout.HeroesTitle, "ui.ayuda.roster");
+
         var clases = p.Roster.Classes;
 
         if (clases.Count == 0)
@@ -348,10 +487,15 @@ public partial class Hud : Control
             return;
 
         var resto = UiLayout.HeroCard(UiLayout.HeroCardsVisible - 1);
+        var contador = new Rect2(resto.Position.X, resto.End.Y + 2f, resto.Size.X, 20f);
 
-        this.Label(new Rect2(resto.Position.X, resto.End.Y + 2f, resto.Size.X, 20f),
-            $"+{clases.Count - UiLayout.HeroCardsVisible}", 15, Palette.TextMuted,
+        this.Label(contador, $"+{clases.Count - UiLayout.HeroCardsVisible}", 15, Palette.TextMuted,
             HorizontalAlignment.Right);
+
+        // Un «+3» suelto se lee como un error de dibujo. Son clases del roster
+        // que no entran en la columna, y siguen usándose desde la mochila.
+        UiTooltip.Over(contador, $"+{clases.Count - UiLayout.HeroCardsVisible}",
+            "ui.ayuda.clases_de_mas");
     }
 
     // =====================================================================
@@ -378,10 +522,10 @@ public partial class Hud : Control
 
         var ficha = p.Roster.Find(_juego.ChosenClass);
 
-        Bloque(UiLayout.RunBottomBlock(0), Loc.Get("ui.hud.perks_equipados"));
-        Bloque(UiLayout.RunBottomBlock(1), Loc.Get("ui.hud.arma_equipada"));
-        Bloque(UiLayout.RunBottomBlock(2), Loc.Get("ui.hud.planos_activos"));
-        Bloque(UiLayout.RunBottomBlock(3), Loc.Get("ui.hud.mochila"));
+        Bloque(UiLayout.RunBottomBlock(0), Loc.Get("ui.hud.perks_equipados"), "ui.ayuda.perks_equipados");
+        Bloque(UiLayout.RunBottomBlock(1), Loc.Get("ui.hud.arma_equipada"), "ui.ayuda.arma_equipada");
+        Bloque(UiLayout.RunBottomBlock(2), Loc.Get("ui.hud.planos_activos"), "ui.ayuda.planos_activos");
+        Bloque(UiLayout.RunBottomBlock(3), Loc.Get("ui.hud.mochila"), "ui.ayuda.mochila");
 
         if (ficha is not null)
         {
@@ -394,10 +538,18 @@ public partial class Hud : Control
     }
 
     /// <summary>El título y la separación de un bloque de la barra de build.</summary>
-    private void Bloque(Rect2 r, string titulo)
+    /// <remarks>
+    /// ⚠ El cartel cuelga del <b>bloque entero</b> y no del rótulo. Los cuatro
+    /// bloques son las cuatro cosas que un jugador nuevo confunde entre sí
+    /// —perks, arma, planos y mochila son cuatro sistemas distintos, no cuatro
+    /// vistas del mismo— y el rótulo mide 22 px de alto sobre un bloque de 130.
+    /// </remarks>
+    private void Bloque(Rect2 r, string titulo, string ayuda)
     {
         this.Label(r.Row(0f, 22f), titulo.ToUpperInvariant(), 14, Palette.TextMuted);
         this.Rule(r, 24f);
+
+        UiTooltip.Over(r, titulo, ayuda);
     }
 
     /// <summary>Alto de la fila de huecos dentro de un bloque de la build.</summary>
@@ -573,6 +725,11 @@ public partial class Hud : Control
 
         this.Label(fila, $"{p.Backpack.Used}/{cap}", 17,
             llena ? Palette.Warning : Palette.TextSecondary, HorizontalAlignment.Right);
+
+        // ⚠ Llena cambia la ayuda, no solo el color. «15/15» en ámbar dice que
+        // algo pasa; lo que hay que saber es que el próximo drop se pierde en
+        // silencio, y que la salida es MEJORAR las sobras, no tirarlas.
+        UiTooltip.Help(fila, llena ? "ui.ayuda.mochila_llena" : "ui.ayuda.mochila_lugar");
     }
 
     // =====================================================================
@@ -602,6 +759,9 @@ public partial class Hud : Control
             $"{Loc.Get("ui.hud.consejo")}  {Loc.Get("ui.hud.ayuda")}", 14, Palette.TextMuted);
 
         this.RarityLegend(UiLayout.RunFooterLegend);
+
+        UiTooltip.Help(UiLayout.RunFooterLegend, "ui.ayuda.rarezas");
+        UiTooltip.Help(UiLayout.RunFooterTip, "ui.ayuda.atajos");
     }
 
     /// <summary>El cartel de ganaste o perdiste, en el centro.</summary>
