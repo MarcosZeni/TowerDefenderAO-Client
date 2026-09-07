@@ -7,7 +7,7 @@
   //
   //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA del ranking.
   // ---------------------------------------------------------------------------
-  "version": 1,
+  "version": 2,
 
   // --- La Torre --------------------------------------------------------------
   //
@@ -37,10 +37,39 @@
   // por área: el área es una propiedad de la oleada, no un contador que se
   // reinicia.
   //
-  // "lastWavePerArea": el reparto de las 100 entre las ocho. No es parejo
-  // —12 o 13— porque 100 no divide en 8; las áreas del medio se llevan la de
-  // más, que es donde el jugador ya entendió el juego y todavía tiene margen
-  // para experimentar. La última tiene que ser igual a wavesPerRun.
+  // "lastWavePerArea": el reparto de las 100 entre las ocho. NO ES PAREJO Y NO
+  // TIENE QUE SERLO: cada área dura lo que su bestiario tiene para dar.
+  //
+  // ⚠ LAS ÁREAS BAJAS SE ACORTARON (2026-09-07). Antes eran [12, 24, 37, 50, 62,
+  // 75, 87, 100] —12 o 13 cada una, parejo— y eso era el bug de ritmo más grande
+  // del juego: las áreas 1 y 2 se llevaban VEINTICUATRO OLEADAS, un cuarto de la
+  // corrida, para cubrir de 30 a 111 de HP. Hasta la oleada 24 el enemigo más
+  // duro que veía el jugador era un Cerdo de 102, mientras él ya había subido
+  // niveles, comprado perks y equipado armas. Medido: el presupuesto efectivo
+  // subía de 1331 en la oleada 12 a 1828 en la 24 —un 37% en doce oleadas— y la
+  // oleada 13 salía MÁS FÁCIL que la 12 (1181 contra 1331), porque el tope del
+  // presupuesto es el costo medio del pool y el pool del área 2 costaba casi lo
+  // mismo que el del área 1.
+  //
+  // Con [6, 13, 26, 39, 52, 66, 83, 100] la oleada 24 pasa a 2809 de presupuesto
+  // —+54%— y el bajón de la 13 desaparece. El Lobo aparece en la 14 en vez de la
+  // 25 y el Zombie en la 27 en vez de la 38.
+  //
+  // ⚠ Queda UN bajón, chico y estructural: la oleada 40 —la primera del área 5—
+  // cae de 5740 a 5553, un 3%. No es el bestiario: es que "equivalentCapMin"
+  // reinicia el capEq de 65 a 50 al cambiar de área, y el área 5 (471-727 de HP)
+  // no es lo bastante más cara que la 4 (304-433) para tapar ese 23%. Se probaron
+  // seis repartos y el bajón se MUEVE de oleada pero no se va: sale del capEq, no
+  // de dónde estén los cortes. Se deja porque en esa oleada aparecen bichos que
+  // antes no existían —la dificultad que se ve sube aunque el presupuesto baje 3%—
+  // y porque perseguirlo cuesta más cambios de temporada de los que vale.
+  //
+  // Las áreas altas se llevan la de más —17 las dos últimas— y eso también es a
+  // propósito: es donde el bestiario tiene rango de HP para estirar (de 4193 a
+  // 8400 en la 8) y donde el jugador ya tiene con qué experimentar. Las bajas no
+  // lo tienen: el área 1 entera va de 30 a 76.
+  //
+  // La última tiene que ser igual a wavesPerRun.
   //
   // ⚠ Cada oleada de esta lista TRAE JEFE, y el jefe es la única fuente de perks
   // de Oro: exactamente ocho oportunidades por corrida. Eso es lo que hace que
@@ -50,7 +79,7 @@
   "run": {
     "wavesPerRun": 100,
     "areaCount": 8,
-    "lastWavePerArea": [12, 24, 37, 50, 62, 75, 87, 100],
+    "lastWavePerArea": [6, 13, 26, 39, 52, 66, 83, 100],
     "wavesBetweenChoices": 3,
     "preparationSeconds": 30,
 

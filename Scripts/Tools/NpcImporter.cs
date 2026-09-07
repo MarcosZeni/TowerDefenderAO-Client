@@ -201,19 +201,51 @@ public static class NpcImporter
     }
 
     /// <summary>
-    /// Reparte los enemigos en las 8 áreas <b>por percentil</b>, no por cortes de
-    /// HP escritos a mano.
+    /// Cuánto pesa el percentil de <b>población</b> frente al percentil de
+    /// <b>HP</b> al repartir el bestiario en las ocho áreas. El resto —0,35— lo
+    /// pesa el HP.
     /// </summary>
     /// <remarks>
-    /// <para>Primero se probó con cortes fijos y el reparto salió
+    /// Es el único número del reparto y sale de una medición, no de gusto:
+    /// corriendo el importador contra el bestiario de hoy, 0,55 y 0,60 dan los
+    /// dos <c>4/7/3/7/5/5/5/6</c> —el área 3 se queda con tres enemigos, que es
+    /// justo lo que el reparto por cortes de HP hacía mal— y 0,65 da
+    /// <c>5/6/4/6/5/5/5/6</c>, donde ninguna baja de cuatro. Subirlo más lo
+    /// devuelve hacia los octiles de población, que es el otro extremo.
+    /// </remarks>
+    private const double PesoPoblacionEnAreas = 0.65;
+
+    /// <summary>
+    /// Reparte los enemigos en las 8 áreas mezclando el <b>percentil de
+    /// población</b> con el <b>percentil de HP en escala logarítmica</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Primero se probó con cortes de HP fijos y el reparto salió
     /// <c>1:3 2:17 3:3 4:12 …</c> — el área 1 con tres bichos y la 2 con
     /// diecisiete. Un área con tres enemigos no tiene de dónde variar, y ahí la
     /// seed deja de hacer trabajo: todas las corridas de esa área se parecen.</para>
     ///
-    /// <para>Cortando por octiles el reparto sale parejo solo, y —lo que
-    /// importa más— <b>sigue saliendo parejo cuando cambie el bestiario</b>.
-    /// Números a mano habría que recalibrarlos cada vez que Austral agregue una
-    /// criatura o que se toque la curva de reescalado.</para>
+    /// <para>Después se cortó por <b>octiles de población</b>, que reparte parejo
+    /// solo y sigue repartiendo parejo cuando cambia el bestiario. ⚠ El problema
+    /// medido el 2026-09-07: <b>el HP del bestiario no está repartido parejo</b>.
+    /// Las áreas 1 y 2 se llevaban once bichos para cubrir de 30 a 111 de HP —el
+    /// 1,3% del rango, ×3,7— y con el reparto de oleadas de entonces eso eran
+    /// VEINTICUATRO OLEADAS, un cuarto de la corrida, en las que el enemigo más
+    /// duro era un Cerdo de 102. Peor: como el tope del presupuesto es el costo
+    /// medio del pool, el pool del área 2 costaba casi lo mismo que el del área 1
+    /// y la oleada 13 salía <b>más fácil</b> que la 12.</para>
+    ///
+    /// <para>La mezcla arregla las dos mitades a la vez. El término de
+    /// <b>población</b> impide que un área quede con dos bichos —que es lo que
+    /// pasaba con cortes de HP—; el término de <b>HP</b> impide que un tramo
+    /// angosto del bestiario se coma un cuarto de la corrida —que es lo que
+    /// pasaba con octiles—. El HP entra en <b>logaritmo</b> porque crece ×280 de
+    /// punta a punta: en lineal, las siete áreas bajas caerían todas antes del
+    /// primer octil y el reparto sería peor que cualquiera de los dos.</para>
+    ///
+    /// <para>Sigue sin haber un número por criatura, así que <b>agregar un bicho
+    /// no obliga a recalibrar nada</b> — que era el motivo de los octiles y se
+    /// conserva.</para>
     /// </remarks>
     private static void RepartirEnAreas(List<EnemigoImportado> ordenadosPorHp)
     {
@@ -221,12 +253,58 @@ public static class NpcImporter
         if (total == 0)
             return;
 
+        if (total == 1)
+        {
+            ordenadosPorHp[0] = ordenadosPorHp[0] with { Area = 1 };
+            CoronarAlJefeFinal(ordenadosPorHp);
+            return;
+        }
+
+        int hpMin = ordenadosPorHp[0].ScaledHp;
+        int hpMax = ordenadosPorHp[^1].ScaledHp;
+
+        // Si todo el bestiario tuviera el mismo HP no habría eje de dificultad
+        // que repartir, y la mezcla se cae sola al percentil de población.
+        double lnRango = hpMax > hpMin
+            ? System.Math.Log((double)hpMax / hpMin)
+            : 0;
+
+        // "areaEsperada" arrastra el área del anterior: el reparto tiene que ser
+        // monótono y sin huecos, y las dos correcciones de abajo dependen de eso.
+        int areaEsperada = 1;
+
         for (int i = 0; i < total; i++)
         {
-            // i * 8 / total da 0..7; +1 lo lleva a 1..8. El último elemento daría
-            // 8 exacto y se pasaría, así que se limita.
-            int area = System.Math.Min(8, (i * 8 / total) + 1);
+            double porPoblacion = (double)i / (total - 1);
+
+            double porHp = lnRango > 0
+                ? System.Math.Log((double)ordenadosPorHp[i].ScaledHp / hpMin) / lnRango
+                : porPoblacion;
+
+            double posicion = (PesoPoblacionEnAreas * porPoblacion)
+                              + ((1 - PesoPoblacionEnAreas) * porHp);
+
+            // "posicion" va de 0 a 1; ×8 da 0..8 y el último elemento daría 8
+            // exacto, que se pasaría, así que se limita.
+            int area = System.Math.Min(8, (int)(posicion * 8) + 1);
+
+            // ⚠ Ningún área puede quedar VACÍA: Balance no puede armar la oleada
+            // de un área sin enemigos y la corrida no arranca. Son dos huecos
+            // distintos y los dos hay que taparlos.
+
+            // (a) Un salto de la 3 a la 5 deja la 4 sin nada.
+            if (area > areaEsperada + 1)
+                area = areaEsperada + 1;
+
+            // (b) Y hay que reservar un enemigo para cada área que todavía falta,
+            // o el bestiario se termina en la 6 y las dos últimas quedan vacías.
+            int minimo = 8 - (total - i) + 1;
+
+            if (area < minimo)
+                area = minimo;
+
             ordenadosPorHp[i] = ordenadosPorHp[i] with { Area = area };
+            areaEsperada = area;
         }
 
         CoronarAlJefeFinal(ordenadosPorHp);
@@ -502,7 +580,19 @@ public static class NpcImporter
 
         int descartadosClones = DescartarClones(enemigos);
 
-        enemigos.Sort((a, b) => a.ScaledHp.CompareTo(b.ScaledHp));
+        // ⚠ El desempate por `OriginalNpc` NO es cosmético. `List.Sort` usa
+        // introsort y NO ES ESTABLE, y el bestiario tiene seis grupos de HP
+        // empatado —tres Elementales en 304, tres bichos en 92, dos en 552, dos
+        // en 1669, dos en 4587—. Sin un criterio total, el orden de los empates
+        // lo decide el algoritmo, y de ese orden salen DOS cosas que no pueden
+        // quedar al azar: el `id` de cada enemigo y —desde el reparto mezclado—
+        // el ÁREA en la que cae. Medido: el mismo bestiario daba `5/6/4/6/6/5/4/6`
+        // o `4/7/3/7/5/5/5/6` según por dónde cayeran los empates.
+        enemigos.Sort((a, b) =>
+        {
+            int porHp = a.ScaledHp.CompareTo(b.ScaledHp);
+            return porHp != 0 ? porHp : a.OriginalNpc.CompareTo(b.OriginalNpc);
+        });
 
         // El área sale del percentil, así que hay que repartir DESPUÉS de ordenar.
         RepartirEnAreas(enemigos);
@@ -596,7 +686,7 @@ public static class NpcImporter
         // sin error y el juego arrancaba con cero enemigos.
         var salida = new
         {
-            version = 1,
+            version = 2,
             source = "NPCs.dat de Austral AO, leído con Encoding.Latin1 y escrito en UTF-8",
 
             note = "Generado por el importador. NO editar a mano: se pisa en la próxima " +
