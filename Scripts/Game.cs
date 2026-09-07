@@ -1564,8 +1564,13 @@ public partial class Game : Node2D
         if (apariencia is null || apariencia.Body.Length == 0)
             return false;
 
-        // Mira a lo que le está pegando. Mientras se arrastra no tiene objetivo
-        // —el fantasma todavía no dispara—, así que sale de frente.
+        // ⚠ UN SOLO HEADING PARA LAS TRES PIEZAS, y lo decide la CABEZA.
+        //
+        // La cabeza es la que sigue al objetivo, pero el cuerpo y el arma giran
+        // con ella: si la cabeza se dibuja al norte, cuerpo y arma van al norte.
+        // Las tres piezas de Austral están dibujadas por heading para encastrar
+        // entre sí, así que mezclar headings deja el arma flotando al costado y
+        // la cabeza mirando fuera del cuello.
         string direccion = Direcciones[MirandoHacia(d, donde)];
 
         var centro = new Vector2(
@@ -1579,7 +1584,7 @@ public partial class Game : Node2D
         // ⚠ El cuerpo va QUIETO, cuadro 0. Sus cuadros son el ciclo de caminar de
         // AO, y un defensor plantado que "camina" en el lugar marea — pedido del
         // 2026-08-26. La única pieza que anima es el arma.
-        if (!DibujarPieza(apariencia.Body, direccion, centro, celda, Vector2.Zero, animar: false))
+        if (!DibujarPieza(apariencia.Body, direccion, centro, celda, Vector2.Zero, Quieto))
             return false;
 
         // ⚠ La cabeza va corrida, y el offset sale del cuerpo.
@@ -1591,10 +1596,43 @@ public partial class Game : Node2D
             apariencia.HeadOffset.X * EscalaSprite,
             apariencia.HeadOffset.Y * EscalaSprite);
 
-        DibujarPieza(apariencia.Head, direccion, centro, celda, offsetCabeza, animar: false);
-        DibujarPieza(apariencia.Weapon, direccion, centro, celda, Vector2.Zero, animar: true);
+        DibujarPieza(apariencia.Head, direccion, centro, celda, offsetCabeza, Quieto);
+        DibujarPieza(apariencia.Weapon, direccion, centro, celda, Vector2.Zero, MsDelGolpe(d));
 
         return true;
+    }
+
+    /// <summary>Le dice a <see cref="DibujarPieza"/> que vaya al cuadro 0 y no anime.</summary>
+    private const long Quieto = -1;
+
+    /// <summary>
+    /// Milisegundos de mundo desde el último golpe de este defensor, o
+    /// <see cref="Quieto"/> si todavía no pegó ninguno.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Esto reemplazó a animar el arma sin parar.</b> El arma corría el
+    /// ciclo entero contra <see cref="MsMundo"/> estuviera o no peleando, así que
+    /// entre oleadas —y en un defensor sin nadie a tiro— el muñeco tajaba el aire
+    /// solo. Con el ciclo colgado del golpe, el swing <b>es</b> el golpe: si no
+    /// hay animación, no pegó.</para>
+    ///
+    /// <para>Sale de <see cref="Defender.LastHitTick"/>, que la simulación ya
+    /// escribe en el mismo lugar donde cobra el daño y que también usan el
+    /// proyectil y el sonido de impacto. No hace falta estado nuevo ni tocar el
+    /// tick.</para>
+    ///
+    /// <para>La cuenta es la misma de <see cref="MsMundo"/> —milésimas de tick
+    /// primero, una sola división al final— para que el swing avance parejo con
+    /// la posición interpolada y no a escalones de un tick.</para>
+    /// </remarks>
+    private long MsDelGolpe(Defender d)
+    {
+        if (d.LastHitTick == int.MinValue)
+            return Quieto;
+
+        long milesimas = ((long)(Run.Tick - 1 - d.LastHitTick) * 1000L) + FraccionMilesimas;
+
+        return milesimas < 0 ? Quieto : milesimas / Ints.TicksPerSecond;
     }
 
     /// <summary>Norte, este, sur y oeste como índices de <see cref="Direcciones"/>.</summary>
@@ -1611,6 +1649,11 @@ public partial class Game : Node2D
     /// Hacia dónde mira un defensor: <b>al enemigo al que le está pegando</b>.
     /// </summary>
     /// <remarks>
+    /// <para>⚠ <b>Manda la cabeza, y el resto la sigue.</b> Es el heading de las
+    /// tres piezas: cuerpo, cabeza y arma se dibujan en la misma dirección —ver
+    /// <see cref="DibujarDefensor"/>—, porque el arte de Austral está dibujado
+    /// por heading para encastrar entre sí.</para>
+    ///
     /// <para>⚠ <b>Esto reemplazó a «mirar al camino».</b> La versión anterior
     /// orientaba el muñeco hacia la celda de ruta más cercana y no cambiaba
     /// nunca, porque una fila de defensores girando en bloque se veía mal. El
@@ -1654,9 +1697,13 @@ public partial class Game : Node2D
     /// <summary>
     /// Dibuja una pieza de un muñeco, anclada abajo y centrada.
     /// </summary>
+    /// <param name="msAnimacion">
+    /// Cuánto hace que arrancó la animación de esta pieza, en milisegundos de
+    /// mundo. <see cref="Quieto"/> —o pasada la última región— va el cuadro 0.
+    /// </param>
     /// <returns><c>false</c> si esa clave no tiene arte.</returns>
     private bool DibujarPieza(
-        string clave, string direccion, Vector2 centro, int celda, Vector2 offset, bool animar)
+        string clave, string direccion, Vector2 centro, int celda, Vector2 offset, long msAnimacion)
     {
         if (clave.Length == 0)
             return false;
@@ -1667,12 +1714,21 @@ public partial class Game : Node2D
         if (g is null)
             return false;
 
-        // La animación sale del reloj del mundo, igual que la del bicho. Con
-        // animar en falso va siempre el cuadro 0: el de estar parado.
-        long ms = MsMundo;
+        // ⚠ La animación se reproduce UNA VEZ y vuelve al cuadro 0.
+        //
+        // `GraphicsLoader.Texture` toma el índice módulo la cantidad de cuadros,
+        // así que un contador libre daría un ciclo infinito: exactamente lo que
+        // había antes. Acá el que se pasa del último cuadro cae en el de estar
+        // parado y se queda ahí hasta el próximo golpe.
+        int cuadro = 0;
 
-        bool mueve = animar && Settings.AnimateWeapons;
-        var textura = GraphicsLoader.Texture(completa, mueve ? (int)(ms / g.MsPerFrame) : 0);
+        if (msAnimacion >= 0 && Settings.AnimateWeapons)
+        {
+            long i = msAnimacion / g.MsPerFrame;
+            cuadro = i < g.Frames ? (int)i : 0;
+        }
+
+        var textura = GraphicsLoader.Texture(completa, cuadro);
 
         if (textura is null)
             return false;
