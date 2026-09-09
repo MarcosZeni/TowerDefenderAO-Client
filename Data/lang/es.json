@@ -57,6 +57,21 @@
     "class.Paladin.name": "Paladín",
     "class.Hunter.name": "Cazador",
 
+    // --- Las sinergias ------------------------------------------------------
+    // ⚠ Los conjuntos SE PISAN: una clase está en varias. Por eso la descripción
+    // dice QUÉ CLASES junta y no solo qué hace — el jugador tiene que poder ver
+    // por qué su Paladín cuenta para tres cosas a la vez.
+    "synergy.guerreros.name": "Guerreros",
+    "synergy.guerreros.desc": "Guerrero, Paladín y Asesino pegan más fuerte cuando pelean juntos.",
+    "synergy.misticos.name": "Místicos",
+    "synergy.misticos.desc": "Mago, Clérigo y Druida alcanzan más lejos cuando pelean juntos.",
+    "synergy.sombras.name": "Sombras",
+    "synergy.sombras.desc": "Ladrón, Bardo y Cazador alcanzan más lejos cuando pelean juntos.",
+    "synergy.fe.name": "Fe",
+    "synergy.fe.desc": "Clérigo y Paladín, dos de cada uno: la fe también es un arma.",
+    "synergy.concilio.name": "Concilio",
+    "synergy.concilio.desc": "Mago, Clérigo y Paladín, dos de cada uno: saber, fe y acero.",
+
     // --- Perks de bronce ----------------------------------------------------
     "perk.filo.name": "Filo",
     "perk.pulso.name": "Pulso",

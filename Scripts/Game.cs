@@ -1854,7 +1854,19 @@ public partial class Game : Node2D
         // jugador decide dónde poner: un anillo que ignora los perks miente
         // justo en el momento en que la información importa.
         var claseAnillo = ocupada?.DefenderClass ?? _claseElegida;
-        int alcanceMili = Run.Roster.StatsOf(claseAnillo, Run.Backpack).RangeMilli;
+
+        // ⚠ Y el tablero se cuenta CON esta ficha adentro cuando todavía no está
+        // puesta. Poner el primer Cazador puede activar una sinergia de alcance:
+        // dibujar el anillo con el tablero de ahora mostraría el círculo chico y
+        // el jugador vería saltar el alcance recién después de soltar, que es
+        // justo cuando ya no puede decidir. Si la celda está ocupada, esa ficha ya
+        // está contada y no se suma de nuevo.
+        var tableroAnillo = Run.CountUnitsPerClass();
+
+        if (ocupada is null)
+            tableroAnillo[(int)claseAnillo]++;
+
+        int alcanceMili = Run.Roster.StatsOf(claseAnillo, Run.Backpack, tableroAnillo).RangeMilli;
 
         if (puede || ocupada is not null)
         {
@@ -1933,7 +1945,7 @@ public partial class Game : Node2D
 
         // El anillo de alcance en el destino: mover una ficha es exactamente
         // decidir a qué llega, así que la pregunta se contesta antes de soltar.
-        int alcanceMili = Run.Roster.StatsOf(llevada.DefenderClass, Run.Backpack).RangeMilli;
+        int alcanceMili = Run.Roster.StatsOf(llevada.DefenderClass, Run.Backpack, Run.CountUnitsPerClass()).RangeMilli;
 
         var centro = new Vector2((destino.X + 0.5f) * celda, (destino.Y + 0.5f) * celda);
         float radio = alcanceMili * celda / (float)Ints.ThousandthsPerCell;

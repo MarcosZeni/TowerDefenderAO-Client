@@ -99,6 +99,17 @@ public sealed class BalanceData
     /// <summary>Los números del tick. Sale de <c>combate.json</c>.</summary>
     public required CombatData Combat { get; init; }
 
+    /// <summary>
+    /// Qué se gana por mezclar clases en el tablero. Sale de <c>sinergias.json</c>.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Entra al hash como las demás desde el 2026-09-09, que es cuando el bonus
+    /// empezó a aplicarse: multiplica el daño y el alcance de cada defensor en
+    /// <see cref="Roster.StatsOf"/>, así que es entrada de la simulación como
+    /// cualquier otra tabla.
+    /// </remarks>
+    public required SynergyTable Synergies { get; init; }
+
     /// <summary>El reparto de las 100 oleadas entre las 8 áreas.</summary>
     /// <remarks>
     /// Se deriva de <see cref="Curvas"/> al indexar, para que no haya dos copias

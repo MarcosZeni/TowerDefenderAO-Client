@@ -241,7 +241,7 @@ public partial class DefenderScreen : Control
             return;
 
         var partida = _juego.Run!;
-        var stats = partida.Roster.StatsOf(defensor.DefenderClass, partida.Backpack);
+        var stats = partida.Roster.StatsOf(defensor.DefenderClass, partida.Backpack, partida.CountUnitsPerClass());
         var caja = Caja();
 
         UiTooltip.Begin(GetGlobalMousePosition());

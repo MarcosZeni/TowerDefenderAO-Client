@@ -42,6 +42,18 @@
     "class.Paladin.name": "Paladin",
     "class.Hunter.name": "Hunter",
 
+    // --- Synergies ----------------------------------------------------------
+    "synergy.guerreros.name": "Warriors",
+    "synergy.guerreros.desc": "Warrior, Paladin and Assassin hit harder when they fight together.",
+    "synergy.misticos.name": "Mystics",
+    "synergy.misticos.desc": "Mage, Cleric and Druid reach farther when they fight together.",
+    "synergy.sombras.name": "Shadows",
+    "synergy.sombras.desc": "Thief, Bard and Hunter reach farther when they fight together.",
+    "synergy.fe.name": "Faith",
+    "synergy.fe.desc": "Cleric and Paladin, two of each: faith is a weapon too.",
+    "synergy.concilio.name": "Council",
+    "synergy.concilio.desc": "Mage, Cleric and Paladin, two of each: lore, faith and steel.",
+
     // --- Bronze perks -------------------------------------------------------
     "perk.filo.name": "Edge",
     "perk.pulso.name": "Pulse",

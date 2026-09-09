@@ -191,6 +191,32 @@ public sealed class Run
     public Shop Shop { get; } = new();
 
     /// <summary>
+    /// Cuántos defensores hay puestos de cada clase. Índice =
+    /// <see cref="DefenderClass"/>. Es lo que las sinergias cuentan.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Se cuenta cada vez, no se lleva un contador incremental.</b> Un
+    /// contador hay que acordarse de bajarlo al vender, al reemplazar y al
+    /// retirar, y el día que se olvida uno la corrida sigue andando con una
+    /// sinergia activa de más — y da distinto que la revalidación del servidor.
+    /// Es el mismo criterio por el que <see cref="Roster.StatsOf"/> no cachea.</para>
+    ///
+    /// <para>El costo es O(defensores) y hay que llamarla <b>una vez por bucle</b>,
+    /// no por defensor: adentro del <c>foreach</c> sería O(n²) por tick.</para>
+    ///
+    /// <para>No consume RNG.</para>
+    /// </remarks>
+    public int[] CountUnitsPerClass()
+    {
+        var cuenta = new int[System.Enum.GetValues<DefenderClass>().Length];
+
+        foreach (var d in _defensores)
+            cuenta[(int)d.DefenderClass]++;
+
+        return cuenta;
+    }
+
+    /// <summary>
     /// Las clases a las que se les acaba de levantar el sello, para que la
     /// pantalla lo anuncie. Se llena al abrir la tienda y se vacía al lanzar la
     /// oleada.
@@ -2270,6 +2296,12 @@ public sealed class Run
         // lista de defensores.
         _grilla.Rebuild(_enemigos, _ruta);
 
+        // ⚠ UNA vez por fase, no una por defensor: adentro del foreach sería
+        // O(defensores²) por tick. La composición no cambia durante la fase —poner
+        // y vender pasan en la preparación—, así que contar antes es equivalente y
+        // barato.
+        var unidadesPorClase = CountUnitsPerClass();
+
         foreach (var d in _defensores)
         {
             if (d.RemainingCooldown > 0)
@@ -2281,7 +2313,7 @@ public sealed class Run
             // base + nivel + perks + equipo, recalculado cada vez. Nada de esto
             // vive en el defensor: un cazador puesto en la oleada 3 y otro puesto
             // en la 40 pegan exactamente igual.
-            var stats = Roster.StatsOf(d.DefenderClass, Backpack);
+            var stats = Roster.StatsOf(d.DefenderClass, Backpack, unidadesPorClase);
             var objetivo = ElegirObjetivo(d, stats.RangeMilli);
 
             // Para el render, no para la simulación: el muñeco mira a lo que le
@@ -3779,9 +3811,11 @@ public sealed class Run
     /// </remarks>
     private void ContarMuertesParaSed()
     {
+        var unidadesPorClase = CountUnitsPerClass();
+
         foreach (var d in _defensores)
         {
-            var stats = Roster.StatsOf(d.DefenderClass, Backpack);
+            var stats = Roster.StatsOf(d.DefenderClass, Backpack, unidadesPorClase);
 
             if (stats.Ability != WeaponAbility.Thirst &&
                 stats.Behavior != PerkEffect.Bloodthirst)

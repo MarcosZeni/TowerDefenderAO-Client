@@ -1273,6 +1273,160 @@ public static class TableReader
     }
 
     // -------------------------------------------------------------------------
+    //  sinergias.json
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Las sinergias: conjuntos de clases y qué se gana por juntarlas.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Los conjuntos SE PISAN a propósito</b>, así que casi todo lo que
+    /// chequea este lector es «esto se puede alcanzar de verdad». Con conjuntos
+    /// disjuntos alcanzaba con mirar cada uno por separado; con solapamiento, una
+    /// sinergia mal escrita no rompe nada al cargar y simplemente no se activa
+    /// nunca — que es la peor clase de bug de datos, el que no se ve.</para>
+    /// </remarks>
+    public static SynergyTable Synergies(string texto)
+    {
+        const string archivo = "sinergias.json";
+
+        using var doc = ParseJson(texto, archivo);
+        var raiz = doc.RootElement;
+
+        int maxRoster = Int(raiz, "maxRosterClasses", archivo);
+
+        if (maxRoster < 2)
+        {
+            throw new InvalidBalanceDataException(
+                $"{archivo}: «maxRosterClasses» es {maxRoster}. Con menos de 2 clases en el " +
+                "roster no hay sinergia posible y el archivo entero sobra.");
+        }
+
+        var lista = new List<Synergy>();
+        var vistas = new HashSet<string>(System.StringComparer.Ordinal);
+
+        foreach (var e in ArrayOf(raiz, "synergies", archivo).EnumerateArray())
+        {
+            string clave = Text(e, "key", archivo);
+
+            if (!vistas.Add(clave))
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» está dos veces");
+
+            var clases = ClassesOf(e, archivo);
+
+            // Una sinergia de una sola clase es un buff de clase disfrazado: iría
+            // en clases.json, donde se lee al lado del resto de sus números.
+            if (clases.Length < 2)
+            {
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: «{clave}» tiene {clases.Length} clase(s). Una sinergia junta " +
+                    "dos o más; para subirle un número a una sola clase está clases.json.");
+            }
+
+            var repetidas = new HashSet<DefenderClass>();
+
+            foreach (var c in clases)
+            {
+                if (!repetidas.Add(c))
+                    throw new InvalidBalanceDataException($"{archivo}: «{clave}» repite la clase «{c}»");
+            }
+
+            // ⚠ El chequeo que justifica que «maxRosterClasses» viva en los datos.
+            // Una sinergia que pide más clases de las que entran en el roster no se
+            // completa NUNCA: carga bien, no rompe nada y no se activa jamás.
+            if (clases.Length > maxRoster)
+            {
+                throw new InvalidBalanceDataException(
+                    $"{archivo}: «{clave}» junta {clases.Length} clases y el roster solo tiene " +
+                    $"{maxRoster} lugares. Nunca se podría completar.");
+            }
+
+            // Opcional: por defecto alcanza con un defensor para que la clase cuente.
+            int minUnidades = e.TryGetProperty("minUnitsPerClass", out var mu)
+                ? Int(e, "minUnitsPerClass", archivo)
+                : 1;
+
+            if (minUnidades < 1)
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene «minUnitsPerClass» en {minUnidades}, y el mínimo es 1");
+
+            var alcance = e.TryGetProperty("scope", out var sc)
+                ? Enum_<SynergyScope>(sc.GetString() ?? "", "scope", archivo)
+                : SynergyScope.Members;
+
+            var escalones = new List<SynergyTier>();
+            int anterior = 0;
+
+            foreach (var t in ArrayOf(e, "tiers", archivo).EnumerateArray())
+            {
+                int necesita = Int(t, "need", archivo);
+
+                if (necesita < 2)
+                    throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene un escalón que pide {necesita} clase(s). El mínimo es 2.");
+
+                if (necesita > clases.Length)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» tiene un escalón que pide {necesita} clases y el " +
+                        $"conjunto solo tiene {clases.Length}. Ese escalón no se alcanza nunca.");
+                }
+
+                // De menor a mayor: así `TierFor` puede quedarse con el más alto y
+                // el que lee el archivo ve la progresión en el orden en que sube.
+                if (necesita <= anterior)
+                    throw new InvalidBalanceDataException($"{archivo}: los escalones de «{clave}» tienen que ir de menor a mayor «need»");
+
+                anterior = necesita;
+
+                string nombreEfecto = Text(t, "effect", archivo);
+
+                // ⚠ Se caza ACÁ, antes del parse genérico, para que el mensaje
+                // ENSEÑE. `Enum_` diría «no es un SynergyEffect válido» y el que
+                // lo intente asumiría que falta implementarlo — cuando en realidad
+                // está sacado a propósito y agregarlo silenciosamente no anda.
+                if (string.Equals(nombreEfecto, "Cadence", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» pide «Cadence», y no existe A PROPÓSITO. El daño va " +
+                        "en centésimas de punto y el alcance en milésimas de celda, pero la cadencia " +
+                        "sigue en TICKS ENTEROS (18 a 30): un tick es un escalón del 3,3% al 5,6%, " +
+                        "así que un +5% sobre cadencia 18 da 17,14 y trunca a 17, y cualquier bonus " +
+                        "más chico que el escalón hace exactamente cero. Para que una sinergia dé " +
+                        "velocidad de ataque hay que escalar la cadencia primero, igual que se hizo " +
+                        "con el daño y el alcance.");
+                }
+
+                var efecto = Enum_<SynergyEffect>(nombreEfecto, "effect", archivo);
+
+                // ⚠ La cadencia sigue en TICKS ENTEROS (18 a 30), así que un tick es
+                // un escalón del 3,3% al 5,6% y cualquier bonus más chico hace CERO.
+                // El enum no tiene Cadence, pero el mensaje tiene que decir por qué
+                // y no solo «no es un valor válido».
+                if (efecto == SynergyEffect.None)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» tiene un escalón con «effect» en None. " +
+                        "Los efectos posibles son Damage y Range. NO hay Cadence a propósito: " +
+                        "la cadencia está en ticks enteros y un bonus porcentual chico se trunca a nada.");
+                }
+
+                int magnitud = Int(t, "magnitude", archivo);
+
+                if (magnitud <= 0)
+                    throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene un escalón con magnitud {magnitud}. Tiene que ser positiva.");
+
+                escalones.Add(new SynergyTier(necesita, efecto, magnitud));
+            }
+
+            if (escalones.Count == 0)
+                throw new InvalidBalanceDataException($"{archivo}: «{clave}» no tiene ningún escalón en «tiers»");
+
+            lista.Add(new Synergy(clave, clases, minUnidades, alcance, [.. escalones]));
+        }
+
+        return new SynergyTable([.. lista], maxRoster);
+    }
+
+    // -------------------------------------------------------------------------
     //  generador-armas.json
     // -------------------------------------------------------------------------
 

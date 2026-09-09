@@ -1491,7 +1491,7 @@ public partial class BackpackScreen : Control
 
     private void StatsDeClase(Run partida, DefenderClass clase)
     {
-        var stats = partida.Roster.StatsOf(clase, partida.Backpack);
+        var stats = partida.Roster.StatsOf(clase, partida.Backpack, partida.CountUnitsPerClass());
         var panel = UiLayout.ShopPanel;
 
         float x = panel.Position.X + 20f;

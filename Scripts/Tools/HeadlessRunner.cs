@@ -2154,7 +2154,7 @@ public static class HeadlessRunner
     {
         foreach (var d in partida.Defenders)
         {
-            var stats = partida.Roster.StatsOf(d.DefenderClass, partida.Backpack);
+            var stats = partida.Roster.StatsOf(d.DefenderClass, partida.Backpack, partida.CountUnitsPerClass());
 
             var quiere = stats.Behavior switch
             {

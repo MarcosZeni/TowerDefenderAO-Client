@@ -143,6 +143,19 @@ public sealed class Roster(BalanceData datos)
     private readonly BalanceData _datos = datos;
     private readonly List<RosterClass> _clases = [];
 
+    /// <summary>
+    /// «No hay tablero»: para pedir stats SIN bonus de sinergia.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Es una constante con nombre y no un <c>[]</c> suelto para que el sitio
+    /// que la usa se lea como una <b>decisión</b> y no como un descuido. Solo vale
+    /// donde de verdad no hay tablero que contar: la UI pintando el anillo de
+    /// alcance de una clase que el jugador todavía no contrató, o la preview de
+    /// una oferta de la tienda. <b>Nunca desde el tick</b> — ahí las sinergias son
+    /// parte del resultado y omitirlas rompe la revalidación en silencio.
+    /// </remarks>
+    public static readonly IReadOnlyList<int> NoBoard = [];
+
     public IReadOnlyList<RosterClass> Classes => _clases;
 
     public bool Has(DefenderClass clase) => Find(clase) is not null;
@@ -247,7 +260,8 @@ public sealed class Roster(BalanceData datos)
     }
 
     /// <summary>
-    /// Los stats efectivos de una clase: <c>base + nivel + perks + equipo</c>.
+    /// Los stats efectivos de una clase:
+    /// <c>(base + nivel + perks + equipo) × sinergias</c>.
     /// </summary>
     /// <remarks>
     /// <para>Se recalcula cada vez que se lo pide, en vez de guardarse. Es más
@@ -256,12 +270,28 @@ public sealed class Roster(BalanceData datos)
     /// ese bug en una simulación determinista es de los peores que hay —la
     /// corrida sigue andando, pero da distinto que la revalidación.</para>
     ///
-    /// <para>Los porcentajes se suman <b>todos</b> antes de multiplicar, por
-    /// <see cref="Enteros.ConPorcentajes"/>: aplicarlos de a uno perdería una
+    /// <para>Los porcentajes del build se suman <b>todos</b> antes de multiplicar,
+    /// por <see cref="Ints.WithPercents"/>: aplicarlos de a uno perdería una
     /// fracción en cada división, y dos defensores con los mismos perks en
     /// distinto orden pegarían distinto.</para>
+    ///
+    /// <para>⚠ <b>Las sinergias son la excepción: NO entran a ese acumulador,
+    /// multiplican el resultado.</b> Es la regla 3 de
+    /// <see cref="SynergyStacking"/>, y es deliberada — la composición del tablero
+    /// escala con el build en vez de competir con él. Adentro se suman entre
+    /// ellas, así que agregar una sinergia cuesta lo que dice su magnitud y no
+    /// depende de las que ya estaban.</para>
+    ///
+    /// <para>⚠ <c>unidadesPorClase</c> es <b>obligatorio y no tiene default</b>, a
+    /// propósito: un parámetro opcional que omite el bonus en silencio es
+    /// exactamente el bug que rompe la revalidación —el cliente pega con sinergia,
+    /// el servidor sin ella, y nadie ve un error—. Los llamadores que de verdad no
+    /// tienen tablero —la UI pintando el anillo de una clase que todavía no se
+    /// contrató— pasan <see cref="NoBoard"/> y así queda escrito en el código que
+    /// la omisión fue una decisión.</para>
     /// </remarks>
-    public EffectiveStats StatsOf(DefenderClass clase, Backpack mochila)
+    public EffectiveStats StatsOf(
+        DefenderClass clase, Backpack mochila, IReadOnlyList<int> unidadesPorClase)
     {
         var b = _datos.StatsOf(clase);
         var ficha = Find(clase);
@@ -317,6 +347,12 @@ public sealed class Roster(BalanceData datos)
             }
         }
 
+        // ⚠ Las sinergias se resuelven ACÁ y no en el tick: `BonusFor` es el único
+        // lugar que decide qué bonus alcanza a qué clase, y con la cuenta repartida
+        // alcanzaría con que un llamador se olvidara de filtrar por scope para que
+        // el mismo defensor pegue distinto en el cliente y en la revalidación.
+        var (bonusDano, bonusAlcance) = _datos.Synergies.BonusFor(clase, unidadesPorClase);
+
         // El arma es el ÚNICO ítem que aporta números. Armadura, casco y escudo
         // son el frame que cambia con el nivel y no suman nada.
         var arma = ficha.Weapon >= 0 ? mochila.WeaponById(ficha.Weapon) : null;
@@ -358,7 +394,16 @@ public sealed class Roster(BalanceData datos)
             // —porcentajes sobre puntos enteros y después ×100— el truncamiento
             // volvería a pasar exactamente donde pasaba antes, y la escala no
             // habría servido de nada.
-            Damage: Ints.WithPercents(Ints.ToHundredths(b.Damage), extraDano),
+            // ⚠ Dos pasos, y el orden importa: primero el build sumado —nivel,
+            // perks, arma— y ENCIMA el multiplicador de sinergia. Meter el bonus
+            // en `extraDano` sería la regla aditiva, que es la que se descartó.
+            //
+            // Trunca dos veces, una por división, y por eso esto solo se puede
+            // hacer con la escala interna: sobre centésimas de punto la pérdida es
+            // del orden de 0,005. En puntos enteros se comía el bonus entero.
+            Damage: Ints.MultiplyPercent(
+                Ints.WithPercents(Ints.ToHundredths(b.Damage), extraDano),
+                100 + bonusDano),
 
             // El alcance vive en MILÉSIMAS de celda (propuesta V2). Antes se
             // redondeaba a celdas enteras y un +15% sobre alcance 2 daba 2,3 que
@@ -370,7 +415,9 @@ public sealed class Roster(BalanceData datos)
             // al lado y el defensor no dispararía nunca.
             RangeMilli: System.Math.Max(
                 Ints.ThousandthsPerCell,
-                Ints.WithPercents(Ints.ToThousandths(b.RangeCells), extraAlcance)),
+                Ints.MultiplyPercent(
+                    Ints.WithPercents(Ints.ToThousandths(b.RangeCells), extraAlcance),
+                    100 + bonusAlcance)),
 
             // ⚠ La cadencia va al REVÉS: menos ticks es más rápido. Un +25% de
             // cadencia tiene que DIVIDIR el intervalo, no multiplicarlo. Es el

@@ -43,6 +43,7 @@ public static class DataValidator
         ValidarPerks(problemas, avisos);
         ValidarPlanos(problemas);
         ValidarPlanosAlcanzables(datos, avisos);
+        ValidarSinergias(datos, problemas, avisos);
         ValidarTextos(datos, problemas, avisos);
         ValidarLayouts(problemas, avisos);
         ValidarCurvas(datos, problemas, avisos);
@@ -115,6 +116,166 @@ public static class DataValidator
 
         if (dependen == 0)
             avisos.Add($"planos: los {datos.Blueprints.All.Count} se pueden juntar con la clase del Único sola");
+    }
+
+    /// <summary>
+    /// Las sinergias: que se puedan alcanzar, que ninguna clase quede afuera, y
+    /// que la acumulación no se haya ido de escala sin que nadie lo note.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>El lector de <c>Tablas.cs</c> ya rechaza lo que está roto dentro
+    /// de una sinergia</b> —conjunto de una sola clase, escalón que pide más
+    /// clases de las que hay, magnitud negativa, key repetida—. Acá van las tres
+    /// cosas que solo se ven mirando el catálogo ENTERO, que son justamente las
+    /// que aparecen al agregar la sinergia número seis y no la primera.</para>
+    ///
+    /// <para>Son avisos y no problemas a propósito: un catálogo desparejo no rompe
+    /// la simulación, y en pleno diseño el desbalance transitorio es normal. Lo
+    /// que hace falta es <b>verlo</b>, no que el validador se plante.</para>
+    /// </remarks>
+    private static void ValidarSinergias(BalanceData datos, List<string> problemas, List<string> avisos)
+    {
+        var tabla = datos.Synergies;
+
+        if (tabla.All.Count == 0)
+        {
+            avisos.Add("sinergias: no hay ninguna. El tablero no premia mezclar clases.");
+            return;
+        }
+
+        // --- (1) Qué clases no están en ninguna sinergia -----------------------
+        //
+        // ⚠ Con conjuntos que se pisan es MUY fácil dejar una clase huérfana:
+        // agregar «Mago + Clérigo + Paladín» se siente como sumar cobertura y en
+        // realidad no toca al Cazador. Una clase sin ninguna sinergia es una clase
+        // que nadie va a poner, porque ya pega menos que las otras.
+        var huerfanas = new List<DefenderClass>();
+
+        foreach (var clase in ChoiceBuilder.All)
+        {
+            bool aparece = false;
+
+            foreach (var s in tabla.All)
+                aparece |= s.Scope == SynergyScope.Board || s.Contains(clase);
+
+            if (!aparece)
+                huerfanas.Add(clase);
+        }
+
+        if (huerfanas.Count > 0)
+            avisos.Add($"sinergias: {string.Join(", ", huerfanas)} no está(n) en ninguna. Nadie tiene razón para ponerla(s).");
+        else
+            avisos.Add($"sinergias: {tabla.All.Count}, y las {ChoiceBuilder.All.Length} clases entran en alguna");
+
+        // --- (2) El techo acumulable por clase ---------------------------------
+        //
+        // ⚠ ESTE ES EL CHEQUEO QUE JUSTIFICA EL ARCHIVO. Cada sinergia se escribe
+        // mirándola sola, y el daño que junta un Paladín es la suma de todas las
+        // que lo tocan. Una quinta sinergia de «solo +8%» puede llevar a una clase
+        // de +25% a +45% sin que ninguna línea del JSON se vea grande.
+        var techos = new List<(DefenderClass Clase, int Dano, int Alcance)>();
+
+        foreach (var clase in ChoiceBuilder.All)
+        {
+            var (dano, alcance) = tabla.MaxStackFor(clase);
+            techos.Add((clase, dano, alcance));
+        }
+
+        techos.Sort((a, b) => (b.Dano + b.Alcance).CompareTo(a.Dano + a.Alcance));
+
+        var linea = new System.Text.StringBuilder("sinergias · techo acumulable:");
+
+        foreach (var (clase, dano, alcance) in techos)
+            linea.Append(System.Globalization.CultureInfo.InvariantCulture, $" {clase} +{dano}/+{alcance} ·");
+
+        avisos.Add(linea.ToString().TrimEnd(' ', '·') + "   (daño/alcance, todas sus sinergias completas)");
+
+        // ⚠ Y la BRECHA, que es lo que de verdad hay que mirar. Las clases del
+        // mismo trío tienen que salir parecidas: si una junta el doble que sus
+        // compañeras es porque quedó pisada por conjuntos extra, y el jugador va a
+        // poner esa y no las otras dos — que es exactamente el amontonamiento que
+        // las sinergias vinieron a romper.
+        int mejor = techos[0].Dano + techos[0].Alcance;
+        int último = techos[^1].Dano + techos[^1].Alcance;
+
+        if (último > 0 && mejor >= último * 2)
+        {
+            avisos.Add(
+                $"sinergias: {techos[0].Clase} acumula {mejor} y {techos[^1].Clase} solo {último} " +
+                "— más del doble. Mirar si no quedó pisada por sinergias de más.");
+        }
+
+        // --- (3) Escalones que el roster no puede sostener ---------------------
+        //
+        // El lector ya rechaza una sinergia cuyo CONJUNTO no entre en el roster.
+        // Lo que no puede ver solo es la suma: completar dos conjuntos grandes a la
+        // vez puede pedir más clases distintas de las que hay lugares, y entonces
+        // esos dos escalones máximos nunca coexisten aunque cada uno sea alcanzable.
+        var incompatibles = new List<string>();
+
+        foreach (var a in tabla.All)
+        {
+            foreach (var b in tabla.All)
+            {
+                if (string.CompareOrdinal(a.Key, b.Key) >= 0)
+                    continue;
+
+                var union = new HashSet<DefenderClass>(a.Classes);
+                union.UnionWith(b.Classes);
+
+                if (union.Count > tabla.MaxRosterClasses)
+                    incompatibles.Add($"{a.Key}+{b.Key}");
+            }
+        }
+
+        // En una sola línea: con conjuntos de tres y roster de cinco, que dos
+        // tríos disjuntos no coexistan es lo esperado, no una anomalía. Lo útil es
+        // ver el mapa de qué builds son imposibles, no un renglón por par.
+        if (incompatibles.Count > 0)
+            avisos.Add($"sinergias: no se pueden completar a la vez ({tabla.MaxRosterClasses} lugares): {string.Join(" · ", incompatibles)}");
+
+        // --- (4) El alcance «board», que es el que se va de escala -------------
+        //
+        // Una sinergia `board` le pega a TODO el tablero, incluidas las clases que
+        // no son del conjunto: la misma magnitud rinde el doble o el triple que en
+        // `members`. No está mal —existe para eso— pero escribir una con la
+        // magnitud de una `members` es el error fácil, y no se ve leyendo el JSON.
+        foreach (var s in tabla.All)
+        {
+            if (s.Scope != SynergyScope.Board)
+                continue;
+
+            foreach (var t in s.Tiers)
+            {
+                if (t.Magnitude >= 10)
+                    avisos.Add($"sinergias: «{s.Key}» es «board» con un escalón de +{t.Magnitude}%. Le pega a TODO el tablero — mirar si no es demasiado.");
+            }
+        }
+
+        // --- (5) Lo único que sí es un problema --------------------------------
+        //
+        // El texto que el jugador va a leer. Misma regla que los perks: una clave
+        // sin traducir se muestra cruda en pantalla.
+        if (Loc.Code.Length == 0)
+            Loc.Load(Loc.Reference);
+
+        var faltan = new List<string>();
+
+        foreach (var s in tabla.All)
+        {
+            foreach (string sufijo in new[] { "name", "desc" })
+            {
+                string clave = $"synergy.{s.Key}.{sufijo}";
+
+                // Loc.Get devuelve la clave misma cuando falta, que es como se
+                // muestra cruda en pantalla. Es el mismo chequeo que usan los perks.
+                if (Loc.Get(clave) == clave)
+                    faltan.Add(clave);
+            }
+        }
+
+        if (faltan.Count > 0)
+            problemas.Add($"sinergias: faltan {faltan.Count} texto(s) en «{Loc.Reference}»: {string.Join(", ", faltan)}");
     }
 
     /// <summary>

@@ -28,6 +28,7 @@ public static class DataLoader
     private const string RutaArmas = "res://Data/generador-armas.json";
     private const string RutaCurvas = "res://Data/curvas.json";
     private const string RutaCombate = "res://Data/combate.json";
+    private const string RutaSinergias = "res://Data/sinergias.json";
 
     /// <summary>
     /// Todo lo que hay que leer, EN ESTE ORDEN.
@@ -37,9 +38,20 @@ public static class DataLoader
     /// acá. Reordenar la lista cambia el hash sin cambiar un solo número, y el
     /// servidor rechazaría a media población por nada.
     /// </remarks>
+    /// <remarks>
+    /// ⚠ <c>sinergias.json</c> ENTRÓ ACÁ el 2026-09-09, en el mismo commit en que
+    /// el bonus empezó a aplicarse de verdad en <see cref="Roster.StatsOf"/>.
+    /// Mientras no hacía nada estuvo afuera —meterlo antes habría invalidado
+    /// corridas sin cambiar una sola cuenta, el mismo criterio que deja a
+    /// <c>Data\lang\</c> afuera—; desde que multiplica el daño y el alcance de
+    /// cada defensor es entrada de la simulación como cualquier otra, y dejarlo
+    /// afuera pondría en la misma tabla de ranking a dos jugadores con sinergias
+    /// distintas.
+    /// </remarks>
     private static readonly string[] _archivos =
     [
         RutaEnemigos, RutaClases, RutaPerks, RutaPlanos, RutaArmas, RutaCurvas, RutaCombate,
+        RutaSinergias,
     ];
 
     private static BalanceData? _cache;
@@ -126,6 +138,7 @@ public static class DataLoader
             Weapons = TableReader.Weapons(textos[RutaArmas]),
             Curves = TableReader.Curves(textos[RutaCurvas]),
             Combat = TableReader.Combat(textos[RutaCombate]),
+            Synergies = TableReader.Synergies(textos[RutaSinergias]),
         };
 
         datos.BuildIndexes();
@@ -463,6 +476,10 @@ public static class DataLoader
                 new UniqueRules(3, 75, 2000, 8, 50, 12, 3),
                 new WeaponRules(4, 1, 5, 100, 100, 100, 20, 5, true, 30, 60, 70, 150, 15, 120, 150),
                 new EnemyTraits(35, 15, 90, 10, 30, 20, 10, 1500)),
+
+            // Sin una sola sinergia: la tabla vacía tiene que ser INJUGABLE, y
+            // regalar bonus de composición sería lo contrario.
+            Synergies = new SynergyTable([], maxRosterClasses: 2),
         };
 
         datos.BuildIndexes();
