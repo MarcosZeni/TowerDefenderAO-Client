@@ -70,7 +70,37 @@
   // que una sinergia pueda dar velocidad de ataque hay que escalar la cadencia
   // primero, igual que se hizo con el daño y el alcance.
   //
-  // "magnitude" son PUNTOS PORCENTUALES enteros y siempre positivos.
+  // "magnitude" son PUNTOS PORCENTUALES enteros y siempre positivos — salvo en
+  // los efectos al matar, donde son lo que dice cada uno.
+  //
+  // "only"              opcional, dentro de un escalón: a qué clases DEL CONJUNTO
+  //                     les llega. Es lo que permite una sinergia ASIMÉTRICA:
+  //                     «Ladrón + Bardo: el Ladrón roba». El Bardo cuenta para
+  //                     activarla y no cobra. Tiene que ser subconjunto de
+  //                     "classes"; sin "only", llega a todo el conjunto.
+  //
+  // --- Los efectos AL MATAR ---------------------------------------------------
+  //
+  // Los dos únicos que no son un número sobre el defensor. Se resuelven en la
+  // fase de muertes y SOLO para el defensor cuyo GOLPE DIRECTO mató: una muerte
+  // por splash, cadena o veneno no tiene dueño y no procea. Es la primera regla
+  // del sistema de estados aplicada a la muerte.
+  //
+  //   "DoubleGoldOnKill"  magnitude = % de chance de que el muerto suelte el
+  //                       DOBLE de oro. Los jefes quedan afuera, como en Saqueo.
+  //   "TowerHealOnKill"   magnitude = PUNTOS de vida que recupera la Torre.
+  //
+  // ⚠ Los dos llevan "cap" OBLIGATORIO: el tope por oleada, en su unidad —oro
+  // extra máximo, o puntos de vida máximos—. Es la lección de Saqueo: sin tope,
+  // una build de economía se vuelve obligatoria, que es lo contrario de una
+  // decisión. Y "cap" está PROHIBIDO en Damage y Range, donde no hace nada: un
+  // número que no hace nada en un archivo de balance es un número que alguien va
+  // a tocar creyendo que hace algo.
+  //
+  // No compiten con la ranura de comportamiento del perk de Oro: aquella es «qué
+  // hace mi golpe», esto es «qué pasa cuando mato». Un Ladrón con Saqueo
+  // equipado Y la sinergia cobra las dos, y está bien: son dos decisiones
+  // distintas, una del roster y otra del tablero. Lo que las acota es el cap.
   //
   // --- ⚠ CÓMO SE ACUMULAN (decidido el 2026-09-09) ---------------------------
   //
@@ -160,31 +190,111 @@
 
     // --- Las que cruzan los tríos --------------------------------------------
     //
-    // ⚠ ACÁ ESTÁ EL PUNTO DEL SISTEMA. Estas dos no son un cuarto y un quinto
-    // grupo: son conjuntos que PISAN a los de arriba. Un Paladín puesto junto a
-    // un Clérigo cuenta para «guerreros», para «misticos» y para «fe» al mismo
-    // tiempo, y esa acumulación es la decisión que el jugador tiene que leer.
+    // ⚠ ACÁ ESTÁ EL PUNTO DEL SISTEMA. No son más grupos: son conjuntos que PISAN
+    // a los de arriba. Un Paladín puesto junto a un Clérigo cuenta para
+    // «guerreros», para «fe» y para «concilio» al mismo tiempo, y esa acumulación
+    // es la decisión que el jugador tiene que leer.
     //
-    // Por eso son de dos escalones cortos y magnitud chica: lo que se acumula
-    // tiene que valer menos que lo que se completa. `--validar` reporta el bonus
-    // máximo que un defensor puede juntar, justamente para ver esto.
+    // Son pares, de un solo escalón y magnitud chica: lo que se acumula tiene
+    // que valer menos que lo que se completa. `--validar` reporta el techo que
+    // junta cada clase, justamente para ver esto — y para que no todas las clases
+    // tengan que estar en todo: el Druida y el Ladrón no suman daño en ningún
+    // lado, a propósito, y lo que ganan es otra cosa.
+    //
+    // ⚠ EL PALADÍN Y EL CLÉRIGO NO SUMAN DAÑO EN LOS CRUCES. La primera versión
+    // tenía a «fe» y «concilio» dando daño, y el techo del Paladín se iba a +45%
+    // contra +25% de sus compañeros de trío: lo pisaban tres conjuntos. Ahora
+    // «fe» cura la Torre y «concilio» da alcance —un Paladín que llega más lejos
+    // es interesante y no es más daño—, y los tres Guerreros quedan en +37.
+
+    // La fe cura: Clérigo y Paladín, dos de cada uno, y cada muerte que dé
+    // cualquiera de los dos le devuelve vida a la Torre. Es el lugar de la
+    // curación en el tablero, que hasta acá solo existía como perk de Oro.
     {
       "key": "fe",
       "classes": ["Cleric", "Paladin"],
       "minUnitsPerClass": 2,
       "scope": "members",
       "tiers": [
-        { "need": 2, "effect": "Damage", "magnitude": 8 }
+        { "need": 2, "effect": "TowerHealOnKill", "magnitude": 2, "cap": 30 }
       ]
     },
+
+    // Saber, fe y acero. Alcance y no daño: ver arriba.
     {
       "key": "concilio",
       "classes": ["Mage", "Cleric", "Paladin"],
       "minUnitsPerClass": 2,
       "scope": "members",
       "tiers": [
-        { "need": 2, "effect": "Damage", "magnitude":  5 },
-        { "need": 3, "effect": "Damage", "magnitude": 12 }
+        { "need": 2, "effect": "Range", "magnitude":  5 },
+        { "need": 3, "effect": "Range", "magnitude": 12 }
+      ]
+    },
+
+    // ⚠ EL LADRÓN ROBA. Ladrón y Bardo son las dos clases de «saqueo» en el
+    // catálogo de Oro; juntas, cada bicho que MATA EL LADRÓN tiene un cuarto de
+    // chance de soltar el doble. Solo el Ladrón, por "only": el Bardo hace falta
+    // para activarla y no cobra — es la primera sinergia asimétrica del archivo.
+    //
+    // El cap de 60 por oleada es el mismo que el de Saqueo, y por lo mismo. Con
+    // 25% y kills solo del Ladrón, en la práctica se llega al tope en las
+    // oleadas medias y no antes: es un ingreso, no una fuente.
+    {
+      "key": "saqueo",
+      "classes": ["Thief", "Bard"],
+      "minUnitsPerClass": 1,
+      "scope": "members",
+      "tiers": [
+        { "need": 2, "effect": "DoubleGoldOnKill", "magnitude": 25, "cap": 60, "only": ["Thief"] }
+      ]
+    },
+
+    // Los dos que comparten Sobrepenetración y Ricochet: los que pegan de lejos
+    // y de costado. Daño, porque el Cazador es la clase más floja del roster
+    // (5,71 de DPS) y esta es su única sinergia de daño.
+    {
+      "key": "caceria",
+      "classes": ["Hunter", "Assassin"],
+      "minUnitsPerClass": 1,
+      "scope": "members",
+      "tiers": [
+        { "need": 2, "effect": "Damage", "magnitude": 12 }
+      ]
+    },
+
+    // Guerrero y Paladín comparten Golpe Sísmico y Guardia del Umbral: la línea
+    // del frente. Con esto los tres Guerreros quedan parejos en +37.
+    {
+      "key": "acero",
+      "classes": ["Warrior", "Paladin"],
+      "minUnitsPerClass": 1,
+      "scope": "members",
+      "tiers": [
+        { "need": 2, "effect": "Damage", "magnitude": 12 }
+      ]
+    },
+
+    // El bosque: Druida y Cazador. Alcance, que es lo que los dos venden.
+    {
+      "key": "naturaleza",
+      "classes": ["Druid", "Hunter"],
+      "minUnitsPerClass": 1,
+      "scope": "members",
+      "tiers": [
+        { "need": 2, "effect": "Range", "magnitude": 10 }
+      ]
+    },
+
+    // Mago y Bardo: en Argentum el Bardo también lanza hechizos. Daño, que es lo
+    // único que le falta al Bardo para dejar de ser solo alcance.
+    {
+      "key": "arcano",
+      "classes": ["Mage", "Bard"],
+      "minUnitsPerClass": 1,
+      "scope": "members",
+      "tiers": [
+        { "need": 2, "effect": "Damage", "magnitude": 10 }
       ]
     }
   ]

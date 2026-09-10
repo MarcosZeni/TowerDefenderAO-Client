@@ -130,6 +130,17 @@ public sealed class Run
     private int _oroBotinOleada;
 
     /// <summary>
+    /// Lo que las sinergias al matar ya dieron en esta oleada, por sinergia.
+    /// Cada una lleva su tope aparte: el <c>cap</c> de su escalón.
+    /// </summary>
+    /// <remarks>
+    /// Por key y no un solo número, porque son efectos distintos con unidades
+    /// distintas —oro y puntos de vida— y porque dos sinergias de oro tienen que
+    /// poder coexistir sin que la primera se coma el tope de la segunda.
+    /// </remarks>
+    private readonly Dictionary<string, int> _dadoPorSinergiaOleada = new(System.StringComparer.Ordinal);
+
+    /// <summary>
     /// Vida que ya curó Vampirismo en esta oleada, en la escala interna. Tiene tope.
     /// </summary>
     /// <remarks>
@@ -2452,10 +2463,13 @@ public sealed class Run
         int overkill = objetivo.Hp < 0 ? -objetivo.Hp : 0;
 
         // La muerte se le atribuye al golpe que la causó, que es el único momento
-        // en que se sabe: la fase 8 saca al muerto de la lista sin registrar quién
-        // fue.
+        // en que se sabe. Queda en el enemigo —no solo en la métrica— porque la
+        // fase 8 la necesita para los efectos de sinergia al matar.
         if (vivíaAntes && !objetivo.Alive)
+        {
             Metrics.KillsByClass[(int)defensor.DefenderClass]++;
+            objetivo.KillerClass = defensor.DefenderClass;
+        }
 
         // ⚠ Métrica, no simulación: el daño que EFECTIVAMENTE hizo falta va a la
         // clase, y lo que sobró va aparte. Sumar el golpe entero mezclaría las dos
@@ -3721,6 +3735,10 @@ public sealed class Run
 
     private void FaseMuertes()
     {
+        // Las sinergias al matar dependen del tablero. Se cuenta UNA vez por fase
+        // —no por muerto— y solo si hay muertos: la cuenta es O(defensores).
+        IReadOnlyList<int>? unidadesPorClase = null;
+
         // Primero cobrar y tirar los drops, EN ORDEN DE SPAWN, y recién después
         // sacarlos de la lista. Si se hiciera en una sola pasada borrando sobre
         // la marcha, el orden de las tiradas dependería de cómo borra la lista.
@@ -3729,7 +3747,19 @@ public sealed class Run
             if (e.Alive)
                 continue;
 
-            Gold += OroPorMatar(e);
+            int oro = OroPorMatar(e);
+
+            // ⚠ Entre el oro base y el drop, y siempre en este orden: la sinergia
+            // de oro tira el RNG, y si se moviera antes del cobro o después del
+            // drop cambiaría la secuencia de tiradas de toda la corrida. Es la
+            // clase de decisión que una vez tomada no se toca.
+            if (e.KillerClass is { } asesino)
+            {
+                unidadesPorClase ??= CountUnitsPerClass();
+                oro += EfectosAlMatar(e, asesino, unidadesPorClase, oro);
+            }
+
+            Gold += oro;
             RollDrop(e);
         }
 
@@ -3740,6 +3770,81 @@ public sealed class Run
 
         // RemoveAll es estable: conserva el orden relativo de los que quedan.
         _enemigos.RemoveAll(e => !e.Alive);
+    }
+
+    /// <summary>
+    /// Los efectos de sinergia AL MATAR para el defensor cuyo golpe directo mató.
+    /// Devuelve el oro extra; la curación va directo a la Torre.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Solo el golpe directo procea, también al matar.</b> Llega acá
+    /// únicamente si <see cref="Enemy.KillerClass"/> está puesto, y eso solo lo
+    /// pone <c>GolpeDirecto</c>: una muerte por splash, cadena, veneno u overkill
+    /// transferido no tiene dueño y no paga nada.</para>
+    ///
+    /// <para>⚠ <b>Cada efecto lleva su tope por oleada, y es obligatorio.</b> Es
+    /// la lección de Saqueo: sin tope, una build de economía se vuelve
+    /// obligatoria, que es lo contrario de una decisión. El tope es el
+    /// <c>cap</c> del escalón, en la unidad del efecto —oro, o puntos de vida—.</para>
+    ///
+    /// <para>Los jefes quedan afuera del doble oro por la misma regla que Saqueo:
+    /// su oro ya es el premio de la pelea. La curación sí cuenta contra un jefe —
+    /// matarlo es el momento en que la Torre más lo necesita—.</para>
+    ///
+    /// <para>Consume RNG solo para el doble oro, y una tirada por muerte con
+    /// dueño y sinergia activa. Va ACÁ, en la fase 8 y en orden de spawn, por lo
+    /// mismo que los drops: es el único orden que no depende de cómo se borra la
+    /// lista.</para>
+    /// </remarks>
+    private int EfectosAlMatar(
+        Enemy e, DefenderClass asesino, IReadOnlyList<int> unidadesPorClase, int oroBase)
+    {
+        int extra = 0;
+
+        foreach (var b in _datos.Synergies.OnKillFor(asesino, unidadesPorClase))
+        {
+            _dadoPorSinergiaOleada.TryGetValue(b.Key, out int yaDado);
+            int queda = b.Tier.Cap - yaDado;
+
+            if (queda <= 0)
+                continue;
+
+            switch (b.Effect)
+            {
+                case SynergyEffect.DoubleGoldOnKill:
+                {
+                    if (_datos.Combat.Boss.LootIgnoresBosses && e.IsBoss)
+                        break;
+
+                    // La tirada va ANTES del chequeo de tope que sigue, y no al
+                    // revés: así la secuencia del RNG no depende de cuánto se
+                    // cobró antes en la oleada, que es un número que la UI puede
+                    // cambiar vendiendo y volviendo a poner.
+                    if (!_rng.Happens(b.Magnitude))
+                        break;
+
+                    int doble = System.Math.Min(oroBase, queda);
+                    extra += doble;
+                    _dadoPorSinergiaOleada[b.Key] = yaDado + doble;
+                    break;
+                }
+
+                case SynergyEffect.TowerHealOnKill:
+                {
+                    // Puntos, como Drenaje: hay que escalar a la unidad interna
+                    // de la Torre o curar 2 sobre 100.000 sería curar nada.
+                    int cura = System.Math.Min(Ints.ToHundredths(b.Magnitude), Ints.ToHundredths(queda));
+
+                    // Lo que la Torre no puede recibir no se descuenta del tope.
+                    int antes = Tower.Hp;
+                    Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + cura);
+                    _dadoPorSinergiaOleada[b.Key] = yaDado + Ints.ToPoints(Tower.Hp - antes);
+                    break;
+                }
+            }
+        }
+
+        return extra;
     }
 
     /// <summary>
@@ -4335,6 +4440,9 @@ public sealed class Run
         // Lo mismo con el tope de oro de Saqueo, y por lo mismo: el techo real es
         // cuánto se puede saquear en una oleada, no en cien.
         _oroBotinOleada = 0;
+
+        // Y con los topes de las sinergias al matar, que son del mismo tipo.
+        _dadoPorSinergiaOleada.Clear();
 
         // ⚠ Y con el tope de curación de Vampirismo, que es nuevo y va por lo
         // mismo: la ventana de 30 ticks limitaba el RITMO pero no el total, así

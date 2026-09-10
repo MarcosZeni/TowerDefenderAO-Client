@@ -173,36 +173,72 @@ public static class DataValidator
         // mirándola sola, y el daño que junta un Paladín es la suma de todas las
         // que lo tocan. Una quinta sinergia de «solo +8%» puede llevar a una clase
         // de +25% a +45% sin que ninguna línea del JSON se vea grande.
-        var techos = new List<(DefenderClass Clase, int Dano, int Alcance)>();
+        var techos = new List<(DefenderClass Clase, int Dano, int Alcance, List<SynergyEffect> AlMatar)>();
 
         foreach (var clase in ChoiceBuilder.All)
         {
-            var (dano, alcance) = tabla.MaxStackFor(clase);
-            techos.Add((clase, dano, alcance));
+            var (dano, alcance, alMatar) = tabla.MaxStackFor(clase);
+            techos.Add((clase, dano, alcance, alMatar));
         }
 
         techos.Sort((a, b) => (b.Dano + b.Alcance).CompareTo(a.Dano + a.Alcance));
 
         var linea = new System.Text.StringBuilder("sinergias · techo acumulable:");
 
-        foreach (var (clase, dano, alcance) in techos)
-            linea.Append(System.Globalization.CultureInfo.InvariantCulture, $" {clase} +{dano}/+{alcance} ·");
+        foreach (var (clase, dano, alcance, alMatar) in techos)
+        {
+            linea.Append(System.Globalization.CultureInfo.InvariantCulture, $" {clase} +{dano}/+{alcance}");
+
+            // Los efectos al matar no son un número que se sume, pero SON poder:
+            // una clase con 0/0 y doble oro no está huérfana, y el que lee la
+            // línea tiene que poder verlo sin abrir el JSON.
+            foreach (var e in alMatar)
+                linea.Append(e == SynergyEffect.DoubleGoldOnKill ? " +oro" : " +cura");
+
+            linea.Append(" ·");
+        }
 
         avisos.Add(linea.ToString().TrimEnd(' ', '·') + "   (daño/alcance, todas sus sinergias completas)");
 
-        // ⚠ Y la BRECHA, que es lo que de verdad hay que mirar. Las clases del
-        // mismo trío tienen que salir parecidas: si una junta el doble que sus
+        // ⚠ Y la BRECHA, que es lo que de verdad hay que mirar: DENTRO DE CADA
+        // CONJUNTO, y por eje. Las clases de un mismo trío tienen que salir
+        // parecidas en lo que ese trío da: si una junta el doble de daño que sus
         // compañeras es porque quedó pisada por conjuntos extra, y el jugador va a
         // poner esa y no las otras dos — que es exactamente el amontonamiento que
         // las sinergias vinieron a romper.
-        int mejor = techos[0].Dano + techos[0].Alcance;
-        int último = techos[^1].Dano + techos[^1].Alcance;
-
-        if (último > 0 && mejor >= último * 2)
+        //
+        // Comparar clases de conjuntos DISTINTOS no dice nada: que el Guerrero
+        // junte +37 de daño y el Ladrón +0 es la regla «más alcance, menos golpe»
+        // funcionando, no un bug. La primera versión de este chequeo comparaba el
+        // mejor contra el peor del roster entero y saltaba por eso.
+        foreach (var s in tabla.All)
         {
-            avisos.Add(
-                $"sinergias: {techos[0].Clase} acumula {mejor} y {techos[^1].Clase} solo {último} " +
-                "— más del doble. Mirar si no quedó pisada por sinergias de más.");
+            if (s.Classes.Length < 2)
+                continue;
+
+            int danoMax = 0, danoMin = int.MaxValue, alcMax = 0, alcMin = int.MaxValue;
+            DefenderClass claseDanoMax = s.Classes[0], claseDanoMin = s.Classes[0];
+
+            foreach (var c in s.Classes)
+            {
+                var (dano, alcance, _) = tabla.MaxStackFor(c);
+
+                if (dano > danoMax) { danoMax = dano; claseDanoMax = c; }
+                if (dano < danoMin) { danoMin = dano; claseDanoMin = c; }
+                alcMax = System.Math.Max(alcMax, alcance);
+                alcMin = System.Math.Min(alcMin, alcance);
+            }
+
+            // Solo el daño se compara por «más del doble»: es el eje que decide
+            // qué clase se pone. Un cero contra un positivo no cuenta como brecha
+            // —es una clase que no suma daño a propósito—; la brecha es entre dos
+            // que sí suman.
+            if (danoMin > 0 && danoMax >= danoMin * 2)
+            {
+                avisos.Add(
+                    $"sinergias: dentro de «{s.Key}», {claseDanoMax} junta +{danoMax}% de daño y " +
+                    $"{claseDanoMin} solo +{danoMin}% — más del doble. Alguna sinergia de más la está pisando.");
+            }
         }
 
         // --- (3) Escalones que el roster no puede sostener ---------------------

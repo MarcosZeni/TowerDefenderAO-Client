@@ -1405,8 +1405,9 @@ public static class TableReader
                 {
                     throw new InvalidBalanceDataException(
                         $"{archivo}: «{clave}» tiene un escalón con «effect» en None. " +
-                        "Los efectos posibles son Damage y Range. NO hay Cadence a propósito: " +
-                        "la cadencia está en ticks enteros y un bonus porcentual chico se trunca a nada.");
+                        "Los efectos posibles son Damage, Range, DoubleGoldOnKill y TowerHealOnKill. " +
+                        "NO hay Cadence a propósito: la cadencia está en ticks enteros y un bonus " +
+                        "porcentual chico se trunca a nada.");
                 }
 
                 int magnitud = Int(t, "magnitude", archivo);
@@ -1414,7 +1415,68 @@ public static class TableReader
                 if (magnitud <= 0)
                     throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene un escalón con magnitud {magnitud}. Tiene que ser positiva.");
 
-                escalones.Add(new SynergyTier(necesita, efecto, magnitud));
+                // Una chance de más de 100 se lee como «siempre» y esconde un typo.
+                if (efecto == SynergyEffect.DoubleGoldOnKill && magnitud > 100)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» tiene una chance de doble oro de {magnitud}%. " +
+                        "Es una probabilidad: como mucho 100.");
+                }
+
+                // "only": a qué clases del conjunto les llega este escalón. Tiene
+                // que ser un SUBCONJUNTO de "classes": una clase de afuera no
+                // cuenta para activar la sinergia y tampoco puede cobrarla.
+                var solo = new List<DefenderClass>();
+
+                if (t.TryGetProperty("only", out var arrSolo) && arrSolo.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var v in arrSolo.EnumerateArray())
+                    {
+                        var c = Enum_<DefenderClass>(v.GetString() ?? "", "only", archivo);
+
+                        if (System.Array.IndexOf(clases, c) < 0)
+                        {
+                            throw new InvalidBalanceDataException(
+                                $"{archivo}: «{clave}» tiene un escalón con «only» que nombra a {c}, " +
+                                "que no está en «classes». Solo puede restringir a clases del conjunto.");
+                        }
+
+                        if (!solo.Contains(c))
+                            solo.Add(c);
+                    }
+                }
+
+                // ⚠ "cap": obligatorio en los efectos al matar y PROHIBIDO en los
+                // numéricos. Obligatorio por la lección de Saqueo —sin tope por
+                // oleada una build de economía se vuelve obligatoria—; prohibido
+                // porque un número que no hace nada en un archivo de balance es
+                // un número que alguien va a tocar creyendo que hace algo.
+                bool tieneCap = t.TryGetProperty("cap", out _);
+                int cap = 0;
+
+                if (efecto.IsOnKill())
+                {
+                    if (!tieneCap)
+                    {
+                        throw new InvalidBalanceDataException(
+                            $"{archivo}: «{clave}» tiene un escalón «{efecto}» sin «cap». Los efectos al " +
+                            "matar llevan tope por oleada OBLIGATORIO —oro extra máximo, o puntos de vida " +
+                            "máximos—: sin él una build de economía deja de ser una decisión.");
+                    }
+
+                    cap = Int(t, "cap", archivo);
+
+                    if (cap <= 0)
+                        throw new InvalidBalanceDataException($"{archivo}: «{clave}» tiene un «cap» de {cap}. Tiene que ser positivo.");
+                }
+                else if (tieneCap)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» tiene «cap» en un escalón «{efecto}», y ahí no hace nada. " +
+                        "El tope por oleada es solo de los efectos al matar.");
+                }
+
+                escalones.Add(new SynergyTier(necesita, efecto, magnitud, [.. solo], cap));
             }
 
             if (escalones.Count == 0)

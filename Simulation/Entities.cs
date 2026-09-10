@@ -166,6 +166,21 @@ public sealed class Enemy
     public int ExtraGoldExpiryTick { get; set; }
 
     /// <summary>
+    /// La clase cuyo GOLPE DIRECTO lo mató, o <c>null</c> si murió de otra cosa.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lo escribe <c>GolpeDirecto</c> en el único momento en que se sabe, y
+    /// lo lee la fase de muertes para los efectos de sinergia al matar. Antes la
+    /// muerte se atribuía solo a una métrica y el comentario de la fase 8 decía
+    /// «no se sabe quién dio el golpe final»: ahora se sabe.</para>
+    ///
+    /// <para>⚠ Una muerte por splash, cadena, veneno u overkill transferido queda
+    /// en <c>null</c> a propósito: solo el golpe directo procea, también al
+    /// matar. Sin eso, una build de área convierte cada oleada en una alcancía.</para>
+    /// </remarks>
+    public DefenderClass? KillerClass { get; set; }
+
+    /// <summary>
     /// Modificadores que le tocaron al spawnear, en puntos porcentuales.
     ///
     /// <para>Los paga el presupuesto de la oleada, y <b>tienen que verse en

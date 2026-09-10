@@ -28,6 +28,42 @@ public enum SynergyEffect
 
     /// <summary>Puntos porcentuales de alcance.</summary>
     Range = 2,
+
+    // -------------------------------------------------------------------------
+    //  Al matar. Son los únicos que no son un número sobre el defensor.
+    // -------------------------------------------------------------------------
+    //
+    //  ⚠ Se resuelven en la FASE DE MUERTES y solo para el defensor cuyo GOLPE
+    //  DIRECTO mató: una muerte por splash, cadena o veneno no tiene dueño y no
+    //  procea nada. Es la primera regla del sistema de estados —solo el golpe
+    //  directo procea— aplicada a la muerte, y es lo que impide que una build de
+    //  área convierta cada oleada en una alcancía.
+    //
+    //  ⚠ No compiten con la ranura de comportamiento del perk de Oro: aquella es
+    //  «qué hace mi golpe», esto es «qué pasa cuando mato». Un Ladrón con Saqueo
+    //  equipado Y la sinergia cobra las dos cosas, y está bien que las cobre —son
+    //  dos decisiones distintas, una del roster y otra del tablero—. Lo que las
+    //  acota es el TOPE POR OLEADA, que es obligatorio.
+
+    /// <summary>
+    /// Al matar, <c>magnitude</c> % de chance de que el enemigo suelte el DOBLE de
+    /// oro. <c>cap</c> es el oro extra máximo por oleada.
+    /// </summary>
+    DoubleGoldOnKill = 10,
+
+    /// <summary>
+    /// Al matar, la Torre se cura <c>magnitude</c> PUNTOS de vida. <c>cap</c> son
+    /// los puntos máximos por oleada.
+    /// </summary>
+    TowerHealOnKill = 11,
+}
+
+/// <summary>Lo que hay que saber de un efecto de sinergia sin mirar el enum.</summary>
+public static class SynergyEffects
+{
+    /// <summary>¿Se resuelve al matar, en vez de ser un número del defensor?</summary>
+    public static bool IsOnKill(this SynergyEffect e)
+        => e is SynergyEffect.DoubleGoldOnKill or SynergyEffect.TowerHealOnKill;
 }
 
 /// <summary>A quién le llega el bonus de una sinergia.</summary>
@@ -50,7 +86,34 @@ public enum SynergyScope
 /// Un escalón: con <paramref name="Need"/> clases distintas del conjunto puestas
 /// en el tablero, el bonus es este.
 /// </summary>
-public sealed record SynergyTier(int Need, SynergyEffect Effect, int Magnitude);
+/// <param name="Only">
+/// A qué clases del conjunto les llega. Vacío = a todas las del conjunto. Es lo
+/// que permite una sinergia ASIMÉTRICA: «Ladrón + Bardo: el Ladrón roba». Sin
+/// esto, el único modo de que una clase gane algo distinto de sus compañeras
+/// sería un conjunto de una, que el lector rechaza.
+/// </param>
+/// <param name="Cap">
+/// Tope por oleada para los efectos al matar: oro extra máximo, o puntos de
+/// vida máximos. Cero en los efectos numéricos, que no lo usan.
+/// </param>
+public sealed record SynergyTier(
+    int Need, SynergyEffect Effect, int Magnitude, DefenderClass[] Only, int Cap)
+{
+    /// <summary>¿Este escalón le llega a esa clase?</summary>
+    public bool Reaches(DefenderClass clase)
+    {
+        if (Only.Length == 0)
+            return true;
+
+        foreach (var c in Only)
+        {
+            if (c == clase)
+                return true;
+        }
+
+        return false;
+    }
+}
 
 /// <summary>
 /// Una sinergia: un conjunto de clases y qué se gana por juntarlas.
@@ -115,7 +178,26 @@ public sealed record Synergy(
 /// Un bonus ya resuelto: qué sinergia lo dio, con qué escalón.
 /// </summary>
 public readonly record struct SynergyBonus(
-    string Key, SynergyEffect Effect, int Magnitude, SynergyScope Scope);
+    string Key, SynergyScope Scope, SynergyTier Tier)
+{
+    public SynergyEffect Effect => Tier.Effect;
+    public int Magnitude => Tier.Magnitude;
+
+    /// <summary>¿Le llega a esa clase, mirando el scope Y el <c>only</c> del escalón?</summary>
+    /// <remarks>
+    /// ⚠ Es el ÚNICO lugar donde se decide, y por eso está acá y no repetido en
+    /// cada consumidor: si <see cref="SynergyTable.BonusFor"/> filtrara por scope
+    /// y <see cref="SynergyTable.OnKillFor"/> se olvidara del <c>only</c>, el
+    /// mismo Ladrón robaría en el cliente y no en la revalidación del servidor.
+    /// </remarks>
+    public bool Reaches(DefenderClass clase, Synergy dueña)
+    {
+        if (Scope == SynergyScope.Members && !dueña.Contains(clase))
+            return false;
+
+        return Tier.Reaches(clase);
+    }
+}
 
 /// <summary>
 /// ⚠ CÓMO SE ACUMULAN, que son tres reglas distintas y conviene leerlas juntas
@@ -239,10 +321,34 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
             }
 
             if (s.TierFor(distintas) is { } tier)
-                activas.Add(new SynergyBonus(s.Key, tier.Effect, tier.Magnitude, s.Scope));
+                activas.Add(new SynergyBonus(s.Key, s.Scope, tier));
         }
 
         return activas;
+    }
+
+    /// <summary>
+    /// Los efectos AL MATAR que le tocan a una clase con ese tablero.
+    /// </summary>
+    /// <remarks>
+    /// Separado de <see cref="BonusFor"/> porque se consume en otro lado y en
+    /// otro momento: aquel entra a los stats de cada golpe, esto se resuelve en
+    /// la fase de muertes y solo para el defensor cuyo golpe directo mató. Un
+    /// escalón al matar no tiene que sumarse a nada: cada uno tira o cura por su
+    /// cuenta, contra su propio tope.
+    /// </remarks>
+    public List<SynergyBonus> OnKillFor(
+        DefenderClass clase, IReadOnlyList<int> unidadesPorClase)
+    {
+        var lista = new List<SynergyBonus>();
+
+        foreach (var b in ActiveFor(unidadesPorClase))
+        {
+            if (b.Effect.IsOnKill() && b.Reaches(clase, ByKey(b.Key)!))
+                lista.Add(b);
+        }
+
+        return lista;
     }
 
     /// <summary>
@@ -270,8 +376,7 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
 
         foreach (var b in ActiveFor(unidadesPorClase))
         {
-            // `board` le llega a todo el tablero; `members` solo a los del conjunto.
-            if (b.Scope == SynergyScope.Members && !ByKey(b.Key)!.Contains(clase))
+            if (!b.Reaches(clase, ByKey(b.Key)!))
                 continue;
 
             if (b.Effect == SynergyEffect.Damage)
@@ -312,21 +417,27 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
     /// entra en cinco lugares—. Sirve para lo que sirve: ver de un vistazo si
     /// agregar una sinergia nueva duplicó el bonus de alguien sin querer.</para>
     /// </remarks>
-    public (int Damage, int Range) MaxStackFor(DefenderClass clase)
+    public (int Damage, int Range, List<SynergyEffect> OnKill) MaxStackFor(DefenderClass clase)
     {
         int dano = 0;
         int alcance = 0;
+        var alMatar = new List<SynergyEffect>();
 
         foreach (var s in All)
         {
             if (s.Scope == SynergyScope.Members && !s.Contains(clase))
                 continue;
 
+            // El escalón más alto que LE LLEGA a esta clase: con `only`, el tope
+            // de una sinergia puede ser de otra clase del mismo conjunto.
             SynergyTier? tope = null;
 
             foreach (var t in s.Tiers)
             {
-                if (tope is null || t.Magnitude > tope.Magnitude)
+                if (!t.Reaches(clase))
+                    continue;
+
+                if (tope is null || t.Need > tope.Need)
                     tope = t;
             }
 
@@ -337,8 +448,10 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
                 dano += tope.Magnitude;
             else if (tope.Effect == SynergyEffect.Range)
                 alcance += tope.Magnitude;
+            else if (tope.Effect.IsOnKill())
+                alMatar.Add(tope.Effect);
         }
 
-        return (dano, alcance);
+        return (dano, alcance, alMatar);
     }
 }
