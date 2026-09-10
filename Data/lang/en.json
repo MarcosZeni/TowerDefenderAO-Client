@@ -64,6 +64,24 @@
     "synergy.arcano.name": "Arcane",
     "synergy.arcano.desc": "Mage and Bard, the spellcasters, hit harder together.",
 
+    "synergy.effect.Damage": "+{m}% damage",
+    "synergy.effect.Range": "+{m}% range",
+    "synergy.effect.DoubleGoldOnKill": "{m}% chance of double gold on kill",
+    "synergy.effect.TowerHealOnKill": "the Tower heals {m} per kill",
+
+    "ui.hud.sinergias": "Synergies",
+    "ui.ayuda.sinergias": "Mixing classes on the board grants bonuses. Each synergy is a set of classes: with two or three of them placed a tier activates, and the bonus multiplies what the defender already deals. A class can be in several, and the bonuses add up.",
+    "ui.sinergia.escalon": "{m} classes",
+    "ui.sinergia.solo": "only {c}",
+    "ui.sinergia.tope": "cap {m} per wave",
+    "ui.sinergia.minimo": "{m} of each",
+    "ui.sinergia.completa": "Complete",
+    "ui.sinergia.tenes": "You have {m} of {n}",
+    "ui.sinergia.falta": "missing {c}",
+    "ui.defensor.sinergias": "Synergies",
+    "ui.ayuda.sinergias_defensor": "What this defender gets from the board. It adds up across synergies and multiplies the damage and range it already has from level, perks and weapon.",
+    "ui.defensor.sin_sinergia": "None active for this class",
+
     // --- Bronze perks -------------------------------------------------------
     "perk.filo.name": "Edge",
     "perk.pulso.name": "Pulse",

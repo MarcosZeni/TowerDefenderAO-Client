@@ -297,6 +297,21 @@ public static class DataValidator
 
         var faltan = new List<string>();
 
+        // Los efectos también tienen texto —«+{m}% de daño»— y un efecto nuevo
+        // sin su frase deja el panorama y el panel del defensor mostrando la
+        // clave cruda. Se chequean todos los del enum, no solo los que el
+        // catálogo usa hoy: el próximo catálogo puede usar el que falta.
+        foreach (var e in System.Enum.GetValues<SynergyEffect>())
+        {
+            if (e == SynergyEffect.None)
+                continue;
+
+            string clave = $"synergy.effect.{e}";
+
+            if (Loc.Get(clave) == clave)
+                faltan.Add(clave);
+        }
+
         foreach (var s in tabla.All)
         {
             foreach (string sufijo in new[] { "name", "desc" })

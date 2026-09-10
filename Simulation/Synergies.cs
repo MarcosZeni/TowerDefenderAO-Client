@@ -161,6 +161,31 @@ public sealed record Synergy(
         return mejor;
     }
 
+    /// <summary>
+    /// Cuántas clases del conjunto CUENTAN con ese tablero: las que llegan a
+    /// <see cref="MinUnitsPerClass"/> defensores puestos.
+    /// </summary>
+    /// <remarks>
+    /// Es la única cuenta que decide si la sinergia se activa, y por eso vive acá
+    /// y la usan tanto <see cref="SynergyTable.ActiveFor"/> como el HUD: si la
+    /// pantalla contara por su lado, podría decir «2 de 3» donde la simulación ve
+    /// una sola porque un Cazador suelto no llega al mínimo.
+    /// </remarks>
+    public int CountPresent(IReadOnlyList<int> unidadesPorClase)
+    {
+        int distintas = 0;
+
+        foreach (var c in Classes)
+        {
+            int i = (int)c;
+
+            if (i >= 0 && i < unidadesPorClase.Count && unidadesPorClase[i] >= MinUnitsPerClass)
+                distintas++;
+        }
+
+        return distintas;
+    }
+
     /// <summary>¿Esta clase pertenece al conjunto?</summary>
     public bool Contains(DefenderClass clase)
     {
@@ -310,17 +335,7 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
 
         foreach (var s in All)
         {
-            int distintas = 0;
-
-            foreach (var c in s.Classes)
-            {
-                int i = (int)c;
-
-                if (i >= 0 && i < unidadesPorClase.Count && unidadesPorClase[i] >= s.MinUnitsPerClass)
-                    distintas++;
-            }
-
-            if (s.TierFor(distintas) is { } tier)
+            if (s.TierFor(s.CountPresent(unidadesPorClase)) is { } tier)
                 activas.Add(new SynergyBonus(s.Key, s.Scope, tier));
         }
 

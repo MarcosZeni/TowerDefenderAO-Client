@@ -82,6 +82,26 @@
     "synergy.arcano.name": "Arcano",
     "synergy.arcano.desc": "Mago y Bardo, los que lanzan hechizos, pegan más fuerte juntos.",
 
+    // Lo que da cada escalón. {m} es la magnitud.
+    "synergy.effect.Damage": "+{m}% de daño",
+    "synergy.effect.Range": "+{m}% de alcance",
+    "synergy.effect.DoubleGoldOnKill": "{m}% de chance de doble oro al matar",
+    "synergy.effect.TowerHealOnKill": "la Torre se cura {m} por cada muerte",
+
+    // Las piezas del cartel y del panorama.
+    "ui.hud.sinergias": "Sinergias",
+    "ui.ayuda.sinergias": "Mezclar clases en el tablero da bonus. Cada sinergia junta un conjunto de clases: con dos o tres de ellas puestas se activa un escalón, y el bonus multiplica lo que ya pega el defensor. Una clase puede estar en varias y los bonus se suman.",
+    "ui.sinergia.escalon": "{m} clases",
+    "ui.sinergia.solo": "solo {c}",
+    "ui.sinergia.tope": "tope {m} por oleada",
+    "ui.sinergia.minimo": "{m} de cada una",
+    "ui.sinergia.completa": "Completa",
+    "ui.sinergia.tenes": "Tenés {m} de {n}",
+    "ui.sinergia.falta": "falta {c}",
+    "ui.defensor.sinergias": "Sinergias",
+    "ui.ayuda.sinergias_defensor": "Lo que este defensor recibe del tablero. Se suma entre sinergias y multiplica el daño y el alcance que ya tiene por nivel, perks y arma.",
+    "ui.defensor.sin_sinergia": "Ninguna activa para esta clase",
+
     // --- Perks de bronce ----------------------------------------------------
     "perk.filo.name": "Filo",
     "perk.pulso.name": "Pulso",

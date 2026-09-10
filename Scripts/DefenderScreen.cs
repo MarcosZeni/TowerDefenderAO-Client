@@ -420,6 +420,69 @@ public partial class DefenderScreen : Control
             y += 22;
         }
 
+        // ⚠ De dónde sale el número de arriba. El StatTrio ya muestra el daño CON
+        // el multiplicador de sinergia, y sin este bloque el jugador veía un
+        // Paladín pegando 30,6 sin ninguna forma de saber que 24,7 son suyos y
+        // el resto es el tablero — que es la definición de mecánica invisible.
+        //
+        // Primero el total, después cada sinergia que le llega a ESTA clase, y
+        // solo las que entran antes del targeting: el rótulo de «apunta a» está
+        // clavado en YTargeting y un renglón de más se le mete debajo.
+        {
+            var tabla = DataLoader.Current.Synergies;
+            var unidades = partida.CountUnitsPerClass();
+            var (bonusDano, bonusAlcance) = tabla.BonusFor(defensor.DefenderClass, unidades);
+
+            bool hayConflicto = partida.HasBehaviorConflict(defensor.DefenderClass);
+            int lugar = (int)((YTargeting - 8f - (y - Caja().Position.Y)) / 22f) - (hayConflicto ? 1 : 0);
+
+            if (lugar >= 1)
+            {
+                var partes = new List<string>(2);
+
+                if (bonusDano > 0)
+                    partes.Add(Loc.Get("synergy.effect.Damage", bonusDano));
+
+                if (bonusAlcance > 0)
+                    partes.Add(Loc.Get("synergy.effect.Range", bonusAlcance));
+
+                string total = partes.Count > 0
+                    ? string.Join("  ·  ", partes)
+                    : Loc.Get("ui.defensor.sin_sinergia");
+
+                Renglon($"{Loc.Get("ui.defensor.sinergias").ToUpperInvariant()}  {total}",
+                    bonusDano > 0 || bonusAlcance > 0 ? Palette.Success : Palette.TextMuted,
+                    "ui.ayuda.sinergias_defensor");
+
+                y += 22;
+                lugar--;
+
+                foreach (var b in tabla.ActiveFor(unidades))
+                {
+                    if (lugar <= 0)
+                        break;
+
+                    var dueña = tabla.ByKey(b.Key)!;
+
+                    if (!b.Reaches(defensor.DefenderClass, dueña))
+                        continue;
+
+                    // El renglón lleva el cartel ENTERO de la sinergia, el mismo del
+                    // panorama: desde acá el jugador tiene que poder ver qué le
+                    // falta para el escalón siguiente sin deseleccionar la unidad.
+                    var caja = new Rect2(x, y, Caja().Size.X - 32f, 22f);
+
+                    this.Label(caja, $"  {Loc.Get($"synergy.{b.Key}.name")}  {SynergyText.Effect(b.Tier)}", 13,
+                        Palette.TextSecondary);
+
+                    UiTooltip.Over(caja, SynergyText.Tooltip(dueña, unidades));
+
+                    y += 22;
+                    lugar--;
+                }
+            }
+        }
+
         // ⚠ Y el conflicto de comportamiento, que antes era MUDO: un Oro raro
         // quedaba anulado por equipar un arma y el jugador no se enteraba nunca.
         // Ahora se puede elegir cuál habla, y esto es lo que dice cuál está

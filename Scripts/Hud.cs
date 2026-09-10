@@ -86,6 +86,15 @@ public partial class Hud : Control
         BarraDeArriba(p);
         ColumnaDeClases(p);
 
+        // ⚠ La columna derecha tiene dos caras y manda el defensor: cuando hay uno
+        // elegido, DefenderScreen dibuja su panel ahí y esto se calla. Sin
+        // elegido, la columna quedaba VACÍA —la tienda se mudó al Mercado— y es
+        // el lugar del tablero: qué sinergias están activas y cuáles a una clase
+        // de estarlo. Es la razón para poner una clase que pega menos, y sin esto
+        // el bonus era una mecánica invisible.
+        if (_juego.SelectedDefender < 0)
+            ColumnaDeSinergias(p);
+
         // ⚠ La barra de abajo la comparten dos pantallas: en combate muestra la
         // build y entre oleadas la preparación. Es el mismo rectángulo del
         // diseño, así que la que no manda se calla en vez de dibujar encima.
@@ -515,6 +524,109 @@ public partial class Hud : Control
     /// <para>Es de la <b>clase elegida</b>, no del roster entero: todo en este
     /// juego es de la clase y nunca de la unidad, así que una barra de build que
     /// mezclara las nueve no diría nada.</para>
+    /// <summary>
+    /// El panorama de sinergias: una fila por conjunto, con su estado.
+    /// </summary>
+    /// <remarks>
+    /// <para>Tres estados y tres colores, en el orden en que el jugador los
+    /// necesita: <b>activa</b> (verde, con el escalón que está dando),
+    /// <b>a una clase</b> de activarse (ámbar, con lo que falta) e
+    /// <b>inactiva</b> (apagada). Las activas van primero: son las que explican
+    /// el número que pega el tablero ahora.</para>
+    ///
+    /// <para>Cada fila lleva el cartel entero —escalones, activo marcado, qué
+    /// falta— por <see cref="SynergyText.Tooltip"/>, que es el mismo texto que
+    /// usa el panel del defensor. El tablero se cuenta UNA vez por cuadro.</para>
+    /// </remarks>
+    private void ColumnaDeSinergias(Run p)
+    {
+        var caja = UiLayout.RunSidePanel;
+
+        this.Panel(caja);
+
+        var titulo = new Rect2(caja.Position.X + 14f, caja.Position.Y + 8f, caja.Size.X - 28f, 32f);
+
+        this.SectionTitle(titulo, Loc.Get("ui.hud.sinergias"));
+        UiTooltip.Help(titulo, "ui.ayuda.sinergias");
+
+        var tabla = DataLoader.Current.Synergies;
+
+        if (tabla.All.Count == 0)
+            return;
+
+        var unidades = p.CountUnitsPerClass();
+
+        // Primero las activas, después las que están a una, después el resto.
+        // Se ordena por estado y no por el orden del JSON porque lo que pega
+        // AHORA tiene que estar arriba, no la que el diseñador escribió primero.
+        var filas = new List<(Synergy S, int Presentes, SynergyTier? Activo, int Orden)>();
+
+        foreach (var s in tabla.All)
+        {
+            int presentes = s.CountPresent(unidades);
+            var activo = s.TierFor(presentes);
+
+            int primerNeed = int.MaxValue;
+
+            foreach (var t in s.Tiers)
+                primerNeed = Mathf.Min(primerNeed, t.Need);
+
+            int orden = activo is not null ? 0 : presentes >= primerNeed - 1 && presentes > 0 ? 1 : 2;
+            filas.Add((s, presentes, activo, orden));
+        }
+
+        filas.Sort((a, b) => a.Orden != b.Orden ? a.Orden.CompareTo(b.Orden) : string.CompareOrdinal(a.S.Key, b.S.Key));
+
+        const float AltoFila = 44f;
+        float y = titulo.End.Y + 10f;
+
+        foreach (var (s, presentes, activo, orden) in filas)
+        {
+            if (y + AltoFila > caja.End.Y - 8f)
+                break;
+
+            var fila = new Rect2(caja.Position.X + 14f, y, caja.Size.X - 28f, AltoFila - 6f);
+
+            var color = orden switch
+            {
+                0 => Palette.Success,
+                1 => Palette.Warning,
+                _ => Palette.TextDisabled,
+            };
+
+            // La marca de estado: un cuadrado de color a la izquierda. Se dibuja
+            // y no se escribe porque la fuente de respaldo del motor no trae los
+            // círculos llenos y medios que serían lo natural.
+            DrawRect(new Rect2(fila.Position.X, fila.Position.Y + 8f, 8f, 8f), color);
+
+            int maximo = 0;
+
+            foreach (var t in s.Tiers)
+                maximo = Mathf.Max(maximo, t.Need);
+
+            var nombre = new Rect2(fila.Position.X + 16f, fila.Position.Y, fila.Size.X - 16f, 22f);
+            var detalle = new Rect2(fila.Position.X + 16f, fila.Position.Y + 20f, fila.Size.X - 16f, 18f);
+
+            this.Label(nombre, Loc.Get($"synergy.{s.Key}.name"), 15,
+                orden == 2 ? Palette.TextMuted : Palette.TextPrimary);
+
+            this.Label(nombre, $"{presentes}/{maximo}", 14, color, HorizontalAlignment.Right);
+
+            // Activa: lo que da. A una: lo que falta. Inactiva: nada, que ya
+            // bastante ruido son diez filas.
+            string segundo = activo is not null
+                ? SynergyText.Effect(activo)
+                : orden == 1 ? SynergyText.Missing(s, presentes, unidades) : "";
+
+            if (segundo.Length > 0)
+                this.Label(detalle, segundo, 12, orden == 0 ? Palette.TextSecondary : Palette.Warning);
+
+            UiTooltip.Over(fila, SynergyText.Tooltip(s, unidades));
+
+            y += AltoFila;
+        }
+    }
+
     /// </remarks>
     private void BarraDeBuild(Run p)
     {
