@@ -33,6 +33,12 @@ public partial class Main : Node2D
         // necesitan: --verificar-arte mira los píxeles de las mismas hojas.
         ArtPack.Mount();
 
+        // ⚠ Y el audio en la misma línea, por el mismo motivo: AudioBank lee
+        // AudioPack.Root al cargar el índice, y si esto corriera después el primer
+        // sonido saldría mudo. Son dos paquetes y no uno porque se parchean por
+        // separado: el arte pesa 57 MB y el audio 21.
+        AudioPack.Mount();
+
         // Las herramientas headless (--determinismo, --balance, --validar,
         // --importar-npcs) cortan acá: corren y salen sin armar nada.
         if (Tools.HeadlessRunner.HandleArguments())

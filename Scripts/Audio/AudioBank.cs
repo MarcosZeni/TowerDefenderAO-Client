@@ -50,8 +50,20 @@ public sealed record MusicEntry(string File, float VolumeDb, bool Loop);
 /// </remarks>
 public static class AudioBank
 {
-    private const string Carpeta = "res://Data/audio";
-    private const string Indice = Carpeta + "/audio.json";
+    /// <summary>
+    /// La carpeta del audio: la del proyecto, o el punto de montaje de
+    /// <c>audio.pck</c>.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Es una propiedad y no una constante porque la decide <see cref="AudioPack"/>
+    /// en el arranque, y cambia entre el editor —donde manda <c>Data\audio\</c>— y
+    /// una build exportada —donde manda el paquete—. Las rutas del índice son
+    /// RELATIVAS a esto, así que <c>audio.json</c> no sabe ni tiene por qué saber
+    /// de dónde salió.
+    /// </remarks>
+    private static string Carpeta => AudioPack.Root;
+
+    private static string Indice => $"{Carpeta}/audio.json";
 
     private static readonly Dictionary<SoundId, SoundEntry> _sfx = [];
     private static readonly Dictionary<MusicTrack, MusicEntry> _musica = [];

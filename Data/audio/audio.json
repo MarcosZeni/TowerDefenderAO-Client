@@ -40,7 +40,7 @@
     // Los nueve de la lista. Suenan una vez por disparo, así que son los que
     // llevan el throttle más agresivo y el volumen más bajo de todo el juego.
     "AttackBow": {
-      "files": ["attack/bow_1.wav", "attack/bow_2.wav"],
+      "files": ["attack/bow_1.ogg", "attack/bow_2.ogg"],
       "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
     },
     "AttackSword": {
@@ -48,7 +48,7 @@
       "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
     },
     "AttackMagic": {
-      "files": ["attack/magic_1.ogg", "attack/magic_2.ogg", "attack/magic_3.wav"],
+      "files": ["attack/magic_1.ogg", "attack/magic_2.ogg", "attack/magic_3.ogg"],
       "vol": -13, "pitch": 8, "throttle": 80, "voices": 3
     },
     "AttackFire": {
@@ -75,7 +75,7 @@
       "vol": -11, "pitch": 6, "throttle": 140, "voices": 2
     },
     "AttackMelee": {
-      "files": ["attack/melee_1.wav", "attack/melee_2.wav"],
+      "files": ["attack/melee_1.ogg", "attack/melee_2.ogg"],
       "vol": -12, "pitch": 10, "throttle": 70, "voices": 3
     },
 
@@ -112,7 +112,7 @@
     // Acciones del jugador: pasan de a una y tienen que confirmarse, así que
     // van más fuerte y sin throttle real.
     "TowerPlace": {
-      "files": ["tower/place_1.wav", "tower/place_2.wav"],
+      "files": ["tower/place_1.ogg", "tower/place_2.ogg"],
       "vol": -7, "pitch": 6, "throttle": 0, "voices": 2
     },
     "TowerUpgrade": {
@@ -139,11 +139,11 @@
     // 180 ms para TODA la pantalla: con 60 bichos recibiendo daño de nueve
     // defensores, un sonido por golpe son cientos de voces por segundo.
     "EnemyHurt": {
-      "files": ["enemy/hurt_1.ogg", "enemy/hurt_2.ogg", "enemy/hurt_3.wav"],
+      "files": ["enemy/hurt_1.ogg", "enemy/hurt_2.ogg", "enemy/hurt_3.ogg"],
       "vol": -16, "pitch": 14, "throttle": 180, "voices": 2
     },
     "EnemyDeath": {
-      "files": ["enemy/death_1.ogg", "enemy/death_2.wav", "enemy/death_3.wav"],
+      "files": ["enemy/death_1.ogg", "enemy/death_2.ogg", "enemy/death_3.ogg"],
       "vol": -13, "pitch": 12, "throttle": 90, "voices": 3
     },
     // El rugido del jefe suena una vez por aparición y es de los pocos eventos
@@ -238,10 +238,10 @@
     // `loop` en false solo para las dos que cierran la corrida: victoria y
     // derrota suenan una vez y se callan.
     "Menu":    { "file": "menu.mp3",    "vol": -14, "loop": true },
-    "Calm":    { "file": "calm.wav",    "vol": -17, "loop": true },
+    "Calm":    { "file": "calm.ogg",    "vol": -17, "loop": true },
     "Normal":  { "file": "normal.mp3",  "vol": -16, "loop": true },
     "Intense": { "file": "intense.mp3", "vol": -15, "loop": true },
-    "Boss":    { "file": "boss.wav",    "vol": -14, "loop": true },
+    "Boss":    { "file": "boss.ogg",    "vol": -14, "loop": true },
     "Victory": { "file": "victory.mp3", "vol": -12, "loop": false },
     "Defeat":  { "file": "defeat.mp3",  "vol": -12, "loop": false }
   }

@@ -154,6 +154,12 @@ public static class HeadlessRunner
                     ArtPacker.Execute(i + 1 < args.Length ? args[i + 1] : "");
                     return true;
 
+                case "--empaquetar-audio":
+                    // Igual que el arte: sin destino va a ..\build\audio.pck; para
+                    // Android se pasa res://audio.pck y queda adentro del APK.
+                    AudioPacker.Execute(i + 1 < args.Length ? args[i + 1] : "");
+                    return true;
+
                 case "--presupuesto-arte":
                     GraphicsInspector.Budget();
                     return true;
