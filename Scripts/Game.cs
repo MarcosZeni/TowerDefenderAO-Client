@@ -1848,7 +1848,7 @@ public partial class Game : Node2D
 
         // El alcance de lo que se está por poner, o de lo que ya está ahí.
         //
-        // ⚠ Sale de los stats EFECTIVOS —base + nivel + perks + equipo— y no de
+        // ⚠ Sale de los stats EFECTIVOS —(base + nivel + perks + equipo) × sinergias— y no de
         // los de la tabla. Con el alcance en milésimas de celda, un perk de
         // alcance mueve el círculo de verdad, y esta es la pantalla donde el
         // jugador decide dónde poner: un anillo que ignora los perks miente

@@ -512,19 +512,6 @@ public partial class Hud : Control
     // =====================================================================
 
     /// <summary>
-    /// La build de la clase elegida, de un vistazo: perks, arma, planos, mochila.
-    /// </summary>
-    /// <remarks>
-    /// <para>El diseño pone acá cuatro bloques y el cuarto son consumibles.
-    /// <b>Este juego no tiene consumibles</b> —no existen en
-    /// <c>JUGABILIDAD.md</c> ni en los datos— así que ese bloque muestra la
-    /// <b>mochila</b>, que es lo que ocupa el mismo lugar en la cabeza del
-    /// jugador: lo que tiene y todavía no puso.</para>
-    ///
-    /// <para>Es de la <b>clase elegida</b>, no del roster entero: todo en este
-    /// juego es de la clase y nunca de la unidad, así que una barra de build que
-    /// mezclara las nueve no diría nada.</para>
-    /// <summary>
     /// El panorama de sinergias: una fila por conjunto, con su estado.
     /// </summary>
     /// <remarks>
@@ -627,6 +614,19 @@ public partial class Hud : Control
         }
     }
 
+    /// <summary>
+    /// La build de la clase elegida, de un vistazo: perks, arma, planos, mochila.
+    /// </summary>
+    /// <remarks>
+    /// <para>El diseño pone acá cuatro bloques y el cuarto son consumibles.
+    /// <b>Este juego no tiene consumibles</b> —no existen en
+    /// <c>Doc\Jugabilidad\</c> ni en los datos— así que ese bloque muestra la
+    /// <b>mochila</b>, que es lo que ocupa el mismo lugar en la cabeza del
+    /// jugador: lo que tiene y todavía no puso.</para>
+    ///
+    /// <para>Es de la <b>clase elegida</b>, no del roster entero: todo en este
+    /// juego es de la clase y nunca de la unidad, así que una barra de build que
+    /// mezclara las nueve no diría nada.</para>
     /// </remarks>
     private void BarraDeBuild(Run p)
     {

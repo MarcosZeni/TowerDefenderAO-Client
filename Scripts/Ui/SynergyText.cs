@@ -84,7 +84,11 @@ public static class SynergyText
         foreach (var t in s.Tiers)
         {
             sb.Append('\n');
-            sb.Append(ReferenceEquals(t, activo) ? "▶ " : "   ");
+            // ⚠ ASCII y del MISMO ancho que la sangría. El «▶» de antes no está en
+            // la fuente del juego —salía por el fallback del sistema, distinto en
+            // cada máquina— y medía dos caracteres contra tres de sangría, así que
+            // en monoespaciado los escalones quedaban en escalera.
+            sb.Append(ReferenceEquals(t, activo) ? "> " : "  ");
             sb.Append(Tier(t));
         }
 

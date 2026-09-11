@@ -434,11 +434,15 @@ public partial class DefenderScreen : Control
             var (bonusDano, bonusAlcance) = tabla.BonusFor(defensor.DefenderClass, unidades);
 
             bool hayConflicto = partida.HasBehaviorConflict(defensor.DefenderClass);
-            int lugar = (int)((YTargeting - 8f - (y - Caja().Position.Y)) / 22f) - (hayConflicto ? 1 : 0);
+
+            // ⚠ El cupo se mide contra el TOPE del rótulo «apunta a», que arranca
+            // en YTargeting - 26, no contra YTargeting - 8: con el margen chico el
+            // último renglón de sinergia se le metía encima.
+            int lugar = (int)((YTargeting - 26f - (y - Caja().Position.Y)) / 22f) - (hayConflicto ? 1 : 0);
 
             if (lugar >= 1)
             {
-                var partes = new List<string>(2);
+                var partes = new List<string>(3);
 
                 if (bonusDano > 0)
                     partes.Add(Loc.Get("synergy.effect.Damage", bonusDano));
@@ -446,12 +450,19 @@ public partial class DefenderScreen : Control
                 if (bonusAlcance > 0)
                     partes.Add(Loc.Get("synergy.effect.Range", bonusAlcance));
 
+                // ⚠ Los efectos AL MATAR también cuentan para el total. `BonusFor`
+                // solo suma daño y alcance, así que un Ladrón con Saqueo y nada
+                // más leía «ninguna activa para esta clase» y abajo, en el mismo
+                // panel, la lista de activas mostraba Saqueo.
+                foreach (var b in tabla.OnKillFor(defensor.DefenderClass, unidades))
+                    partes.Add(Loc.Get($"synergy.effect.{b.Effect}", b.Magnitude));
+
                 string total = partes.Count > 0
                     ? string.Join("  ·  ", partes)
                     : Loc.Get("ui.defensor.sin_sinergia");
 
                 Renglon($"{Loc.Get("ui.defensor.sinergias").ToUpperInvariant()}  {total}",
-                    bonusDano > 0 || bonusAlcance > 0 ? Palette.Success : Palette.TextMuted,
+                    partes.Count > 0 ? Palette.Success : Palette.TextMuted,
                     "ui.ayuda.sinergias_defensor");
 
                 y += 22;

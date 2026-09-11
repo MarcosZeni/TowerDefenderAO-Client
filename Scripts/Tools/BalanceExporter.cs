@@ -55,6 +55,7 @@ public static class BalanceExporter
             ("Blueprints", HojaPlanos()),
             ("HabilidadesArma", HabilidadesArma()),
             ("GeneracionArmas", GeneracionArmas_()),
+            ("Sinergias", Sinergias(datos)),
             ("Constantes", Constantes()),
             ("Matchups", Matchups(datos)),
         };
@@ -338,6 +339,79 @@ public static class BalanceExporter
     }
 
     // -------------------------------------------------------------------------
+    //  Hoja — Sinergias
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Los conjuntos de sinergia, un renglón por escalón, y debajo el techo
+    /// acumulable por clase.
+    /// </summary>
+    /// <remarks>
+    /// <para>Existía un hueco: `sinergias.json` es el octavo archivo del hash y era
+    /// el único que no aparecía en <c>BALANCE.xlsx</c>, así que la planilla decía
+    /// mostrar «los datos vivos» y mostraba siete de ocho.</para>
+    ///
+    /// <para>⚠ La segunda tabla —el techo por clase— es la que contesta la pregunta
+    /// que el catálogo no deja ver leyéndolo: <b>ninguna línea del JSON se ve
+    /// grande, la suma sí</b>. Sale de <see cref="SynergyTable.MaxStackFor"/>, que
+    /// es la misma cuenta que imprime <c>--validar</c>.</para>
+    /// </remarks>
+    private static List<object[]> Sinergias(BalanceData datos)
+    {
+        var tabla = datos.Synergies;
+
+        List<object[]> filas =
+        [
+            ["Key", "Clases", "MinPorClase", "Scope", "Need", "Efecto", "Magnitud", "Only", "Cap"],
+        ];
+
+        foreach (var s in tabla.All)
+        {
+            foreach (var t in s.Tiers)
+            {
+                filas.Add(
+                [
+                    s.Key,
+                    string.Join(" + ", s.Classes),
+                    s.MinUnitsPerClass,
+                    s.Scope.ToString().ToLowerInvariant(),
+                    t.Need,
+                    t.Effect.ToString(),
+                    t.Magnitude,
+                    t.Only.Length > 0 ? string.Join(" + ", t.Only) : "todas",
+
+                    // El tope solo existe en los efectos al matar; en los numéricos
+                    // el lector lo PROHÍBE, así que un 0 ahí diría «tope cero».
+                    t.Effect.IsOnKill() ? t.Cap : "",
+                ]);
+            }
+        }
+
+        filas.Add([]);
+        filas.Add(["Techo acumulable por clase", "todas sus sinergias completas a la vez"]);
+        filas.Add(["Clase", "Daño %", "Alcance %", "Al matar"]);
+
+        foreach (DefenderClass clase in System.Enum.GetValues<DefenderClass>())
+        {
+            var (dano, alcance, alMatar) = tabla.MaxStackFor(clase);
+
+            filas.Add(
+            [
+                clase.ToString(),
+                dano,
+                alcance,
+                alMatar.Count > 0 ? string.Join(" + ", alMatar) : "",
+            ]);
+        }
+
+        filas.Add([]);
+        filas.Add(["MaxRosterClasses", tabla.MaxRosterClasses,
+                   "contra cuántas clases se valida que un conjunto sea alcanzable"]);
+
+        return filas;
+    }
+
+    // -------------------------------------------------------------------------
     //  Hoja 7 — Habilidades de arma
     // -------------------------------------------------------------------------
 
@@ -448,7 +522,8 @@ public static class BalanceExporter
             ["TicksPerSecond", Ints.TicksPerSecond, "Ints.cs", "paso fijo, congelado; NO es configurable"],
             ["ThousandthsPerCell", Ints.ThousandthsPerCell, "Ints.cs", "unidad de toda distancia de ruta"],
             ["DatosVersion", d.Version, "enemigos.json", "la temporada del ranking"],
-            ["DatosHash", d.Hash, "todos", "cubre bestiario + 6 tablas + layouts"],
+            ["DatosHash", d.Hash, "todos", $"cubre los {DataLoader.BalanceFileCount} archivos de balance + los layouts"],
+            ["MaxRosterClasses", d.Synergies.MaxRosterClasses, "sinergias.json", "contra cuántas clases se valida que una sinergia sea alcanzable"],
 
             // --- La Torre ---
             ["TorreHpInicial", c.Tower.HpInicial, "curvas.json", ""],

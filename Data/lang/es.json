@@ -400,17 +400,6 @@
     "ui.atajo.ClaseSiguiente": "Clase siguiente",
     "ui.atajo.Backpack": "Abrir la mochila",
     "ui.atajo.CallNextWave": "Adelantar la oleada",
-    "ui.eleccion.elegi_una": "ELEGÍ UNA",
-    "ui.eleccion.no_se_puede_cerrar": "no se puede cerrar sin elegir",
-    "ui.eleccion.contratar": "CONTRATAR",
-    "ui.eleccion.subir_de_nivel": "SUBIR DE NIVEL",
-    "ui.eleccion.de_dano": "de daño",
-    "ui.eleccion.alcance": "alcance",
-    "ui.eleccion.de_oro": "de oro",
-    "ui.eleccion.sirve_a": "Lo pueden equipar:",
-    "ui.eleccion.va_a_la_mochila": "Va a la mochila. Lo equipás vos.",
-    "ui.eleccion.rol_nuevo": "Rol nuevo, nivel 1.",
-    "ui.eleccion.arranca_con_slot": "Arranca con 1 slot de perk.",
     "ui.eleccion.level": "Nivel",
 
     "ui.jefe.titulo": "El jefe cayó",
@@ -426,7 +415,6 @@
     "ui.eleccion.slots_completos": "Ya tiene los 6 slots abiertos.",
     "ui.preparacion.wave": "Oleada",
     "ui.preparacion.de": "de",
-    "ui.preparacion.oro": "oro",
     "ui.preparacion.instrucciones": "poné defensores, equipá y comprá — el reloj está detenido",
     "ui.preparacion.avance": "Lo que viene",
     "ui.preparacion.jefe": "(JEFE)",
@@ -479,7 +467,6 @@
 
     // Donde las tarjetas de la tienda llevan el precio, las de la elección
     // llevan esto. Es la comparación entera de la pantalla, en una palabra.
-    "ui.mercado.gratis": "gratis",
     "ui.mercado.cerrar": "cerrar",
     "ui.mercado.confirmar": "click de nuevo para confirmar",
     "ui.mercado.esc_para_cerrar": "Esc para volver al tablero · el mercado sigue abierto hasta que lances la oleada",
@@ -487,9 +474,6 @@
     // ⚠ Aparecen cuando la elección DEJA DE SER GRATIS. Con las tres opciones
     // cobrando, un jugador sin oro quedaría trabado en un modal que no se cierra
     // y con el reloj congelado: la corrida muerta sin haber perdido.
-    "ui.mercado.pasar": "pasar",
-    "ui.mercado.elegi_o_pasa": "pagá una o pasá — lo que no te llevás se pierde",
-    "ui.tienda.titulo": "TIENDA",
     "ui.tienda.no_se_repone": "no se repone: lo que compres deja el lugar vacío",
     "ui.tienda.vendido": "vendido",
     "ui.tienda.reclutar": "RECLUTAR",
@@ -508,8 +492,6 @@
     "ui.tienda.arma": "ARMA",
     "ui.tienda.dano": "daño",
     "ui.tienda.alcance": "alcance",
-    "ui.tienda.cadencia": "cadencia",
-    "ui.tienda.ticks": "ticks",
     "ui.tienda.costo_colocacion": "cada ficha cuesta",
     "ui.tienda.cualquier_clase": "cualquier clase",
     "ui.tienda.sin_habilidad": "sin habilidad",
@@ -520,8 +502,6 @@
     // dos veces por lo que cree que es lo mismo.
     "ui.tienda.solo_esta_corrida": "solo para esta corrida",
     "ui.tienda.proximas_ofertas": "Nuevas ofertas en la oleada",
-    "ui.tienda.comprar": "Comprar",
-    "ui.tienda.sin_oro": "no alcanza",
 
     // --- El panel del defensor: targeting y soporte ---------------------------
     //
@@ -550,18 +530,14 @@
     "ui.targeting.Weakest": "el de menos vida",
     "ui.targeting.NearestTower": "el más cerca de la Torre",
 
-    "ui.hud.torre": "TORRE",
     "ui.hud.oleada": "OLEADA",
-    "ui.hud.ticks": "ticks",
     "ui.hud.oro": "ORO",
     "ui.hud.ganaste": "GANASTE",
     "ui.hud.cayo_la_torre": "CAYÓ LA TORRE",
     "ui.hud.ayuda": "clase: click en la barra o Q E · poner: click o arrastre al mapa · vender: derecho · espacio: pausa · 1 2 3: velocidad",
     "ui.hud.aca_van_tus_clases": "acá van tus clases",
     "ui.hud.elegi_la_primera": "elegí la primera",
-    "ui.hud.nv": "nv",
     "ui.hud.perks": "perks",
-    "ui.hud.en_el_mapa": "en el mapa",
     "ui.hud.mochila": "mochila",
 
     // --- Los rótulos de la disposición del diseñador -------------------------
@@ -598,19 +574,10 @@
     "class.Druid.role": "Control",
     "class.Paladin.role": "Tanque",
     "class.Hunter.role": "Daño físico",
-    "ui.mochila.titulo": "MOCHILA",
-    "ui.mochila.llena": "llena: el próximo drop te va a hacer tirar algo",
-    "ui.mochila.oro": "oro",
     "ui.mochila.equipar_en": "EQUIPAR EN",
-    "ui.mochila.nv": "nv",
     "ui.mochila.elegi_clase": "elegí una clase para ver sus perks",
     "ui.mochila.nivel": "nivel",
-    "ui.mochila.dano": "daño",
-    "ui.mochila.alcance": "alcance",
-    "ui.mochila.cada": "cada",
-    "ui.mochila.ticks": "ticks",
     "ui.mochila.habilidad": "habilidad:",
-    "ui.mochila.arma_tapa_rasgo": "⚠ la habilidad del arma reemplaza al perk de comportamiento",
 
     // ⚠ La ranura de comportamiento sigue siendo UNA: esto no permite tener los
     // dos, permite elegir cuál habla. La última línea es la que evita el
@@ -622,7 +589,6 @@
     "ui.mochila.stats_del_arma_quedan": "los stats del arma se conservan en los dos casos",
     "ui.mochila.subir_nivel": "subir a nivel",
     "ui.mochila.nivel_maximo": "nivel máximo",
-    "ui.mochila.sin_oro": "no alcanza el oro",
     // ⚠ Un click MUESTRA, el doble click SACA. El texto lo dice así porque el
     // gesto barato tiene que ser el reversible: antes un click abría la
     // confirmación de destruir y no había forma de mirar qué daba un perk.
@@ -636,7 +602,6 @@
     // mecánica existe no puede depender de leer una línea de ayuda.
     "ui.mochila.mejorar": "mejorar",
     "ui.mochila.marcar_para_mejorar": "marcá varios del mismo tier para mejorarlos",
-    "ui.mochila.tope_oro": "tope de Oro fabricado:",
 
     // Los seis motivos por los que MEJORAR rebota, y por qué existen: la mejora
     // fallaba en SILENCIO. La simulación tenía ocho salidas sin decir nada, la
@@ -672,7 +637,6 @@
     "ui.mochila.tab_perks": "Perks",
     "ui.mochila.tab_armas": "Armas",
     "ui.mochila.tab_planos": "Planos",
-    "ui.mochila.filtro": "Filtro:",
     "ui.mochila.todos": "todos",
     "ui.mochila.le_entran": "le entran",
     "ui.mochila.ordenar": "Ordenar:",

@@ -162,10 +162,21 @@ public partial class Main : Node2D
         {
             var (ok, datos, _) = await Net.ApiClient.CurrentRunAsync();
 
-            if (ok && datos is { Log.Length: > 0 } &&
+            // ⚠ `logTruncado` NO se puede reconstruir. El servidor corta el blob a
+            // `maxLogBytes` a lo bruto, y eso parte el stream Deflate por la
+            // mitad: `BinaryLog.Read` tira, no devuelve un log corto. Antes se
+            // ignoraba la bandera y la excepción salía de un `async void`, o sea
+            // sin nadie que la atrape, al apretar Continuar.
+            if (ok && datos is { Log.Length: > 0, LogTruncated: false } &&
                 datos.DataVersion == DataLoader.Current.Version)
             {
                 nube = datos;
+            }
+            else if (ok && datos is { LogTruncated: true })
+            {
+                GD.PushWarning(
+                    $"El checkpoint de la nube de la corrida {datos.RunId} vino truncado y no se " +
+                    "puede reconstruir; se usa el de disco.");
             }
         }
 
@@ -176,8 +187,27 @@ public partial class Main : Node2D
             GD.Print($"Retomando de la nube: corrida {nube.RunId}, tick {nube.SavedTick} " +
                      $"(en disco había {tickLocal})");
 
-            cargado = SaveFile.Rebuild(
-                nube.Seed, nube.RunId, nube.SavedTick, System.Convert.FromBase64String(nube.Log!));
+            // ⚠ Un blob ilegible NO puede tumbar el juego. Esto corre en un
+            // `async void` enganchado a una señal: una excepción acá no la atrapa
+            // nadie. Lo que llega es del servidor —Base64 mal formado, un log de
+            // otra build, bytes cortados— así que el camino de vuelta es el
+            // guardado de disco, que es lo que había antes de la nube.
+            try
+            {
+                cargado = SaveFile.Rebuild(
+                    nube.Seed, nube.RunId, nube.SavedTick, System.Convert.FromBase64String(nube.Log!));
+            }
+            catch (System.Exception ex)
+            {
+                GD.PushError($"No se pudo reconstruir el checkpoint de la nube ({ex.Message}); " +
+                             "se usa el de disco.");
+
+                // Se olvida la nube para que el chequeo de abajo no compare el
+                // guardado de disco contra la oleada del checkpoint y grite
+                // «determinismo roto» por algo que nunca se re-simuló.
+                nube = null;
+                cargado = SaveFile.Load();
+            }
 
             // ⚠ El chequeo de determinismo entre aparatos, gratis. El que subió el
             // checkpoint reportó su oleada; si la re-simulación de ESTA máquina no
@@ -185,7 +215,7 @@ public partial class Main : Node2D
             // exactamente lo que la regla «todo en enteros, PRNG propio» promete
             // que no pasa. Si este aviso aparece alguna vez, es un bug de la
             // simulación y es el más caro del proyecto: a cazarlo, no a taparlo.
-            if (cargado.Run is { } reconstruida && reconstruida.Wave != nube.Wave)
+            if (nube is not null && cargado.Run is { } reconstruida && reconstruida.Wave != nube.Wave)
             {
                 GD.PushError(
                     $"DETERMINISMO ROTO entre aparatos: el checkpoint dice oleada " +

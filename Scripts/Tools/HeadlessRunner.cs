@@ -1509,9 +1509,14 @@ public static class HeadlessRunner
     /// </summary>
     /// <remarks>
     /// <para>Piso y normal ponen <b>la más cara que puedan pagar</b>. Es una
-    /// heurística deliberadamente simple —más caro suele ser mejor— y como el
-    /// roster crece a ocho o nueve clases, el tablero termina repartido entre
-    /// todas.</para>
+    /// heurística deliberadamente simple —más caro suele ser mejor—.</para>
+    ///
+    /// <para>⚠ <b>No reparte el tablero</b>, aunque el roster crezca a nueve
+    /// clases: en cuanto el oro pasa el costo de la más cara, esa gana siempre.
+    /// El comentario de antes decía lo contrario y no hay métrica que lo
+    /// desmienta —no se mide la composición del tablero por clase—, así que en
+    /// la práctica <b>ninguna de las tres políticas llega al <c>need: 2</c> de
+    /// una sinergia</b> y <c>--balance</c> mide un juego sin sinergias.</para>
     ///
     /// <para>⚠ <b>El techo CONCENTRA en la mejor clase del roster</b>, y eso no es
     /// un detalle: un perk vive en la ficha de la clase, así que un Oro puesto en
@@ -2152,9 +2157,13 @@ public static class HeadlessRunner
     /// </remarks>
     private static bool AjustarTargeting(Run partida, ActionLog log)
     {
+        // Una sola vez: el tablero no cambia adentro del bucle, y contarlo por
+        // defensor hacía esta vuelta de preparación cuadrática en `--balance`.
+        var unidadesPorClase = partida.CountUnitsPerClass();
+
         foreach (var d in partida.Defenders)
         {
-            var stats = partida.Roster.StatsOf(d.DefenderClass, partida.Backpack, partida.CountUnitsPerClass());
+            var stats = partida.Roster.StatsOf(d.DefenderClass, partida.Backpack, unidadesPorClase);
 
             var quiere = stats.Behavior switch
             {
