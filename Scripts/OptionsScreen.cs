@@ -208,7 +208,7 @@ public partial class OptionsScreen : Control
                 if (RectValor(i, 0, 2).HasPoint(donde))
                     Resolution.Complete();
                 else if (RectValor(i, 1, 2).HasPoint(donde))
-                    Resolution.InWindow(new Vector2I(1600, 900));
+                    Resolution.InWindow(Resolution.WindowSize);
 
                 break;
 
@@ -340,8 +340,9 @@ public partial class OptionsScreen : Control
         Fondo(i, interactiva: true);
         this.Label(RectFila(i), Loc.Get("ui.opciones.modo"), 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
-        bool completa = DisplayServer.WindowGetMode() is DisplayServer.WindowMode.ExclusiveFullscreen
-            or DisplayServer.WindowMode.Fullscreen;
+        // ⚠ Del estado y no de DisplayServer: el cambio real se aplica un frame
+        // después, y leerlo del sistema acá marcaba la cajita vieja.
+        bool completa = Resolution.IsFullscreen;
 
         Choice(RectValor(i, 0, 2), Loc.Get("ui.opciones.completa"), completa);
         Choice(RectValor(i, 1, 2), Loc.Get("ui.opciones.enventana"), !completa);
@@ -352,7 +353,9 @@ public partial class OptionsScreen : Control
         Fondo(i, interactiva: true);
         this.Label(RectFila(i), Loc.Get("ui.opciones.resolucion"), 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
-        var actual = DisplayServer.WindowGetSize();
+        // En pantalla completa ninguna queda marcada: la resolución es la del
+        // monitor. Apretar una pasa a ventana con ese tamaño.
+        var actual = Resolution.IsFullscreen ? Vector2I.Zero : Resolution.WindowSize;
 
         for (int r = 0; r < Resolution.Options.Length; r++)
         {
