@@ -193,7 +193,7 @@ public enum PerkEffect
 /// <remarks>
 /// ⚠ Los perks <b>no son de la unidad: son de la clase</b>. Toda unidad de esa
 /// clase los tiene, la que ya estaba puesta y la que se ponga después. Un
-/// defensor no guarda perks: calcula <c>base + nivel + perks + equipo</c> cada
+/// defensor no guarda perks: calcula <c>(base + nivel + perks + equipo) × sinergias</c> cada
 /// vez, así que no hay estado duplicado ni desincronización posible.
 /// </remarks>
 public sealed class PerkDefinition

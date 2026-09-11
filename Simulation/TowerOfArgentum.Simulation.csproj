@@ -56,7 +56,14 @@
     <!-- Empaquetado -->
     <IsPackable>true</IsPackable>
     <PackageId>TowerOfArgentum.Simulation</PackageId>
-    <Version>0.1.0</Version>
+    <!-- ⚠ SE SUBE CON CADA CAMBIO DE Simulation\, sin excepción, y se re-empaca.
+         El 0.1.0 quedó clavado desde el 2026-09-01 mientras la simulación se
+         movía tres veces —la semántica de Fuse, el ritmo de áreas, las
+         sinergias—, así que el servidor revalidaba con OTRA simulación: hubiera
+         acusado de trampa a jugadores honestos. Además NuGet cachea por
+         id+versión, así que re-empacar con el mismo número no reemplaza nada en
+         una máquina que ya restauró. -->
+    <Version>0.2.0</Version>
     <Authors>Tower of Argentum</Authors>
 
     <Description>

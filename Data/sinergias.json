@@ -19,8 +19,11 @@
   //  mismo juego y no pueden compartir tabla.
   //
   //  El diseño completo está en Doc\Jugabilidad\11-roster-tablero-y-sinergias.md
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 1,
+  "version": 3,
 
   // ⚠ Contra cuántas clases se valida que una sinergia sea ALCANZABLE.
   //
@@ -111,7 +114,7 @@
   //    sumaran, el segundo escalón dejaría de ser una decisión y sería un piso.
   //
   // 2. Entre SINERGIAS DISTINTAS: acumulan SUMÁNDOSE. Un Paladín en «guerreros»
-  //    (+25), «fe» (+8) y «concilio» (+12) lleva +45.
+  //    (+25 de daño) y «acero» (+12) lleva +37.
   //
   //    ⚠ NO SE COMPONEN, Y ESTA ES LA REGLA QUE SOSTIENE TODO EL ARCHIVO. Con las
   //    cinco sinergias de hoy la diferencia parece chica —componer da 1,51 contra
@@ -139,9 +142,15 @@
   //
   // ⚠ AL CALIBRAR: multiplicar ENSANCHA LA BRECHA ENTRE CLASES. Con un build de
   // +90% encima, la ventaja del Paladín sobre el Guerrero pasa de ×1,86 sin
-  // sinergias a ×2,03 sumando y a ×2,16 multiplicando. Por eso el techo de +45%
-  // del Paladín que reporta `--validar` pesa MÁS con esta regla, no menos: es el
-  // primer número a revisar.
+  // sinergias a ×2,03 sumando y a ×2,16 multiplicando.
+  //
+  // ⚠ EL PRIMER NÚMERO A REVISAR ES LA BRECHA DE «caceria», no el techo del
+  // Paladín: el catálogo de abajo lo dejó en +37, parejo con Guerrero y Asesino.
+  // Lo que `--validar` reporta hoy es que adentro de «caceria» el Asesino junta
+  // +37% de daño y el Cazador solo +12%. El conjunto se escribió PARA el Cazador,
+  // que es la clase más floja del roster, y termina dándole cinco veces menos que
+  // al Asesino porque a este lo empujan «guerreros» y «acero» desde afuera. La
+  // salida barata es `only: ["Hunter"]`, que el lector ya soporta.
   //
   // ⚠ Y ESTAS MAGNITUDES TODAVÍA NO ESTÁN CALIBRADAS CONTRA NADA. `--balance` no
   // las puede medir todavía: el bot amontona UNA sola clase, así que casi nunca

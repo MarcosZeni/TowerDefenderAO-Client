@@ -54,6 +54,17 @@ public static class DataLoader
         RutaSinergias,
     ];
 
+    /// <summary>
+    /// Cuántos archivos de balance entran al hash.
+    /// </summary>
+    /// <remarks>
+    /// Existe para que los textos que lo cuentan —la hoja «Constantes» de
+    /// <c>BALANCE.xlsx</c>, sobre todo— salgan de la lista de verdad. El número
+    /// escrito a mano se quedó en «siete» y en «6 tablas» durante toda la vida de
+    /// <c>sinergias.json</c>.
+    /// </remarks>
+    public static int BalanceFileCount => _archivos.Length;
+
     private static BalanceData? _cache;
 
     /// <summary>El último error de carga, para que la UI lo pueda mostrar.</summary>

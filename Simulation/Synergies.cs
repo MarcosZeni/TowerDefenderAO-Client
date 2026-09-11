@@ -235,7 +235,7 @@ public readonly record struct SynergyBonus(
 /// segundo escalón dejaría de ser una decisión para volverse un piso.</para>
 ///
 /// <para><b>2. Entre sinergias DISTINTAS: acumulan, sumándose entre ellas.</b> Un
-/// Paladín en «guerreros» (+25), «fe» (+8) y «concilio» (+12) lleva +45.</para>
+/// Paladín en «guerreros» (+25 de daño) y «acero» (+12) lleva +37.</para>
 ///
 /// <para>⚠ <b>NO se componen, y esta es la regla que sostiene todo el sistema.</b>
 /// Con las cinco sinergias de hoy la diferencia parece chica —componer da 1,51
@@ -269,9 +269,14 @@ public readonly record struct SynergyBonus(
 /// <para>⚠ Tiene dos consecuencias que hay que mirar al calibrar, y las dos
 /// apuntan al mismo lado: multiplicar <b>ensancha la brecha entre clases</b>. Con
 /// un build de +90 % encima, la ventaja del Paladín sobre el Guerrero pasa de
-/// ×1,86 sin sinergias a ×2,03 sumando y a <b>×2,16 multiplicando</b>. El techo
-/// de +45 % del Paladín, que <c>--validar</c> ya señala, pesa más con esta regla,
-/// no menos.</para>
+/// ×1,86 sin sinergias a ×2,03 sumando y a <b>×2,16 multiplicando</b>.</para>
+///
+/// <para>⚠ <b>La brecha que hay que mirar hoy es la de «caceria»</b>, no la del
+/// Paladín: el catálogo vigente deja al Paladín en +37, parejo con el Guerrero y
+/// el Asesino. Lo que <c>--validar</c> señala es que adentro de «caceria» —el
+/// conjunto escrito PARA el Cazador, que es la clase más floja— el Asesino junta
+/// +37 y el Cazador +12, porque al Asesino lo empujan «guerreros» y «acero» desde
+/// afuera. Multiplicar la ensancha todavía más.</para>
 /// </remarks>
 public static class SynergyStacking
 {
@@ -386,21 +391,21 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
     public (int Damage, int Range) BonusFor(
         DefenderClass clase, IReadOnlyList<int> unidadesPorClase)
     {
-        int dano = 0;
-        int alcance = 0;
+        var activas = ActiveFor(unidadesPorClase);
 
-        foreach (var b in ActiveFor(unidadesPorClase))
+        // Se filtra sobre la misma lista, hacia atrás, para no alocar una segunda:
+        // esto corre dos veces por defensor por tick.
+        for (int i = activas.Count - 1; i >= 0; i--)
         {
-            if (!b.Reaches(clase, ByKey(b.Key)!))
-                continue;
-
-            if (b.Effect == SynergyEffect.Damage)
-                dano += b.Magnitude;
-            else if (b.Effect == SynergyEffect.Range)
-                alcance += b.Magnitude;
+            if (!activas[i].Reaches(clase, ByKey(activas[i].Key)!))
+                activas.RemoveAt(i);
         }
 
-        return (dano, alcance);
+        // ⚠ La suma la hace SynergyStacking y no este método: la regla 2 tiene que
+        // estar escrita en un solo lugar. Tenerla acá a mano y además en
+        // `SynergyStacking.Total` es cómo una de las dos copias se queda vieja.
+        return (SynergyStacking.Total(activas, SynergyEffect.Damage),
+                SynergyStacking.Total(activas, SynergyEffect.Range));
     }
 
     /// <summary>La sinergia con esa key, o <c>null</c>.</summary>
@@ -422,15 +427,16 @@ public sealed class SynergyTable(Synergy[] todas, int maxRosterClasses)
     /// <remarks>
     /// <para>Suma entre sinergias distintas, que es la regla 2 de
     /// <see cref="SynergyStacking"/>. El número que devuelve es el que después
-    /// MULTIPLICA al build, así que un +45 acá no es «+45 % más de daño del
-    /// total»: es un ×1,45 encima de lo que el defensor ya pegaba con nivel,
+    /// MULTIPLICA al build, así que un +37 acá no es «+37 % más de daño del
+    /// total»: es un ×1,37 encima de lo que el defensor ya pegaba con nivel,
     /// perks y arma.</para>
     ///
     /// <para>⚠ Es un <b>techo teórico</b>, no lo que va a pasar: supone que el
     /// jugador completó a la vez todos los conjuntos que tocan esa clase, lo que
-    /// el tope del roster puede volver imposible —o no: el +45 del Paladín SÍ
-    /// entra en cinco lugares—. Sirve para lo que sirve: ver de un vistazo si
-    /// agregar una sinergia nueva duplicó el bonus de alguien sin querer.</para>
+    /// el tope del roster puede volver imposible —o no: el +37 del Paladín sale
+    /// de «guerreros» y «acero», que son tres clases en total y entran de sobra—.
+    /// Sirve para lo que sirve: ver de un vistazo si agregar una sinergia nueva
+    /// duplicó el bonus de alguien sin querer.</para>
     /// </remarks>
     public (int Damage, int Range, List<SynergyEffect> OnKill) MaxStackFor(DefenderClass clase)
     {

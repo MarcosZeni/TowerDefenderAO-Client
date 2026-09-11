@@ -28,8 +28,11 @@
   //  los datos, que es exactamente el bug que esta separación hace imposible.
   //
   //  ⚠ Entra al hash de /run/start. Tocar un número acá es TEMPORADA NUEVA.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 2,
+  "version": 3,
 
   // Cuántas copias del mismo perk entran en una clase. Es la regla de arriba
   // hecha número: apilable si es un número, único si es un comportamiento.

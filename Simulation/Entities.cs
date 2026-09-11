@@ -428,7 +428,7 @@ public sealed class Defender
     // -------------------------------------------------------------------------
     //
     //  ⚠ Nada de esto son STATS. Los stats siguen viviendo en la clase y se
-    //  recalculan cada vez (`base + nivel + perks + equipo`); esto es memoria de
+    //  recalculan cada vez (`(base + nivel + perks + equipo) × sinergias`); esto es memoria de
     //  lo que ESTA unidad viene haciendo, que es otra cosa. Dos cazadores con los
     //  mismos perks pegan igual; uno puede llevar cinco golpes seguidos al mismo
     //  bicho y el otro no.

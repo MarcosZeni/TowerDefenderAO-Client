@@ -13,8 +13,11 @@
   //  ni nada que escale sin fin. Agregar planos sin freno rompe esa promesa.
   //
   //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 2,
+  "version": 3,
 
   // Se referencian por la "key" de perks.json y NO por id: un id pegado a mano
   // quedaría apuntando a otro perk en cuanto alguien agregue uno, y el síntoma

@@ -1355,6 +1355,8 @@ public static class TableReader
 
             var escalones = new List<SynergyTier>();
             int anterior = 0;
+            SynergyEffect? efectoAnterior = null;
+            int magnitudAnterior = 0;
 
             foreach (var t in ArrayOf(e, "tiers", archivo).EnumerateArray())
             {
@@ -1428,8 +1430,26 @@ public static class TableReader
                 // cuenta para activar la sinergia y tampoco puede cobrarla.
                 var solo = new List<DefenderClass>();
 
-                if (t.TryGetProperty("only", out var arrSolo) && arrSolo.ValueKind == JsonValueKind.Array)
+                if (t.TryGetProperty("only", out var arrSolo))
                 {
+                    // ⚠ Escrito mal, «only» se ignoraba en silencio y el escalón
+                    // pasaba a llegarle a TODO el conjunto: exactamente el bonus
+                    // que la restricción existía para no dar. Un campo que está
+                    // pero no restringe se rechaza, como el `cap` de más abajo.
+                    if (arrSolo.ValueKind != JsonValueKind.Array)
+                    {
+                        throw new InvalidBalanceDataException(
+                            $"{archivo}: «{clave}» tiene un escalón con «only» que no es una lista. " +
+                            "Va entre corchetes aunque sea una sola clase: [\"Thief\"].");
+                    }
+
+                    if (arrSolo.GetArrayLength() == 0)
+                    {
+                        throw new InvalidBalanceDataException(
+                            $"{archivo}: «{clave}» tiene un escalón con «only» vacío. " +
+                            "Un «only» vacío no restringe nada: sacalo, o nombrá las clases que cobran.");
+                    }
+
                     foreach (var v in arrSolo.EnumerateArray())
                     {
                         var c = Enum_<DefenderClass>(v.GetString() ?? "", "only", archivo);
@@ -1475,6 +1495,44 @@ public static class TableReader
                         $"{archivo}: «{clave}» tiene «cap» en un escalón «{efecto}», y ahí no hace nada. " +
                         "El tope por oleada es solo de los efectos al matar.");
                 }
+
+                // ⚠ «only» con «scope: board» no significa nada: board ya quiere
+                // decir «le llega a todo el tablero», y el lector obliga a que
+                // «only» sea subconjunto de «classes», así que el par degenera en
+                // un «members» disfrazado. Dos formas de escribir lo mismo es cómo
+                // el chequeo de huérfanas del validador termina contando mal.
+                if (alcance == SynergyScope.Board && solo.Count > 0)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: «{clave}» combina «scope: board» con «only», y eso no existe. " +
+                        "«board» le llega a todo el tablero; si el escalón solo lo cobran algunas " +
+                        "clases del conjunto, el scope es «members».");
+                }
+
+                // ⚠ Todos los escalones de una sinergia dan el MISMO efecto, y de
+                // menor a mayor. `TierFor` se queda con el más alto alcanzado, así
+                // que un escalón superior más flojo —o de otro efecto— hace que
+                // COMPLETAR el conjunto empeore al defensor, en silencio y sin que
+                // ningún número del catálogo lo anticipe.
+                if (efectoAnterior is { } previo && previo != efecto)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: los escalones de «{clave}» mezclan «{previo}» y «{efecto}». " +
+                        "Un conjunto da un solo efecto: al subir de escalón el más alto TAPA al " +
+                        "anterior, así que completarlo cambiaría un efecto por otro. Si querés las " +
+                        "dos cosas, son dos sinergias sobre las mismas clases.");
+                }
+
+                if (efectoAnterior is not null && magnitud <= magnitudAnterior)
+                {
+                    throw new InvalidBalanceDataException(
+                        $"{archivo}: el escalón «need {necesita}» de «{clave}» da {magnitud} y el " +
+                        $"anterior daba {magnitudAnterior}. Los escalones suben: como el más alto " +
+                        "tapa al anterior, uno más flojo castiga por completar el conjunto.");
+                }
+
+                efectoAnterior = efecto;
+                magnitudAnterior = magnitud;
 
                 escalones.Add(new SynergyTier(necesita, efecto, magnitud, [.. solo], cap));
             }

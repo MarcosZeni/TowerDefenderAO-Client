@@ -22,8 +22,11 @@
   //  generado tenga un techo conocido.
   //
   //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 1,
+  "version": 3,
 
   // --- Los números que se compran con lo que no se fue en la habilidad -------
   //

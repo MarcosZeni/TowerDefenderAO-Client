@@ -2321,7 +2321,7 @@ public sealed class Run
                 continue;
             }
 
-            // base + nivel + perks + equipo, recalculado cada vez. Nada de esto
+            // (base + nivel + perks + equipo) × sinergias, recalculado cada vez. Nada de esto
             // vive en el defensor: un cazador puesto en la oleada 3 y otro puesto
             // en la 40 pegan exactamente igual.
             var stats = Roster.StatsOf(d.DefenderClass, Backpack, unidadesPorClase);
@@ -3358,7 +3358,22 @@ public sealed class Run
                     int porcentaje = objetivo.Hp * 100 / objetivo.MaxHp;
 
                     if (porcentaje <= umbral)
+                    {
                         objetivo.Hp = 0;
+
+                        // ⚠ La ejecución SÍ tiene dueño. Es el remate del golpe
+                        // directo de este defensor —no un secundario—, así que la
+                        // muerte se le atribuye igual que en `GolpeDirecto`: sin
+                        // esto el enemigo llegaba a la fase 8 con `KillerClass` en
+                        // null, el Ladrón no cobraba Saqueo por su propia
+                        // ejecución y `KillsByClass` decía que no mató a nadie.
+                        //
+                        // No hay doble conteo: acá solo se entra si el enemigo
+                        // seguía vivo después de `GolpeDirecto`, que es el único
+                        // otro lugar que pone `KillerClass`.
+                        Metrics.KillsByClass[(int)defensor.DefenderClass]++;
+                        objetivo.KillerClass = defensor.DefenderClass;
+                    }
                 }
 
                 return;
@@ -3763,10 +3778,12 @@ public sealed class Run
             RollDrop(e);
         }
 
-        // La habilidad Sed cuenta muertes por defensor. Se atribuyen al que tenga
-        // al enemigo en alcance, que es una aproximación —no se sabe quién dio el
-        // golpe final— pero es determinista y barata, que es lo que importa.
-        ContarMuertesParaSed();
+        // La habilidad Sed cuenta muertes por defensor. Se atribuyen a TODO el
+        // que tenga al enemigo en alcance, no al dueño del golpe. Desde las
+        // sinergias el dueño SÍ se sabe —`Enemy.KillerClass`—, pero pasar Sed a
+        // usarlo cambiaría el daño de corridas ya guardadas: la aproximación se
+        // conserva a propósito, no por no tener el dato.
+        ContarMuertesParaSed(unidadesPorClase);
 
         // RemoveAll es estable: conserva el orden relativo de los que quedan.
         _enemigos.RemoveAll(e => !e.Alive);
@@ -3804,7 +3821,18 @@ public sealed class Run
         foreach (var b in _datos.Synergies.OnKillFor(asesino, unidadesPorClase))
         {
             _dadoPorSinergiaOleada.TryGetValue(b.Key, out int yaDado);
-            int queda = b.Tier.Cap - yaDado;
+
+            // ⚠ El tope se lleva en la UNIDAD INTERNA del efecto: oro entero para
+            // el doble oro, CENTÉSIMAS de punto para la curación. El `cap` del
+            // JSON está escrito en la unidad del jugador, así que se escala acá
+            // una sola vez. Antes el acumulador de la cura guardaba puntos
+            // truncados y una cura parcial de 1,5 descontaba 1: el medio punto
+            // salía gratis y el tope de la oleada nunca cerraba.
+            int tope = b.Effect == SynergyEffect.TowerHealOnKill
+                ? Ints.ToHundredths(b.Tier.Cap)
+                : b.Tier.Cap;
+
+            int queda = tope - yaDado;
 
             if (queda <= 0)
                 continue;
@@ -3816,10 +3844,12 @@ public sealed class Run
                     if (_datos.Combat.Boss.LootIgnoresBosses && e.IsBoss)
                         break;
 
-                    // La tirada va ANTES del chequeo de tope que sigue, y no al
-                    // revés: así la secuencia del RNG no depende de cuánto se
-                    // cobró antes en la oleada, que es un número que la UI puede
-                    // cambiar vendiendo y volviendo a poner.
+                    // ⚠ El tope se mira ANTES de tirar: con la oleada agotada no
+                    // se consume RNG. Es al revés de lo que decía este comentario,
+                    // y el orden real es el correcto —lo que se cobró antes en la
+                    // oleada sale del log, así que la secuencia sigue siendo
+                    // reproducible—. Queda congelado igual: moverlo corre todas
+                    // las tiradas de la corrida.
                     if (!_rng.Happens(b.Magnitude))
                         break;
 
@@ -3833,12 +3863,13 @@ public sealed class Run
                 {
                     // Puntos, como Drenaje: hay que escalar a la unidad interna
                     // de la Torre o curar 2 sobre 100.000 sería curar nada.
-                    int cura = System.Math.Min(Ints.ToHundredths(b.Magnitude), Ints.ToHundredths(queda));
+                    // `queda` ya viene en centésimas (ver el tope de arriba).
+                    int cura = System.Math.Min(Ints.ToHundredths(b.Magnitude), queda);
 
                     // Lo que la Torre no puede recibir no se descuenta del tope.
                     int antes = Tower.Hp;
                     Tower.Hp = System.Math.Min(Tower.MaxHp, Tower.Hp + cura);
-                    _dadoPorSinergiaOleada[b.Key] = yaDado + Ints.ToPoints(Tower.Hp - antes);
+                    _dadoPorSinergiaOleada[b.Key] = yaDado + (Tower.Hp - antes);
                     break;
                 }
             }
@@ -3913,10 +3944,32 @@ public sealed class Run
     /// y el perk Sed de Sangre. Filtrar solo por el arma dejaba al perk contando
     /// siempre cero, que es un perk que no hace nada — y no lo diría ningún
     /// error, solo un número que nunca sube.</para>
+    ///
+    /// <para>Recibe el conteo por clase que la fase de muertes ya hizo, si lo
+    /// hizo. Es el mismo valor —entre las dos no se toca el tablero— y evita
+    /// recorrer los defensores dos veces en el mismo tick.</para>
     /// </remarks>
-    private void ContarMuertesParaSed()
+    private void ContarMuertesParaSed(IReadOnlyList<int>? unidadesPorClase)
     {
-        var unidadesPorClase = CountUnitsPerClass();
+        // Sin muertos no hay nada que sumar, y el bucle de abajo lo confirmaría
+        // recorriendo todos los defensores y pidiendo el `StatsOf` de cada uno
+        // —con su bonus de sinergia— para no sumar nada. Son casi todos los ticks
+        // de la corrida: salir acá no cambia un solo resultado.
+        bool hayMuertos = false;
+
+        foreach (var e in _enemigos)
+        {
+            if (!e.Alive)
+            {
+                hayMuertos = true;
+                break;
+            }
+        }
+
+        if (!hayMuertos)
+            return;
+
+        unidadesPorClase ??= CountUnitsPerClass();
 
         foreach (var d in _defensores)
         {

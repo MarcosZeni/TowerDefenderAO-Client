@@ -17,8 +17,11 @@
   //  ⚠ Las distancias van en MILÉSIMAS DE CELDA y el daño en CENTÉSIMAS DE
   //  PUNTO — la escala interna de la simulación. Los porcentajes no tienen
   //  unidad y se escriben como puntos porcentuales enteros.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 2,
+  "version": 3,
 
   // --- El enemigo ------------------------------------------------------------
   //

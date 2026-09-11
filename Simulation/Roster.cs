@@ -143,19 +143,6 @@ public sealed class Roster(BalanceData datos)
     private readonly BalanceData _datos = datos;
     private readonly List<RosterClass> _clases = [];
 
-    /// <summary>
-    /// «No hay tablero»: para pedir stats SIN bonus de sinergia.
-    /// </summary>
-    /// <remarks>
-    /// ⚠ Es una constante con nombre y no un <c>[]</c> suelto para que el sitio
-    /// que la usa se lea como una <b>decisión</b> y no como un descuido. Solo vale
-    /// donde de verdad no hay tablero que contar: la UI pintando el anillo de
-    /// alcance de una clase que el jugador todavía no contrató, o la preview de
-    /// una oferta de la tienda. <b>Nunca desde el tick</b> — ahí las sinergias son
-    /// parte del resultado y omitirlas rompe la revalidación en silencio.
-    /// </remarks>
-    public static readonly IReadOnlyList<int> NoBoard = [];
-
     public IReadOnlyList<RosterClass> Classes => _clases;
 
     public bool Has(DefenderClass clase) => Find(clase) is not null;
@@ -285,10 +272,12 @@ public sealed class Roster(BalanceData datos)
     /// <para>⚠ <c>unidadesPorClase</c> es <b>obligatorio y no tiene default</b>, a
     /// propósito: un parámetro opcional que omite el bonus en silencio es
     /// exactamente el bug que rompe la revalidación —el cliente pega con sinergia,
-    /// el servidor sin ella, y nadie ve un error—. Los llamadores que de verdad no
-    /// tienen tablero —la UI pintando el anillo de una clase que todavía no se
-    /// contrató— pasan <see cref="NoBoard"/> y así queda escrito en el código que
-    /// la omisión fue una decisión.</para>
+    /// el servidor sin ella, y nadie ve un error—. Hoy <b>todos</b> los llamadores
+    /// tienen tablero que contar, la UI incluida: el anillo de alcance de una
+    /// clase que el jugador todavía no soltó cuenta la ficha en la mano
+    /// (<c>Game.cs</c>). Si algún día hiciera falta pedir stats sin sinergias, va
+    /// con una constante con nombre y no con un <c>[]</c> suelto, para que se lea
+    /// como decisión y no como descuido.</para>
     /// </remarks>
     public EffectiveStats StatsOf(
         DefenderClass clase, Backpack mochila, IReadOnlyList<int> unidadesPorClase)

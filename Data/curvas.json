@@ -6,8 +6,11 @@
   //  cuán dura es una oleada, es el presupuesto de acá.
   //
   //  ⚠ Entra al hash de /run/start. Tocar esto es TEMPORADA NUEVA del ranking.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho del hash; el que el cargador lee
+  //  de verdad es el de enemigos.json.
   // ---------------------------------------------------------------------------
-  "version": 2,
+  "version": 3,
 
   // --- La Torre --------------------------------------------------------------
   //

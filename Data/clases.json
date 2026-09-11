@@ -12,9 +12,14 @@
   //
   //  ⚠ Este archivo es ENTRADA de la simulación y entra al hash de /run/start.
   //  Cambiar un número acá vuelve irreplicables las corridas viejas: es una
-  //  TEMPORADA NUEVA del ranking. Ver DATOS.md §7.
+  //  TEMPORADA NUEVA del ranking. Ver Doc\Datos\05-temporadas.md.
+  //
+  //  ⚠ "version" es el MISMO número en los ocho archivos del hash, y el que el
+  //  cargador lee de verdad es el de enemigos.json. Está acá por consistencia:
+  //  estuvieron desparejos —unos en 1 y otros en 2— y eso hacía pensar que cada
+  //  archivo llevaba su propia versión.
   // ---------------------------------------------------------------------------
-  "version": 1,
+  "version": 3,
 
   // Puntos porcentuales de daño que suma cada nivel por encima del 1.
   //

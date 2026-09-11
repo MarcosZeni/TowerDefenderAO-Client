@@ -1,5 +1,6 @@
 {
-  "version": 2,
+  "version": 3,
+  "versionNote": "⚠ ESTA es la versión de los datos: DataLoader la lee de acá y de ningún otro archivo, y es la que separa las temporadas del ranking (runs.datos_version). Los otros siete JSON del hash llevan el mismo número por consistencia, pero el que cuenta es este. TIENE QUE COINCIDIR con DataVersion de GameApi\\appsettings.json: si se separan no falla nada, deja de andar el checkpoint en la nube EN SILENCIO (Main.cs solo retoma si las dos son iguales). La 3 salió el 2026-09-11: la atribución de la muerte por Ejecución y el tope de la cura de Fe cambian resultados.",
   "source": "NPCs.dat de Austral AO, leído con Encoding.Latin1 y escrito en UTF-8",
   "note": "Generado por el importador. NO editar a mano: se pisa en la próxima corrida de --importar-npcs. Los ajustes de balance van en el importador.",
   "rescaled": "scaledHp = a·rawHp^b, clavado en Hormiga (5→30) y Golem (23000→6000). Los crudos de Austral son para un MMO 1v1; acá hay treinta bichos contra diez defensores. hpCrudo queda para poder rehacer la curva.",
