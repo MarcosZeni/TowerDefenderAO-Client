@@ -30,6 +30,7 @@ public partial class LoginScreen : Control
     private Button _entrar = null!;
     private Button _registrar = null!;
     private CheckBox _recordar = null!;
+    private float _keyboardOffset;
 
     /// <summary>
     /// El formulario, escondido mientras se prueba la sesión guardada.
@@ -52,13 +53,14 @@ public partial class LoginScreen : Control
     /// flotarían sobre un fondo vacío y el login sería la única pantalla del juego
     /// sin panel.
     /// </remarks>
-    private static Rect2 Marco()
-        => new((Canvas.CanvasWidth / 2f) - 300f, (Canvas.CanvasHeight / 2f) - 260f, 600f, 520f);
+    private Rect2 Marco()
+        => new((Canvas.CanvasWidth / 2f) - 300f, (Canvas.CanvasHeight / 2f) - 260f + _keyboardOffset, 600f, 520f);
 
     public override void _Ready()
     {
         UiStyle.Init();
         SetAnchorsPreset(LayoutPreset.FullRect);
+        SetProcess(OS.HasFeature("mobile"));
 
         // ⚠ El tema va acá y no en cada nodo: es la única pantalla con nodos del
         // motor, y con el tema de fábrica de Godot se vería de otro juego que el
@@ -84,6 +86,8 @@ public partial class LoginScreen : Control
         {
             CustomMinimumSize = new Vector2(440, 46),
             MaxLength = 20,
+            // En celular se abre al tocar el campo, no al enfocar durante el arranque.
+            VirtualKeyboardShowOnFocus = !OS.HasFeature("mobile"),
 
             // El nick de la última sesión queda escrito, aunque el token haya
             // caducado o el jugador haya salido de la cuenta. No es un secreto, y
@@ -99,6 +103,8 @@ public partial class LoginScreen : Control
         {
             CustomMinimumSize = new Vector2(440, 46),
             Secret = true,
+            VirtualKeyboardType = LineEdit.VirtualKeyboardTypeEnum.Password,
+            VirtualKeyboardShowOnFocus = !OS.HasFeature("mobile"),
         };
 
         // Enter en la contraseña entra directo: es lo que espera cualquiera que
@@ -160,12 +166,86 @@ public partial class LoginScreen : Control
         _mensaje.AddThemeColorOverride("font_color", Palette.Danger);
         AddChild(_mensaje);
 
+        if (OS.HasFeature("mobile"))
+        {
+            ShowKeyboardOnTap(_nick);
+            ShowKeyboardOnTap(_password);
+        }
+
         // Con el nick ya escrito, el cursor va a la contraseña: es el único campo
         // que falta.
         if (_nick.Text.Length > 0)
             _password.GrabFocus();
         else
             _nick.GrabFocus();
+    }
+
+    /// <summary>
+    /// Abre el teclado del celular al tocar el campo.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>VirtualKeyboardShowOnFocus</c> está apagado porque el foco inicial
+    /// de <c>_Ready</c> abriría el teclado tapando el login apenas arranca; esto lo
+    /// abre recién cuando el jugador toca el campo. Tocar un campo que ya tenía el
+    /// foco también lo abre: es la única manera de recuperarlo después de cerrarlo
+    /// con Atrás.</para>
+    ///
+    /// <para>⚠ <b>En el emulador NO se ve nunca, y no es un bug.</b> El emulador
+    /// siempre expone un teclado físico (<c>qwerty2</c>), aun con
+    /// <c>hw.keyboard=no</c>, y Godot no abre el teclado virtual si
+    /// <see cref="DisplayServer.HasHardwareKeyboard"/> da true: ahí se escribe con
+    /// el teclado de la PC. Medido el 2026-09-12: el toque llega, Godot llama y
+    /// Android no recibe ningún pedido de mostrar.</para>
+    /// </remarks>
+    private static void ShowKeyboardOnTap(LineEdit field)
+    {
+        field.GuiInput += evento =>
+        {
+            // Godot emula el mouse desde el toque, así que soltar el dedo llega
+            // como botón izquierdo soltado.
+            if (evento is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+                return;
+
+            if (!field.Editable)
+                return;
+
+            DisplayServer.VirtualKeyboardShow(
+                field.Text,
+                field.GetGlobalRect(),
+                (DisplayServer.VirtualKeyboardType)(int)field.VirtualKeyboardType,
+                field.MaxLength,
+                field.CaretColumn,
+                field.CaretColumn);
+        };
+    }
+
+    public override void _Process(double delta)
+    {
+        float offset = 0f;
+        int keyboardHeight = DisplayServer.VirtualKeyboardGetHeight();
+
+        if (IsVisibleInTree() && keyboardHeight > 0 &&
+            GetViewport().GuiGetFocusOwner() is LineEdit field && IsAncestorOf(field))
+        {
+            // Android informa píxeles físicos; el formulario usa el lienzo lógico.
+            // Se descuenta el desplazamiento previo para no acumularlo cada frame.
+            float scale = GetScreenTransform().Y.Length();
+            if (scale > 0f)
+            {
+                float fieldBottom = (field.GetScreenTransform() * field.Size).Y - _keyboardOffset * scale;
+                float visibleBottom = DisplayServer.WindowGetSize().Y - keyboardHeight - 16f * scale;
+                offset = Mathf.Min(0f, (visibleBottom - fieldBottom) / scale);
+            }
+        }
+
+        if (!Mathf.IsEqualApprox(_keyboardOffset, offset))
+        {
+            var movement = new Vector2(0f, offset - _keyboardOffset);
+            _formulario.Position += movement;
+            _mensaje.Position += movement;
+            _keyboardOffset = offset;
+            QueueRedraw();
+        }
     }
 
     /// <summary>

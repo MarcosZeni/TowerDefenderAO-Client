@@ -103,6 +103,9 @@ public partial class Hud : Control
 
         Pie();
 
+        if (Device.IsTouch)
+            BotonesTactiles(p);
+
         // Antes del fantasma: mientras se arrastra una ficha el cursor lleva un
         // muñeco pegado, y un cartel debajo de él no se lee.
         //
@@ -867,13 +870,41 @@ public partial class Hud : Control
 
         this.Label(aviso, "i", 13, Palette.BackgroundMain, HorizontalAlignment.Center);
 
+        // En el celular el consejo habla de tocar y arrastrar: el de la PC nombra
+        // teclas y el botón derecho, que ahí no existen.
         this.Label(UiLayout.RunFooterTip,
-            $"{Loc.Get("ui.hud.consejo")}  {Loc.Get("ui.hud.ayuda")}", 14, Palette.TextMuted);
+            $"{Loc.Get("ui.hud.consejo")}  {Loc.Get(Device.IsTouch ? "ui.hud.ayuda_tactil" : "ui.hud.ayuda")}",
+            14, Palette.TextMuted);
 
         this.RarityLegend(UiLayout.RunFooterLegend);
 
         UiTooltip.Help(UiLayout.RunFooterLegend, "ui.ayuda.rarezas");
         UiTooltip.Help(UiLayout.RunFooterTip, "ui.ayuda.atajos");
+    }
+
+    /// <summary>
+    /// Los botones del dedo, debajo del roster: mochila, velocidad y adelantar.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Solo en el celular. Las tres cosas se hacían únicamente con teclado —Tab,
+    /// 1-2-3 y Enter—, y sin ellas la mochila, que es donde se equipan perks y
+    /// armas, quedaba inalcanzable. En la PC no se dibujan: el teclado ya las
+    /// tiene y el hueco debajo del roster queda como estaba.
+    /// </remarks>
+    private void BotonesTactiles(Run p)
+    {
+        bool enCurso = p.State == RunState.InProgress;
+
+        this.Button(UiLayout.TouchButton(0), Loc.Get("ui.hud.mochila"), Palette.BorderLight,
+            relleno: _juego.Backpack is { IsOpen: true }, encima: _botonEncima == 3);
+
+        this.Button(UiLayout.TouchButton(1), $"x{_juego.Velocidad}",
+            _juego.Velocidad > 1 ? Palette.Warning : Palette.BorderLight,
+            relleno: _juego.Velocidad > 1, encima: _botonEncima == 4);
+
+        this.Button(UiLayout.TouchButton(2), Loc.Get("ui.hud.adelantar"),
+            enCurso && _juego.CanCallNextWave ? Palette.Info : Palette.TextDisabled,
+            relleno: false, encima: _botonEncima == 5);
     }
 
     /// <summary>El cartel de ganaste o perdiste, en el centro.</summary>
@@ -918,6 +949,9 @@ public partial class Hud : Control
         => UiLayout.SettingsButton.HasPoint(posicion) ? 0
          : UiLayout.MenuButton.HasPoint(posicion) ? 1
          : UiLayout.PauseButton.HasPoint(posicion) ? 2
+         : Device.IsTouch && UiLayout.TouchButton(0).HasPoint(posicion) ? 3
+         : Device.IsTouch && UiLayout.TouchButton(1).HasPoint(posicion) ? 4
+         : Device.IsTouch && UiLayout.TouchButton(2).HasPoint(posicion) ? 5
          : -1;
 
     /// <summary>
@@ -1009,6 +1043,20 @@ public partial class Hud : Control
 
             case 2:
                 _juego.Pausado = !_juego.Pausado;
+                break;
+
+            // Los del dedo no andan con la corrida terminada, al revés de los
+            // tres de arriba: ninguno es una salida de la pantalla.
+            case 3 when _juego.Run is { State: RunState.InProgress }:
+                _juego.ToggleBackpack();
+                break;
+
+            case 4 when _juego.Run is { State: RunState.InProgress }:
+                _juego.CycleSpeed();
+                break;
+
+            case 5 when _juego.Run is { State: RunState.InProgress }:
+                _juego.CallNextWave();
                 break;
         }
     }

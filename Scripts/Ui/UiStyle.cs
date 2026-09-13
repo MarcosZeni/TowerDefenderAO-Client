@@ -672,7 +672,7 @@ public static class UiStyle
     public static void Price(
         this CanvasItem ci, Rect2 r, int oro, bool alcanza = true, HorizontalAlignment alineacion = HorizontalAlignment.Left)
     {
-        int tamano = (int)Mathf.Min(20f, r.Size.Y * 0.66f);
+        int tamano = (int)Mathf.Min(20f * TouchScale, r.Size.Y * 0.66f);
         float radio = tamano * 0.42f;
         string s = Thousands(oro);
 
@@ -690,6 +690,45 @@ public static class UiStyle
         ci.Label(new Rect2(x + (radio * 2f) + 8f, r.Position.Y, ancho, r.Size.Y), s, tamano,
             alcanza ? Palette.Gold : Palette.Danger);
     }
+
+    /// <summary>
+    /// El lado del botón de cerrar: más grande en el celular, que se aprieta con el dedo.
+    /// </summary>
+    public static float CloseSide => Device.IsTouch ? 64f : 44f;
+
+    /// <summary>
+    /// El botón de cerrar de una ventana: una cruz en un cuadrado.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Toda ventana que se puede cerrar lleva uno, arriba a la
+    /// derecha.</b> Varias se cerraban solo con ESC, y en el celular —donde no hay
+    /// ESC y Atrás no se adivina— la mochila quedaba abierta sin ninguna salida a
+    /// la vista. La única que no lo lleva es el drop del jefe, que no se cierra
+    /// por diseño.</para>
+    ///
+    /// <para>La cruz es «×» y no «✕»: IBM Plex Mono no trae la segunda, y un glifo
+    /// que la fuente no tiene sale como un rectángulo vacío.</para>
+    /// </remarks>
+    public static void CloseButton(this CanvasItem ci, Rect2 r, bool encima = false)
+    {
+        ci.Button(r, "", Palette.BorderLight, relleno: false, encima: encima);
+        ci.Label(r, "×", (int)(r.Size.Y * 0.72f), Palette.TextPrimary, HorizontalAlignment.Center);
+    }
+
+    /// <summary>Dónde va el botón de cerrar de un panel: su esquina de arriba a la derecha.</summary>
+    public static Rect2 CloseRectFor(Rect2 panel, float margen = 10f)
+        => new(panel.End.X - CloseSide - margen, panel.Position.Y + margen, CloseSide, CloseSide);
+
+    /// <summary>
+    /// Cuánto se agrandan los topes de letra de los renglones con número en el celular.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Solo sube el TOPE: el tamaño real sigue saliendo del alto del renglón, así
+    /// que en una pantalla que no agrandó sus renglones nada se desborda. En el
+    /// celular el lienzo de 1920×1080 entra en siete centímetros de alto, y los
+    /// números de 15-16 px de precios y stats no se leían.
+    /// </remarks>
+    public static float TouchScale => Device.IsTouch ? 1.3f : 1f;
 
     /// <summary>
     /// Un entero con separador de miles, el del idioma.
@@ -839,12 +878,12 @@ public static class UiStyle
         this CanvasItem ci, Rect2 r, Icono cual, string valor, Color? colorValor = null,
         string cartel = "")
     {
-        float lado = Mathf.Min(r.Size.Y, 18f);
+        float lado = Mathf.Min(r.Size.Y, 18f * TouchScale);
         var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
 
         ci.Icon(caja, cual, Palette.TextMuted);
 
-        int tamano = (int)Mathf.Min(16f, r.Size.Y * 0.78f);
+        int tamano = (int)Mathf.Min(16f * TouchScale, r.Size.Y * 0.78f);
 
         ci.Label(
             new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),

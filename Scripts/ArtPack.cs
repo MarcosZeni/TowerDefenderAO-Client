@@ -102,7 +102,14 @@ public static class ArtPack
         }
 
         // 2. Al lado del ejecutable.
-        if (Montar(OS.GetExecutablePath().GetBaseDir().PathJoin(PackName), "al lado del ejecutable"))
+        //    ⚠ Solo si la carpeta es una ruta absoluta. En Android no hay ejecutable
+        //    y la carpeta sale vacía: la ruta queda en "arte.pck" a secas, que
+        //    FileExists resuelve contra res:// y da true, pero LoadResourcePack no
+        //    sabe abrirla adentro del paquete disperso del APK y llena el log de
+        //    errores antes de que el paso 3 lo monte bien.
+        string junto = OS.GetExecutablePath().GetBaseDir();
+
+        if (junto.IsAbsolutePath() && Montar(junto.PathJoin(PackName), "al lado del ejecutable"))
             return;
 
         // 3. Adentro del paquete principal.

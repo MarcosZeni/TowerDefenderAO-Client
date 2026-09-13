@@ -242,6 +242,23 @@ public partial class MarketScreen : Control
     /// </remarks>
     private const int RanurasMinimas = 4;
 
+    /// <summary>
+    /// Si la pantalla se dibuja en tamaño celular: letra y renglones más grandes.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ En el celular el lienzo de 1920×1080 entra en una pantalla de siete
+    /// centímetros de alto, y los textos de 12-15 px de las tarjetas no se leían.
+    /// Las tarjetas miden lo mismo; lo que cambia es cómo se reparte su alto:
+    /// menos aire entre renglones y letra un 30 % más grande.
+    /// </remarks>
+    private static bool Grande => Device.IsTouch;
+
+    /// <summary>Un tamaño de letra, agrandado en el celular.</summary>
+    private static int T(int tamano) => Grande ? Mathf.RoundToInt(tamano * 1.3f) : tamano;
+
+    /// <summary>Una medida de la tarjeta: la de la PC o la del celular.</summary>
+    private static float M(float pc, float celular) => Grande ? celular : pc;
+
     private static Rect2 Columna(int i)
     {
         float ancho = (Canvas.CanvasWidth - (MargenX * 2f) - (Hueco * 2f)) / 3f;
@@ -327,6 +344,12 @@ public partial class MarketScreen : Control
                 }
 
                 var (c, f) = TarjetaEn(posicion);
+
+                // ⚠ La tarjeta tocada pasa a ser la de «bajo el cursor». En el
+                // celular un toque no manda movimiento antes, así que el campo
+                // quedaba viejo, y el temblor del dedo en el segundo toque lo
+                // actualizaba y desarmaba la tarjeta en vez de comprarla.
+                _bajoElCursor = (c, f);
 
                 if (c >= 0)
                     Apretar(_columnas[c][f]);
@@ -457,12 +480,14 @@ public partial class MarketScreen : Control
 
     private void Cabecera(Run p)
     {
-        var titulo = new Rect2(0, 44f, Canvas.CanvasWidth, 48f);
+        var titulo = new Rect2(0, 44f, Canvas.CanvasWidth, M(48f, 56f));
 
-        this.Label(titulo, Loc.Get("ui.mercado.titulo"), 40, Palette.TextPrimary,
+        this.Label(titulo, Loc.Get("ui.mercado.titulo"), T(40), Palette.TextPrimary,
             HorizontalAlignment.Center);
 
-        this.Label(titulo.Row(50f, 26f), Loc.Get("ui.mercado.esc_para_cerrar"), 18,
+        // En el celular no hay Esc: se cierra con Atrás o con el botón.
+        this.Label(titulo.Row(M(50f, 58f), M(26f, 30f)),
+            Loc.Get(Grande ? "ui.mercado.atras_para_cerrar" : "ui.mercado.esc_para_cerrar"), T(18),
             Palette.TextMuted, HorizontalAlignment.Center);
 
         // El oro va arriba a la izquierda, del tamaño del título: es el número
@@ -536,11 +561,13 @@ public partial class MarketScreen : Control
 
         this.Panel(pie, opacidad: 1f);
 
-        this.Label(pie.Inset(14f), Loc.Get("ui.tienda.no_se_repone"), 14, Palette.TextMuted);
+        // El pie crece menos que las tarjetas: son tres textos en el mismo renglón
+        // y a 1,3 se pisaban entre ellos.
+        this.Label(pie.Inset(14f), Loc.Get("ui.tienda.no_se_repone"), (int)M(14f, 16f), Palette.TextMuted);
 
         this.Label(pie.Inset(14f),
             $"{Loc.Get("ui.tienda.proximas_ofertas")} {p.Shop.StockWave + 3}",
-            14, Palette.TextMuted, HorizontalAlignment.Right);
+            (int)M(14f, 16f), Palette.TextMuted, HorizontalAlignment.Right);
 
         // ⚠ «No se repone» es la regla que más plata cuesta ignorar: lo que no se
         // compró hoy no vuelve, y lo que se compró no deja un hueco que se
@@ -571,7 +598,7 @@ public partial class MarketScreen : Control
         {
             this.Label(pie.Inset(14f),
                 Loc.Get("ui.tienda.elegi_gratis", p.Shop.FreeLeft),
-                15, Palette.Warning, HorizontalAlignment.Center);
+                (int)M(15f, 17f), Palette.Warning, HorizontalAlignment.Center);
 
             // Pisa la ayuda del stock a propósito: en la primera tienda, lo que
             // hay que entender no es que el stock no se repone, es que estas dos
@@ -596,7 +623,7 @@ public partial class MarketScreen : Control
 
         this.Label(pie.Inset(14f),
             $"{nombres} — {Loc.Get("ui.tienda.sello_abierto")}",
-            15, Palette.Success, HorizontalAlignment.Center);
+            (int)M(15f, 17f), Palette.Success, HorizontalAlignment.Center);
 
         UiTooltip.Help(pie, "ui.ayuda.sello_abierto");
     }
@@ -634,7 +661,7 @@ public partial class MarketScreen : Control
 
             this.Label(r,
                 Loc.Get(yaLaTiene ? "ui.mercado.ya_reclutada" : "ui.tienda.vendido").ToUpperInvariant(),
-                18, Palette.TextDisabled, HorizontalAlignment.Center);
+                T(18), Palette.TextDisabled, HorizontalAlignment.Center);
 
             // ⚠ Una carta apagada es una pregunta —«¿se repone? ¿vuelve?»— y la
             // respuesta es la regla del stock. La ranura queda vacía hasta la
@@ -660,11 +687,11 @@ public partial class MarketScreen : Control
 
             this.Portrait(ic, p.Roster.Find((DefenderClass)oferta.Id)!);
 
-            this.Label(nom, Loc.Class((DefenderClass)oferta.Id).ToUpperInvariant(), 22,
+            this.Label(nom, Loc.Class((DefenderClass)oferta.Id).ToUpperInvariant(), T(22),
                 Palette.TextDisabled);
 
-            this.Label(new Rect2(nom.Position.X, r.End.Y - 44f, nom.Size.X, 22f),
-                Loc.Get("ui.tienda.nivel_maximo").ToUpperInvariant(), 15, Palette.TextDisabled);
+            this.Label(new Rect2(nom.Position.X, r.End.Y - M(44f, 50f), nom.Size.X, M(22f, 28f)),
+                Loc.Get("ui.tienda.nivel_maximo").ToUpperInvariant(), T(15), Palette.TextDisabled);
 
             UiTooltip.Over(r, Loc.Get("ui.tienda.nivel_maximo"), "ui.ayuda.nivel_maximo");
 
@@ -678,7 +705,7 @@ public partial class MarketScreen : Control
 
         var (icono, titulo, nombre, cuerpo) = Partes(r);
 
-        this.Label(titulo, EtiquetaDe(oferta).ToUpperInvariant(), 13, acento);
+        this.Label(titulo, EtiquetaDe(oferta).ToUpperInvariant(), T(13), acento);
 
         // ⚠ Cada tipo de oferta explica SU regla, no «esto es una tienda». Las
         // cinco cosas que se venden se compran por motivos distintos: un nivel
@@ -716,16 +743,19 @@ public partial class MarketScreen : Control
         // ⚠ Lo gratis se dice con la palabra, no con un «0». Un cero al lado de
         // una moneda se lee como «sin precio cargado», que es exactamente lo que
         // pasaba en la tienda de planos del menú principal.
+        // ⚠ El precio se aleja del borde derecho: pegado al borde caía encima del
+        // remache de la esquina del marco, que tapaba el último dígito.
+        var precio = new Rect2(nombre.Position.X, r.End.Y - M(30f, 40f),
+            nombre.Size.X - M(22f, 30f), M(24f, 34f));
+
         if (oferta.Free)
         {
-            this.Label(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
-                Loc.Get("ui.tienda.gratis").ToUpperInvariant(), 18, Palette.Success,
+            this.Label(precio, Loc.Get("ui.tienda.gratis").ToUpperInvariant(), T(18), Palette.Success,
                 HorizontalAlignment.Right);
         }
         else
         {
-            this.Price(new Rect2(nombre.Position.X, r.End.Y - 30f, nombre.Size.X, 24f),
-                oferta.Price, alcanza, HorizontalAlignment.Right);
+            this.Price(precio, oferta.Price, alcanza, HorizontalAlignment.Right);
         }
 
         DibujarArmado(r, ficha);
@@ -750,11 +780,11 @@ public partial class MarketScreen : Control
 
         DrawRect(r, Palette.Warning, filled: false, width: 2.5f);
 
-        var banda = new Rect2(r.Position.X + 2f, r.End.Y - 32f, r.Size.X - 4f, 30f);
+        var banda = new Rect2(r.Position.X + 2f, r.End.Y - M(32f, 42f), r.Size.X - 4f, M(30f, 40f));
 
         DrawRect(banda, Palette.Warning.Alpha(0.92f));
 
-        this.Label(banda, Loc.Get("ui.mercado.confirmar").ToUpperInvariant(), 14,
+        this.Label(banda, Loc.Get("ui.mercado.confirmar").ToUpperInvariant(), T(14),
             Palette.BackgroundMain, HorizontalAlignment.Center);
     }
 
@@ -769,9 +799,9 @@ public partial class MarketScreen : Control
 
         return (
             icono,
-            new Rect2(x, r.Position.Y + 8f, ancho, 18f),
-            new Rect2(x, r.Position.Y + 26f, ancho, 28f),
-            new Rect2(x, r.Position.Y + 58f, ancho, r.Size.Y - 92f));
+            new Rect2(x, r.Position.Y + M(8f, 4f), ancho, M(18f, 22f)),
+            new Rect2(x, r.Position.Y + M(26f, 24f), ancho, M(28f, 34f)),
+            new Rect2(x, r.Position.Y + M(58f, 60f), ancho, r.Size.Y - M(92f, 100f)));
     }
 
     // ⚠ ACÁ VIVÍAN `DibujarEleccion` y `DibujarQueAbre`, las tarjetas de la
@@ -800,13 +830,13 @@ public partial class MarketScreen : Control
         // sin cobrar. Se dibuja lo que se pueda en vez de explotar.
         if (ficha is null)
         {
-            this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 24, Palette.TextDisabled);
+            this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), T(24), Palette.TextDisabled);
             return;
         }
 
         this.Portrait(icono, ficha);
 
-        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 24, Palette.TextPrimary);
+        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), T(24), Palette.TextPrimary);
 
         int destino = ficha.Level + 1;
         int tope = datos.Classes.PerkSlotsPerClass;
@@ -814,15 +844,15 @@ public partial class MarketScreen : Control
         int slotsAntes = ficha.OpenSlots;
         int slotsDespues = System.Math.Min(destino, tope);
 
-        this.Label(cuerpo.Row(0f, 20f),
-            $"{Loc.Get("ui.eleccion.level")} {ficha.Level} → {destino}", 16, Palette.Warning);
+        this.Label(cuerpo.Row(0f, M(20f, 24f)),
+            $"{Loc.Get("ui.eleccion.level")} {ficha.Level} → {destino}", T(16), Palette.Warning);
 
-        this.Label(cuerpo.Row(22f, 20f),
+        this.Label(cuerpo.Row(M(22f, 26f), M(20f, 24f)),
             slotsDespues > slotsAntes
                 ? $"{Loc.Get("ui.eleccion.abre_slot")} {slotsDespues} " +
                   $"{Loc.Get("ui.eleccion.de")} {tope}"
                 : Loc.Get("ui.eleccion.slots_completos"),
-            14, slotsDespues > slotsAntes ? Palette.Legendary : Palette.TextMuted);
+            T(14), slotsDespues > slotsAntes ? Palette.Legendary : Palette.TextMuted);
 
         // ⚠ Cuántas fichas de esta clase están puestas, porque el nivel las sube a
         // TODAS. Un nivel con seis magos en el tablero y uno con un mago solo son
@@ -836,8 +866,8 @@ public partial class MarketScreen : Control
                 puestos++;
         }
 
-        this.Label(cuerpo.Row(44f, 20f),
-            $"{puestos} {Loc.Get("ui.tienda.en_el_tablero")}", 13,
+        this.Label(cuerpo.Row(M(44f, 52f), M(20f, 24f)),
+            $"{puestos} {Loc.Get("ui.tienda.en_el_tablero")}", T(13),
             puestos > 0 ? Palette.TextSecondary : Palette.TextMuted);
     }
 
@@ -907,15 +937,15 @@ public partial class MarketScreen : Control
 
         this.Portrait(icono, ficha);
 
-        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), 24, Palette.TextPrimary);
+        this.Label(nombre, Loc.Class(clase).ToUpperInvariant(), T(24), Palette.TextPrimary);
 
-        this.Label(cuerpo.Row(0f, 18f), Loc.Role(clase), 13, Palette.TextMuted);
+        this.Label(cuerpo.Row(0f, M(18f, 24f)), Loc.Role(clase), T(13), Palette.TextMuted);
 
         // ⚠ Los tres números en UN renglón, con icono. Antes eran tres filas de
         // «palabra … número» más una cuarta para el costo de colocación: cuatro
         // renglones para cuatro cifras de un dígito, y el texto se salía del
         // recuadro. Ver UiStyle.StatTrio.
-        this.StatTrio(cuerpo.Row(20f, 20f),
+        this.StatTrio(cuerpo.Row(M(20f, 26f), M(20f, 24f)),
             s.Damage.ToString(), s.RangeCells.ToString(), s.CadenceTicks.ToString());
 
         if (!conCosto)
@@ -924,10 +954,10 @@ public partial class MarketScreen : Control
         // ⚠ El costo de COLOCACIÓN, que es otro gasto y se paga muchas veces.
         // Sin esta línea, reclutar un mago por 656 parece caro hasta que uno
         // descubre que además cada ficha cuesta 100.
-        var fila = cuerpo.Row(42f, 20f);
-        float ancho = UiStyle.Width(Loc.Get("ui.tienda.costo_colocacion"), 12) + 10f;
+        var fila = cuerpo.Row(M(42f, 52f), M(20f, 28f));
+        float ancho = UiStyle.Width(Loc.Get("ui.tienda.costo_colocacion"), T(12)) + 10f;
 
-        this.Label(fila, Loc.Get("ui.tienda.costo_colocacion"), 12, Palette.TextMuted);
+        this.Label(fila, Loc.Get("ui.tienda.costo_colocacion"), T(12), Palette.TextMuted);
 
         this.Price(new Rect2(fila.Position.X + ancho, fila.Position.Y,
                 fila.Size.X - ancho, fila.Size.Y),
@@ -953,9 +983,9 @@ public partial class MarketScreen : Control
                 (int)(icono.Size.X * 0.5f), acento, HorizontalAlignment.Center);
         }
 
-        this.Label(nombre, Loc.Perk(def).ToUpperInvariant(), 24, Palette.TextPrimary);
+        this.Label(nombre, Loc.Perk(def).ToUpperInvariant(), T(24), Palette.TextPrimary);
 
-        this.EffectRow(cuerpo.Row(0f, 20f), def, acento);
+        this.EffectRow(cuerpo.Row(0f, M(20f, 24f)), def, acento);
 
         // ⚠ Sin el rótulo «le sirve a»: la lista de clases en gris ya se lee como
         // lo que es, y ese renglón le comía la mitad del lugar a lo único que no
@@ -974,9 +1004,13 @@ public partial class MarketScreen : Control
             sirve.Append(Loc.Class(c));
         }
 
-        this.Paragraph(cuerpo.Row(22f, cuerpo.Size.Y - 22f),
+        // En el celular el renglón deja libre la esquina del precio: con letra
+        // grande una lista larga de clases llegaba hasta él.
+        this.Paragraph(
+            new Rect2(cuerpo.Position.X, cuerpo.Position.Y + M(22f, 26f),
+                cuerpo.Size.X - M(0f, 120f), cuerpo.Size.Y - M(22f, 26f)),
             sirve.Length == 0 ? Loc.Get("ui.tienda.cualquier_clase") : sirve.ToString(),
-            13, Palette.TextMuted);
+            T(13), Palette.TextMuted);
     }
 
     /// <summary>
@@ -1010,12 +1044,12 @@ public partial class MarketScreen : Control
                 (int)(icono.Size.X * 0.5f), Palette.Unique, HorizontalAlignment.Center);
         }
 
-        this.Label(nombre, Loc.Perk(unico).ToUpperInvariant(), 22, Palette.TextPrimary);
+        this.Label(nombre, Loc.Perk(unico).ToUpperInvariant(), T(22), Palette.TextPrimary);
 
-        Marca(cuerpo.Row(0f, 19f), Tiene(p, plano.GoldA), Loc.Perk(datos.Perks.Get(plano.GoldA)));
-        Marca(cuerpo.Row(20f, 19f), Tiene(p, plano.GoldB), Loc.Perk(datos.Perks.Get(plano.GoldB)));
+        Marca(cuerpo.Row(0f, M(19f, 24f)), Tiene(p, plano.GoldA), Loc.Perk(datos.Perks.Get(plano.GoldA)));
+        Marca(cuerpo.Row(M(20f, 26f), M(19f, 24f)), Tiene(p, plano.GoldB), Loc.Perk(datos.Perks.Get(plano.GoldB)));
 
-        this.Label(cuerpo.Row(44f, 18f), Loc.Get("ui.tienda.solo_esta_corrida"), 12, acento);
+        this.Label(cuerpo.Row(M(44f, 52f), M(18f, 24f)), Loc.Get("ui.tienda.solo_esta_corrida"), T(12), acento);
     }
 
     private void Marca(Rect2 r, bool tiene, string nombre)
@@ -1025,10 +1059,10 @@ public partial class MarketScreen : Control
         // ⚠ La cruz es «×» y no «✗»: IBM Plex Mono no trae la segunda, y un
         // glifo que la fuente no tiene se dibuja como un rectángulo vacío — que
         // en una receta se lee como «no sé», no como «falta».
-        this.Label(r, tiene ? "✓" : "×", 14, color);
+        this.Label(r, tiene ? "✓" : "×", T(14), color);
 
-        this.Label(new Rect2(r.Position.X + 18f, r.Position.Y, r.Size.X - 18f, r.Size.Y),
-            nombre, 13, tiene ? Palette.TextSecondary : Palette.TextMuted);
+        this.Label(new Rect2(r.Position.X + M(18f, 24f), r.Position.Y, r.Size.X - M(18f, 24f), r.Size.Y),
+            nombre, T(13), tiene ? Palette.TextSecondary : Palette.TextMuted);
     }
 
     private static bool Tiene(Run p, int idPerk)
@@ -1066,18 +1100,20 @@ public partial class MarketScreen : Control
         this.Slot(icono, color);
         this.Icon(icono.Inset(icono.Size.X * 0.22f), UiStyle.Icono.Weapon, color);
 
-        this.Label(nombre, Loc.Weapon(arma).ToUpperInvariant(), 21, Palette.TextPrimary);
+        this.Label(nombre, Loc.Weapon(arma).ToUpperInvariant(), T(21), Palette.TextPrimary);
 
-        this.StatTrio(cuerpo.Row(0f, 20f),
+        this.StatTrio(cuerpo.Row(0f, M(20f, 24f)),
             $"+{arma.Damage}%", $"+{arma.Range}%", $"+{arma.Cadence}%");
 
         // La habilidad se queda con el resto del cuerpo entero: es la línea que
         // decide si el arma vale, y la que más se cortaba cuando arriba había
         // tres renglones de stats.
-        this.Paragraph(cuerpo.Row(24f, cuerpo.Size.Y - 24f),
+        this.Paragraph(
+            new Rect2(cuerpo.Position.X, cuerpo.Position.Y + M(24f, 26f),
+                cuerpo.Size.X - M(0f, 120f), cuerpo.Size.Y - M(24f, 26f)),
             arma.Ability == WeaponAbility.None
                 ? Loc.Get("ui.tienda.sin_habilidad")
                 : Loc.AbilityText(arma.Ability, arma.Magnitude),
-            13, arma.Ability == WeaponAbility.None ? Palette.TextDisabled : Palette.Epic);
+            T(13), arma.Ability == WeaponAbility.None ? Palette.TextDisabled : Palette.Epic);
     }
 }

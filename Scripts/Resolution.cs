@@ -31,6 +31,11 @@ namespace TowerOfArgentum;
 /// ventana —y además pelea con el alt-tab y con el segundo monitor—; la sin
 /// bordes cubre la pantalla igual y cambia de modo sin sorpresas.</para>
 ///
+/// <para>⚠ <b>Y por eso el modo «sin bordes» es otra cosa:</b> una ventana sin
+/// barra de título, del tamaño elegido en la fila de resoluciones y centrada.
+/// Del tamaño del monitor tapa también la barra de tareas; más chica, queda
+/// como un recuadro limpio arriba del escritorio.</para>
+///
 /// <para>El estado (modo y tamaño de ventana) vive acá y no se lee de
 /// <c>DisplayServer</c>: como la aplicación es diferida, leerlo del sistema
 /// justo después de apretar devuelve el valor viejo y la pantalla de opciones
@@ -58,8 +63,24 @@ public static class Resolution
     /// </summary>
     private static readonly Vector2I DefaultWindow = new(1600, 900);
 
+    /// <summary>Los tres modos de la ventana.</summary>
+    public enum WindowStyle
+    {
+        /// <summary>Pantalla completa, la sin bordes de Godot que cubre el monitor.</summary>
+        Fullscreen,
+
+        /// <summary>Ventana común, con barra de título.</summary>
+        Windowed,
+
+        /// <summary>Ventana sin barra de título, del tamaño elegido y centrada.</summary>
+        Borderless,
+    }
+
+    /// <summary>El modo en que está (o va a estar, apenas se aplique) la ventana.</summary>
+    public static WindowStyle Style { get; private set; } = WindowStyle.Fullscreen;
+
     /// <summary>Si está (o va a estar, apenas se aplique) en pantalla completa.</summary>
-    public static bool IsFullscreen { get; private set; } = true;
+    public static bool IsFullscreen => Style == WindowStyle.Fullscreen;
 
     /// <summary>
     /// El tamaño de ventana elegido. Se conserva también en pantalla completa,
@@ -72,11 +93,18 @@ public static class Resolution
     {
         var config = new ConfigFile();
 
-        bool completa = true;
-
         if (config.Load(Route) == Error.Ok)
         {
-            completa = (bool)config.GetValue("video", "completa", true);
+            // ⚠ «modo» entró con la ventana sin bordes. Un video.cfg anterior solo
+            // tiene «completa», y se sigue leyendo: sin eso, el que jugaba en
+            // ventana arrancaría en pantalla completa después de actualizar.
+            bool completa = (bool)config.GetValue("video", "completa", true);
+
+            int modo = (int)config.GetValue("video", "modo",
+                (int)(completa ? WindowStyle.Fullscreen : WindowStyle.Windowed));
+
+            if (System.Enum.IsDefined(typeof(WindowStyle), modo))
+                Style = (WindowStyle)modo;
 
             int ancho = (int)config.GetValue("video", "ancho", DefaultWindow.X);
             int alto = (int)config.GetValue("video", "alto", DefaultWindow.Y);
@@ -85,22 +113,30 @@ public static class Resolution
                 WindowSize = new Vector2I(ancho, alto);
         }
 
-        if (completa)
-            Complete();
-        else
-            InWindow(WindowSize);
-    }
-
-    public static void Complete()
-    {
-        IsFullscreen = true;
         Store();
         Apply();
     }
 
-    public static void InWindow(Vector2I tamano)
+    public static void Complete() => Set(WindowStyle.Fullscreen, WindowSize);
+
+    public static void InWindow(Vector2I tamano) => Set(WindowStyle.Windowed, tamano);
+
+    public static void Borderless(Vector2I tamano) => Set(WindowStyle.Borderless, tamano);
+
+    /// <summary>
+    /// Cambia el tamaño desde la fila de resoluciones.
+    /// </summary>
+    /// <remarks>
+    /// Sin bordes sigue sin bordes. Desde pantalla completa pasa a ventana, que es
+    /// lo que hacía antes: ahí el tamaño es el del monitor, y elegir otro solo
+    /// tiene sentido en una ventana.
+    /// </remarks>
+    public static void Resize(Vector2I tamano)
+        => Set(Style == WindowStyle.Borderless ? WindowStyle.Borderless : WindowStyle.Windowed, tamano);
+
+    private static void Set(WindowStyle estilo, Vector2I tamano)
     {
-        IsFullscreen = false;
+        Style = estilo;
         WindowSize = tamano;
         Store();
         Apply();
@@ -117,6 +153,12 @@ public static class Resolution
     /// </remarks>
     private static async void Apply()
     {
+        // En el celular la ventana es la pantalla entera y el sistema no deja
+        // cambiarle modo, tamaño ni posición. Opciones ni muestra esas filas ahí,
+        // pero un video.cfg de otra plataforma se aplica igual al arrancar.
+        if (OS.HasFeature("mobile"))
+            return;
+
         if (Engine.GetMainLoop() is not SceneTree arbol)
             return;
 
@@ -141,9 +183,10 @@ public static class Resolution
                 return;
         }
 
-        // Por si el modo anterior dejó la bandera puesta: sin bordes en ventana
-        // no se puede mover ni cerrar desde la barra.
-        ventana.Borderless = false;
+        // La bandera sale del modo: sin bordes la pide, y en ventana hay que
+        // sacarla por si el modo anterior la dejó puesta —una ventana común sin
+        // bordes no se puede mover ni cerrar desde la barra—.
+        ventana.Borderless = Style == WindowStyle.Borderless;
 
         var tamano = WindowSize;
 
@@ -159,7 +202,15 @@ public static class Resolution
         // Centrar en el área útil —la pantalla sin la barra de tareas— y nunca
         // con la esquina afuera: sin esto la ventana queda donde estaba, y al
         // achicar puede terminar mitad fuera de la pantalla.
-        var util = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
+        //
+        // Sin bordes se centra contra la pantalla ENTERA y no contra el área útil:
+        // del tamaño del monitor tiene que tapar la barra de tareas, que es para lo
+        // que se elige ese modo.
+        int pantalla = DisplayServer.WindowGetCurrentScreen();
+
+        var util = Style == WindowStyle.Borderless
+            ? new Rect2I(DisplayServer.ScreenGetPosition(pantalla), DisplayServer.ScreenGetSize(pantalla))
+            : DisplayServer.ScreenGetUsableRect(pantalla);
         var posicion = util.Position + ((util.Size - tamano) / 2);
 
         posicion.X = Mathf.Max(posicion.X, util.Position.X);
@@ -173,6 +224,7 @@ public static class Resolution
         var config = new ConfigFile();
 
         config.SetValue("video", "completa", IsFullscreen);
+        config.SetValue("video", "modo", (int)Style);
         config.SetValue("video", "ancho", WindowSize.X);
         config.SetValue("video", "alto", WindowSize.Y);
 

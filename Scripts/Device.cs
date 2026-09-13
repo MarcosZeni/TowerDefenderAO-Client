@@ -50,4 +50,15 @@ public static class Device
     /// argumento, cualquiera puede.
     /// </remarks>
     public static bool SimulateMobile { get; set; }
+
+    /// <summary>
+    /// Si se juega con el dedo: Android, iOS, o la PC con <c>--celular</c>.
+    /// </summary>
+    /// <remarks>
+    /// Lo miran las pantallas que tienen algo que solo se hace con teclado —la
+    /// mochila con Tab, la velocidad con 1-2-3, adelantar con Enter— para dibujar
+    /// el botón que lo reemplaza. Incluye <see cref="SimulateMobile"/> a propósito:
+    /// así esos botones se prueban desde la PC sin exportar un APK.
+    /// </remarks>
+    public static bool IsTouch => SimulateMobile || OS.HasFeature("mobile");
 }

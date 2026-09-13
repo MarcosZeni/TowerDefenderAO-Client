@@ -336,6 +336,7 @@
     "ui.opciones.modo": "Mode",
     "ui.opciones.completa": "Fullscreen",
     "ui.opciones.enventana": "Windowed",
+    "ui.opciones.sinbordes": "Borderless",
     "ui.opciones.resolucion": "Resolution",
     "ui.opciones.nitidez": "does not change the visible field, only the sharpness",
     "ui.opciones.sonido": "SOUND",
@@ -408,6 +409,7 @@
     "ui.mercado.cerrar": "close",
     "ui.mercado.confirmar": "click again to confirm",
     "ui.mercado.esc_para_cerrar": "Esc to go back to the board · the market stays open until you launch the wave",
+    "ui.mercado.atras_para_cerrar": "Back to return to the board · the market stays open until you launch the wave",
     "ui.mercado.ya_reclutada": "already yours",
     "ui.tienda.no_se_repone": "no restock: whatever you buy leaves an empty slot",
     "ui.tienda.vendido": "sold",
@@ -458,6 +460,8 @@
     "ui.hud.elegi_la_primera": "pick the first one",
     "ui.hud.perks": "perks",
     "ui.hud.mochila": "backpack",
+    "ui.hud.adelantar": "call wave",
+    "ui.hud.ayuda_tactil": "place: drag the card onto the map · move: drag the unit between waves · tap a unit for its panel · back: close or pause",
 
     // --- Labels for the designer's layout ------------------------------------
     "ui.hud.vida_de_torre": "Tower Health",
@@ -528,6 +532,7 @@
     "ui.mochila.destruir": "destroy",
     "ui.mochila.cancelar": "cancel",
     "ui.mochila.esc_cerrar": "esc to close",
+    "ui.mochila.atras_cerrar": "back to close",
 
     // --- The three tabs and the two dropdowns from the mockup -----------------
     "ui.mochila.tab_perks": "Perks",
@@ -574,7 +579,8 @@
     "ui.fin.ticks": "ticks",
     "ui.fin.desempate": "the leaderboard breaks ties by ticks: fewer is better",
     "ui.fin.de_oro_a_la_billetera": "gold to the wallet",
-    "ui.fin.esc_volver": "esc to go back to the menu",
+    "ui.fin.esc_volver": "esc or click to go back to the menu",
+    "ui.fin.tocar_volver": "tap the screen to go back to the menu",
 
     // --- HUD labels that were missing ---------------------------------------
     "ui.hud.pausar": "Pause",

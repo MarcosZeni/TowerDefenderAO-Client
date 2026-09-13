@@ -24,6 +24,21 @@ public partial class RunEndScreen : Control
     private string _estadoEnvio = "";
     private long _oroGanado = -1;
 
+    /// <summary>El jugador pidió volver al menú con un click o un toque. Lo escucha <c>Main</c>.</summary>
+    public event System.Action? Dismissed;
+
+    /// <summary>Cuándo apareció el cartel, en milisegundos del motor. 0 = todavía no.</summary>
+    private ulong _aparecioMs;
+
+    /// <summary>
+    /// Cuánto tiene que estar a la vista el cartel antes de que un toque lo cierre.
+    /// </summary>
+    /// <remarks>
+    /// Sin esto, el jugador que está tocando el tablero justo cuando cae la Torre
+    /// sale al menú sin llegar a ver el resultado de horas de corrida.
+    /// </remarks>
+    private const ulong MsAntesDeSalir = 1500;
+
     public RunEndScreen(Game juego)
     {
         _juego = juego;
@@ -49,10 +64,34 @@ public partial class RunEndScreen : Control
         if (!_reportado)
         {
             _reportado = true;
+            _aparecioMs = Time.GetTicksMsec();
             _ = ReportarAsync(partida!);
         }
 
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// Un click o un toque, soltado, vuelve al menú.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Antes la única salida era ESC, y en el celular no hay ESC: la corrida
+    /// terminaba y la pantalla quedaba trabada. Va en <c>_UnhandledInput</c> para
+    /// que los carteles de ayuda y los botones de arriba sigan atendiendo primero.
+    /// </remarks>
+    public override void _UnhandledInput(InputEvent evento)
+    {
+        if (!Visible || _aparecioMs == 0)
+            return;
+
+        if (evento is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+            return;
+
+        if (Time.GetTicksMsec() - _aparecioMs < MsAntesDeSalir)
+            return;
+
+        GetViewport().SetInputAsHandled();
+        Dismissed?.Invoke();
     }
 
     /// <summary>
@@ -130,6 +169,10 @@ public partial class RunEndScreen : Control
         DrawRect(panel, acento, filled: false, width: 3f);
         DrawRect(panel.Row(0f, 6f), acento);
 
+        // La cruz vuelve al menú. Tocar en cualquier lado ya lo hacía, pero eso no
+        // se ve: una ventana sin botón de cerrar se lee como trabada.
+        this.CloseButton(UiStyle.CloseRectFor(panel, 14f));
+
         this.Label(panel.Row(60f, 60f), Loc.Get(gano ? "ui.fin.ganaste" : "ui.fin.cayo_la_torre"),
             52, acento, HorizontalAlignment.Center);
 
@@ -185,7 +228,8 @@ public partial class RunEndScreen : Control
         this.Label(panel.Row(panel.Size.Y - 62f, 24f), _estadoEnvio, 16, Palette.TextMuted,
             HorizontalAlignment.Center);
 
-        this.Label(panel.Row(panel.Size.Y - 36f, 24f), Loc.Get("ui.fin.esc_volver"), 15,
+        this.Label(panel.Row(panel.Size.Y - 36f, 24f),
+            Loc.Get(Device.IsTouch ? "ui.fin.tocar_volver" : "ui.fin.esc_volver"), 15,
             Palette.TextDisabled, HorizontalAlignment.Center);
 
         // Último de todo, como en el resto de las pantallas: el cartel va encima.

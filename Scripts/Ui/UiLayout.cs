@@ -334,6 +334,29 @@ public static class UiLayout
         RunFooter.End.X - 820f, RunFooter.Position.Y, 800f, RunFooter.Size.Y);
 
     /// <summary>
+    /// La tira de botones del dedo, debajo del roster: mochila, velocidad y
+    /// adelantar oleada.
+    /// </summary>
+    /// <remarks>
+    /// Va en el hueco que queda entre el final de la columna de clases y la barra
+    /// de abajo, que en la PC está vacío. Solo se dibuja en el celular
+    /// (<see cref="Device.IsTouch"/>): ahí esas tres cosas no tienen tecla.
+    /// </remarks>
+    public static readonly Rect2 TouchBar = new(
+        RunRoster.Position.X, RunRoster.End.Y + 8f,
+        RunRoster.Size.X, RunBottomBar.Position.Y - RunRoster.End.Y - 16f);
+
+    /// <summary>Uno de los tres botones de <see cref="TouchBar"/>, de izquierda a derecha.</summary>
+    public static Rect2 TouchButton(int i)
+    {
+        const float Hueco = 8f;
+        float ancho = (TouchBar.Size.X - (2f * Hueco)) / 3f;
+
+        return new Rect2(TouchBar.Position.X + (i * (ancho + Hueco)), TouchBar.Position.Y,
+            ancho, TouchBar.Size.Y);
+    }
+
+    /// <summary>
     /// Uno de los cuatro bloques de la barra de abajo, en el orden del diseño.
     /// </summary>
     /// <remarks>

@@ -377,6 +377,7 @@
     "ui.opciones.modo": "Modo",
     "ui.opciones.completa": "Pantalla completa",
     "ui.opciones.enventana": "En ventana",
+    "ui.opciones.sinbordes": "Sin bordes",
     "ui.opciones.resolucion": "Resolución",
     "ui.opciones.nitidez": "no cambia el campo visible, solo la nitidez",
     "ui.opciones.sonido": "SONIDO",
@@ -470,6 +471,7 @@
     "ui.mercado.cerrar": "cerrar",
     "ui.mercado.confirmar": "click de nuevo para confirmar",
     "ui.mercado.esc_para_cerrar": "Esc para volver al tablero · el mercado sigue abierto hasta que lances la oleada",
+    "ui.mercado.atras_para_cerrar": "Atrás para volver al tablero · el mercado sigue abierto hasta que lances la oleada",
     "ui.mercado.ya_reclutada": "ya la tenés",
     // ⚠ Aparecen cuando la elección DEJA DE SER GRATIS. Con las tres opciones
     // cobrando, un jugador sin oro quedaría trabado en un modal que no se cierra
@@ -539,6 +541,8 @@
     "ui.hud.elegi_la_primera": "elegí la primera",
     "ui.hud.perks": "perks",
     "ui.hud.mochila": "mochila",
+    "ui.hud.adelantar": "adelantar",
+    "ui.hud.ayuda_tactil": "poner: arrastrá la tarjeta al mapa · mover: arrastrá la ficha entre oleadas · tocá una ficha para su panel · atrás: cerrar o pausa",
 
     // --- Los rótulos de la disposición del diseñador -------------------------
     // Salen del panel de Resources\ui\preview.png. Van en mayúsculas en el
@@ -632,6 +636,7 @@
     "ui.mochila.destruir": "destruir",
     "ui.mochila.cancelar": "cancelar",
     "ui.mochila.esc_cerrar": "esc para cerrar",
+    "ui.mochila.atras_cerrar": "atrás para cerrar",
 
     // --- Las tres pestañas y los dos desplegables del diseño ------------------
     "ui.mochila.tab_perks": "Perks",
@@ -682,7 +687,8 @@
     "ui.fin.ticks": "ticks",
     "ui.fin.desempate": "el ranking desempata por ticks: menos es mejor",
     "ui.fin.de_oro_a_la_billetera": "de oro a la billetera",
-    "ui.fin.esc_volver": "esc para volver al menú",
+    "ui.fin.esc_volver": "esc o click para volver al menú",
+    "ui.fin.tocar_volver": "tocá la pantalla para volver al menú",
 
     // --- Los carteles del HUD que faltaban ----------------------------------
     "ui.hud.pausar": "Pausar",

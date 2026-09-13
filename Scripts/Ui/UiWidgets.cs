@@ -174,12 +174,12 @@ public static class UiWidgets
     /// </remarks>
     public static void EffectRow(this CanvasItem ci, Rect2 r, PerkDefinition perk, Color color)
     {
-        float lado = Mathf.Min(r.Size.Y, 18f);
+        float lado = Mathf.Min(r.Size.Y, 18f * UiStyle.TouchScale);
         var caja = new Rect2(r.Position.X, r.Position.Y + ((r.Size.Y - lado) / 2f), lado, lado);
 
         ci.Icon(caja, IconFor(perk.Effect), color);
 
-        int tamano = (int)Mathf.Min(15f, r.Size.Y * 0.78f);
+        int tamano = (int)Mathf.Min(15f * UiStyle.TouchScale, r.Size.Y * 0.78f);
 
         ci.Label(new Rect2(caja.End.X + 8f, r.Position.Y, r.End.X - caja.End.X - 8f, r.Size.Y),
             EffectLabel(perk), tamano, Palette.TextSecondary);

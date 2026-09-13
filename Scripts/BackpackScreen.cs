@@ -248,6 +248,14 @@ public partial class BackpackScreen : Control
         var posicion = GetGlobalMousePosition();
         var partida = _juego.Run;
 
+        // La cruz cierra, salvo con la confirmación abierta: ahí lo que se
+        // decide es destruir o no, y cerrar la mochila dejaría la pregunta colgada.
+        if (_confirmarSacar is null && _confirmarTirar < 0 && RectCerrar().HasPoint(posicion))
+        {
+            Toggle();
+            return;
+        }
+
         // Confirmar la destrucción, si hay una pendiente. Va primero: mientras
         // hay un modal arriba, nada de abajo atiende.
         if (_confirmarSacar is { } pendiente)
@@ -740,6 +748,18 @@ public partial class BackpackScreen : Control
             ancho, 40f);
     }
 
+    /// <summary>
+    /// El botón de cerrar, arriba a la derecha, encima de la columna de la tienda.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Afuera de los paneles y no adentro: las cuatro columnas ya llenan su alto,
+    /// y una cruz metida en la esquina de una taparía la primera tarjeta.
+    /// </remarks>
+    private static Rect2 RectCerrar()
+        => new(UiLayout.ShopPanel.End.X - UiStyle.CloseSide,
+            UiLayout.ShopPanel.Position.Y - UiStyle.CloseSide - 6f,
+            UiStyle.CloseSide, UiStyle.CloseSide);
+
     private static Rect2 RectConfirmar()
         => new((Canvas.CanvasWidth / 2f) - 220f, (Canvas.CanvasHeight / 2f) + 30f, 200f, 56f);
 
@@ -766,6 +786,8 @@ public partial class BackpackScreen : Control
         ColumnaDeDetalle(partida);
         ColumnaDeLaClaseMirada(partida);
         Pie();
+
+        this.CloseButton(RectCerrar());
 
         // Antes de la confirmación: con el modal abierto no hay nada que
         // explicar, y el cartel quedaría flotando arriba del cartel.
@@ -1624,7 +1646,9 @@ public partial class BackpackScreen : Control
         this.Panel(UiLayout.FooterBar, opacidad: 1f);
 
         this.Label(UiLayout.FooterTip,
-            $"{Loc.Get("ui.mochila.esc_cerrar")}  ·  {Loc.Get("ui.mochila.sacar_destruye")}" +
+            // En el celular se cierra con Atrás, que el juego traduce a ESC.
+            $"{Loc.Get(Device.IsTouch ? "ui.mochila.atras_cerrar" : "ui.mochila.esc_cerrar")}  ·  " +
+            $"{Loc.Get("ui.mochila.sacar_destruye")}" +
             $"  ·  {Loc.Get("ui.mochila.marcar_para_mejorar")}",
             14, Palette.TextMuted);
 

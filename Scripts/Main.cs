@@ -131,13 +131,34 @@ public partial class Main : Node2D
     /// </remarks>
     public override void _Notification(int que)
     {
-        if (que != NotificationWMCloseRequest)
+        // ⚠ Atrás de Android hace lo mismo que ESC, y por eso se emula la tecla en
+        // vez de atenderlo pantalla por pantalla: todas las salidas del juego —el
+        // fin de corrida, la mochila, opciones, el menú de pausa— ya escuchan ESC,
+        // y un segundo camino sería uno más para olvidarse. Sin esto Atrás cerraba
+        // la app de golpe (`quit_on_go_back` venía prendido) y sin guardar.
+        if (que == NotificationWMGoBackRequest)
+        {
+            SimulateEscape();
+            return;
+        }
+
+        // ⚠ En el celular la app no se «cierra»: pasa a segundo plano, y Android
+        // la puede matar ahí sin avisar. Pausarse es el último momento seguro
+        // para guardar, igual que la X de la ventana en la PC.
+        if (que != NotificationWMCloseRequest && que != NotificationApplicationPaused)
             return;
 
         var juego = _corrida?.GetNodeOrNull<Game>("Game");
 
         if (juego?.Run is { State: RunState.InProgress })
             juego.StoreRun();
+    }
+
+    /// <summary>Aprieta y suelta ESC, como si viniera del teclado.</summary>
+    private static void SimulateEscape()
+    {
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
     }
 
     /// <summary>
@@ -344,7 +365,9 @@ public partial class Main : Node2D
         capaModal.AddChild(mochila);
         juego.Backpack = mochila;
 
-        capaModal.AddChild(new RunEndScreen(juego) { Name = "FinDeCorrida" });
+        var fin = new RunEndScreen(juego) { Name = "FinDeCorrida" };
+        fin.Dismissed += VolverAlMenu;
+        capaModal.AddChild(fin);
 
         // La preparación va ANTES de la elección: cuando las dos podrían estar
         // abiertas manda la elección, que sí es modal y no se puede cerrar sin

@@ -30,7 +30,17 @@ public partial class OptionsScreen : Control
     private const int Width = 900;
     private const int X0 = (Canvas.CanvasWidth - Width) / 2;
     private const int Y0 = 120;
-    private const int AltoFila = 46;
+    /// <summary>
+    /// El alto de cada renglón.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Era 46, y con 22 renglones «Volver» caía en y=1086: debajo del lienzo de
+    /// 1080, imposible de clickear. En la PC se salía con ESC y no se notaba; en
+    /// el celular no hay ESC y Opciones no se cerraba. Con 42 la lista entera
+    /// entra. En el dedo son 70: ahí la lista es la mitad —no hay ventana ni
+    /// teclas— y un renglón de 42 px es chico para tocar.
+    /// </remarks>
+    private static int AltoFila => Device.IsTouch ? 70 : 42;
 
     public bool IsOpen => _abierto;
 
@@ -88,9 +98,44 @@ public partial class OptionsScreen : Control
     private const int CantidadAtajos = 8;
     private static int TotalFilas => (int)Fila.PrimerAtajo + CantidadAtajos + 2;
 
+    /// <summary>
+    /// Si la fila existe en este aparato.
+    /// </summary>
+    /// <remarks>
+    /// En el dedo no existen la sección de ventana —el sistema no deja cambiar
+    /// modo ni tamaño— ni la de teclas con su «restaurar»: remapear espera una
+    /// tecla, y sin teclado el renglón quedaba capturando para siempre.
+    /// </remarks>
+    private static bool Existe(int i)
+    {
+        if (!Device.IsTouch)
+            return true;
+
+        if (i <= (int)Fila.Resolution)
+            return false;
+
+        return i < (int)Fila.TituloTeclas || i == FilaVolver;
+    }
+
+    /// <summary>En qué renglón de la pantalla cae la fila: las que no existen no ocupan lugar.</summary>
+    private static int Renglon(int i)
+    {
+        int renglon = 0;
+
+        for (int k = 0; k < i; k++)
+        {
+            if (Existe(k))
+                renglon++;
+        }
+
+        return renglon;
+    }
+
+    private static int FilasVisibles => Renglon(TotalFilas);
+
     /// <summary>La fila de índice <paramref name="i"/>, o los botones del final.</summary>
     private static Rect2 RectFila(int i)
-        => new(X0, Y0 + (i * AltoFila), Width, AltoFila - 6);
+        => new(X0, Y0 + (Renglon(i) * AltoFila), Width, AltoFila - 6);
 
     /// <summary>Las cajitas que se pueden apretar dentro de una fila de valor.</summary>
     private static Rect2 RectValor(int i, int columna, int deCuantas)
@@ -98,7 +143,7 @@ public partial class OptionsScreen : Control
         float ancho = 150;
         float x = X0 + Width - 24 - ((deCuantas - columna) * (ancho + 10));
 
-        return new Rect2(x, Y0 + (i * AltoFila) + 4, ancho, AltoFila - 14);
+        return new Rect2(x, Y0 + (Renglon(i) * AltoFila) + 4, ancho, AltoFila - 14);
     }
 
     private static int IndiceDe(Fila fila) => (int)fila;
@@ -163,15 +208,26 @@ public partial class OptionsScreen : Control
     {
         for (int i = 0; i < TotalFilas; i++)
         {
-            if (RectFila(i).HasPoint(posicion))
+            if (Existe(i) && RectFila(i).HasPoint(posicion))
                 return i;
         }
 
         return -1;
     }
 
+    /// <summary>El marco alrededor de la lista. Lo usan el dibujo y la cruz.</summary>
+    private static Rect2 Marco()
+        => new(X0 - 24f, Y0 - 78f, Width + 48f, (FilasVisibles * AltoFila) + 100f);
+
     private void Apretar(Vector2 donde)
     {
+        // La cruz, igual que «Volver»: está arriba, donde se mira primero.
+        if (UiStyle.CloseRectFor(Marco()).HasPoint(donde))
+        {
+            Cerrar();
+            return;
+        }
+
         int i = FilaEn(donde);
 
         if (i < 0)
@@ -205,9 +261,11 @@ public partial class OptionsScreen : Control
         switch (fila)
         {
             case Fila.ModoVentana:
-                if (RectValor(i, 0, 2).HasPoint(donde))
+                if (RectValor(i, 0, 3).HasPoint(donde))
                     Resolution.Complete();
-                else if (RectValor(i, 1, 2).HasPoint(donde))
+                else if (RectValor(i, 1, 3).HasPoint(donde))
+                    Resolution.Borderless(Resolution.WindowSize);
+                else if (RectValor(i, 2, 3).HasPoint(donde))
                     Resolution.InWindow(Resolution.WindowSize);
 
                 break;
@@ -216,7 +274,7 @@ public partial class OptionsScreen : Control
                 for (int r = 0; r < Resolution.Options.Length; r++)
                 {
                     if (RectResolucion(i, r).HasPoint(donde))
-                        Resolution.InWindow(Resolution.Options[r]);
+                        Resolution.Resize(Resolution.Options[r]);
                 }
 
                 break;
@@ -251,7 +309,7 @@ public partial class OptionsScreen : Control
     }
 
     private static Rect2 RectBarra(int i)
-        => new(X0 + Width - 344, Y0 + (i * AltoFila) + 12, 320, AltoFila - 30);
+        => new(X0 + Width - 344, Y0 + (Renglon(i) * AltoFila) + 12, 320, AltoFila - 30);
 
     /// <summary>Dónde cayó el click sobre la barra, en 0-100. Fuera, no cambia.</summary>
     private static int VolumenEn(int i, Vector2 donde, int actual)
@@ -265,7 +323,7 @@ public partial class OptionsScreen : Control
     }
 
     private static Rect2 RectResolucion(int i, int r)
-        => new(X0 + 300 + (r * 96), Y0 + (i * AltoFila) + 4, 90, AltoFila - 14);
+        => new(X0 + 300 + (r * 96), Y0 + (Renglon(i) * AltoFila) + 4, 90, AltoFila - 14);
 
     // -------------------------------------------------------------------------
     //  Dibujo
@@ -280,18 +338,22 @@ public partial class OptionsScreen : Control
 
         // El marco alrededor de la lista entera: sin él las filas flotan sobre el
         // velo y la pantalla es la única del juego sin panel.
-        var marco = new Rect2(X0 - 24f, Y0 - 78f, Width + 48f, (TotalFilas * AltoFila) + 100f);
+        var marco = Marco();
 
         this.Panel(marco, opacidad: 1f);
+        this.CloseButton(UiStyle.CloseRectFor(marco));
 
         this.Label(new Rect2(X0, Y0 - 68f, Width, 48f), Loc.Get("ui.opciones.titulo"), 38,
             Palette.TextPrimary);
 
         this.Rule(marco, 76f);
 
-        Titulo(IndiceDe(Fila.TituloVentana), Loc.Get("ui.opciones.ventana"));
-        ModoVentana(IndiceDe(Fila.ModoVentana));
-        Resoluciones(IndiceDe(Fila.Resolution));
+        if (Existe(IndiceDe(Fila.ModoVentana)))
+        {
+            Titulo(IndiceDe(Fila.TituloVentana), Loc.Get("ui.opciones.ventana"));
+            ModoVentana(IndiceDe(Fila.ModoVentana));
+            Resoluciones(IndiceDe(Fila.Resolution));
+        }
 
         Titulo(IndiceDe(Fila.TituloSonido), Loc.Get("ui.opciones.sonido"));
         Barra(IndiceDe(Fila.MusicVolume), Loc.Get("ui.opciones.musica"), Settings.MusicVolume);
@@ -312,12 +374,16 @@ public partial class OptionsScreen : Control
                 Width - 480f, AltoFila - 6f),
             Loc.Get("ui.opciones.explicaciones_detalle"), 13, Palette.TextDisabled);
 
-        Titulo(IndiceDe(Fila.TituloTeclas), Loc.Get("ui.opciones.teclas"));
+        if (Existe(IndiceDe(Fila.TituloTeclas)))
+        {
+            Titulo(IndiceDe(Fila.TituloTeclas), Loc.Get("ui.opciones.teclas"));
 
-        for (int a = 0; a < CantidadAtajos; a++)
-            Shortcut(IndiceDe(Fila.PrimerAtajo) + a, (Shortcut)a);
+            for (int a = 0; a < CantidadAtajos; a++)
+                Shortcut(IndiceDe(Fila.PrimerAtajo) + a, (Shortcut)a);
 
-        Boton(FilaRestaurar, Loc.Get("ui.opciones.restaurar"));
+            Boton(FilaRestaurar, Loc.Get("ui.opciones.restaurar"));
+        }
+
         Boton(FilaVolver, Loc.Get("ui.opciones.volver"));
     }
 
@@ -342,10 +408,11 @@ public partial class OptionsScreen : Control
 
         // ⚠ Del estado y no de DisplayServer: el cambio real se aplica un frame
         // después, y leerlo del sistema acá marcaba la cajita vieja.
-        bool completa = Resolution.IsFullscreen;
+        var modo = Resolution.Style;
 
-        Choice(RectValor(i, 0, 2), Loc.Get("ui.opciones.completa"), completa);
-        Choice(RectValor(i, 1, 2), Loc.Get("ui.opciones.enventana"), !completa);
+        Choice(RectValor(i, 0, 3), Loc.Get("ui.opciones.completa"), modo == Resolution.WindowStyle.Fullscreen);
+        Choice(RectValor(i, 1, 3), Loc.Get("ui.opciones.sinbordes"), modo == Resolution.WindowStyle.Borderless);
+        Choice(RectValor(i, 2, 3), Loc.Get("ui.opciones.enventana"), modo == Resolution.WindowStyle.Windowed);
     }
 
     private void Resoluciones(int i)

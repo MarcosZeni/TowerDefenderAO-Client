@@ -169,7 +169,12 @@ public partial class BossDropScreen : Control
 
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
             {
-                Apretar(TarjetaEn(GetGlobalMousePosition()));
+                // La tocada pasa a ser la de «bajo el cursor», igual que en el
+                // mercado: sin movimiento previo el campo quedaba viejo y el
+                // temblor del segundo toque desarmaba la tarjeta.
+                int tocada = TarjetaEn(GetGlobalMousePosition());
+                _bajoElCursor = tocada;
+                Apretar(tocada);
                 GetViewport().SetInputAsHandled();
                 break;
             }

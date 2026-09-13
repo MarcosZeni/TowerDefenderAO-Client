@@ -100,8 +100,12 @@ public static class AudioPack
             return;
         }
 
-        // 2. Al lado del ejecutable.
-        if (Montar(OS.GetExecutablePath().GetBaseDir().PathJoin(PackName), "al lado del ejecutable"))
+        // 2. Al lado del ejecutable. Solo con ruta absoluta, por lo mismo que el
+        //    arte: en Android la carpeta sale vacía y "audio.pck" a secas falla al
+        //    montarse antes de que el paso 3 lo monte bien.
+        string junto = OS.GetExecutablePath().GetBaseDir();
+
+        if (junto.IsAbsolutePath() && Montar(junto.PathJoin(PackName), "al lado del ejecutable"))
             return;
 
         // 3. Adentro del paquete principal.

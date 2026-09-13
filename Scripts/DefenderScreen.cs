@@ -142,6 +142,14 @@ public partial class DefenderScreen : Control
             {
                 var posicion = GetGlobalMousePosition();
 
+                if (UiStyle.CloseRectFor(Caja()).HasPoint(posicion))
+                {
+                    _juego.SelectedDefender = -1;
+                    _ventaArmada = false;
+                    GetViewport().SetInputAsHandled();
+                    break;
+                }
+
                 if (RectVender().HasPoint(posicion))
                 {
                     if (_ventaArmada)
@@ -247,6 +255,10 @@ public partial class DefenderScreen : Control
         UiTooltip.Begin(GetGlobalMousePosition());
 
         this.Panel(caja);
+
+        // La cruz: sin ella el panel se cerraba con ESC o tocando otra celda, y
+        // ninguna de las dos se ve.
+        this.CloseButton(UiStyle.CloseRectFor(caja));
 
         // El retrato arriba de todo: el jugador acaba de clickear una unidad del
         // mapa y lo primero que tiene que confirmar es cuál agarró. Con seis de

@@ -1097,6 +1097,39 @@ public partial class Game : Node2D
         }
     }
 
+    // --- Lo mismo que las teclas, para los botones del dedo del HUD ----------
+    //
+    // ⚠ En el celular la mochila (Tab), la velocidad (1-2-3) y adelantar (Enter)
+    // no tenían ningún otro camino. Pasan por acá y no por las variables sueltas
+    // para respetar las mismas reglas que las teclas: adelantar en pausa sigue
+    // sin poder.
+
+    /// <summary>Abre o cierra la mochila, como Tab.</summary>
+    public void ToggleBackpack() => Backpack?.Toggle();
+
+    /// <summary>Pasa a la velocidad siguiente: 1, 2, 4 y vuelta a 1.</summary>
+    public void CycleSpeed() => _velocidad = _velocidad switch { 1 => 2, 2 => 4, _ => 1 };
+
+    /// <summary>Si ahora se puede adelantar la oleada. El botón se dibuja apagado si no.</summary>
+    public bool CanCallNextWave => PuedeActuar;
+
+    /// <summary>
+    /// Adelanta la oleada, como Enter. Entre oleadas es comenzar la que espera.
+    /// </summary>
+    public void CallNextWave()
+    {
+        if (!PuedeActuar)
+            return;
+
+        if (Run.WaitingForWaveStart)
+        {
+            StartWave();
+            return;
+        }
+
+        Encolar(PlayerAction.CallNextWave);
+    }
+
     /// <summary>
     /// Convierte una posición de <b>pantalla</b> en celda de la grilla.
     /// </summary>

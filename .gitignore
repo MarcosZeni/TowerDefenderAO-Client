@@ -456,6 +456,13 @@ data_*/
 #   *.import      describen cómo importar cada asset. Sin ellos, cada clon
 #                 reimporta distinto.
 #   project.godot, *.tscn, *.tres
+#   export_presets.cfg
+#                 los presets de exportación (Windows, Android, Android
+#                 Emulator). Antes estaba ignorado y en cada máquina nueva había
+#                 que volver a cargar a mano el exclude_filter del audio, los
+#                 iconos y las rutas de salida. Las contraseñas de un keystore de
+#                 RELEASE no viven acá: Godot las guarda en
+#                 .godot\export_credentials.cfg, que sí queda afuera.
 #
 # No hay reglas acá porque no hay que ignorarlos: están anotados para que nadie
 # los agregue a esta lista "para limpiar el repo".
@@ -470,7 +477,6 @@ export/
 *.pck
 *.exe
 *.zip
-export_presets.cfg
 
 
 # -----------------------------------------------------------------------------
@@ -503,3 +509,6 @@ Simulation/bin/
 # El paquete de arte: artefacto de --empaquetar-arte, la fuente son los PNG
 # de Resources\. Misma regla que el atlas, y son 56 MB.
 arte.pck
+
+# Plantilla Gradle local y salidas de la exportacion a Android.
+/android/

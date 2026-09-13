@@ -123,7 +123,12 @@ public partial class EscMenuScreen : Control
                 break;
 
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:
-                Apretar(BotonEn(GetGlobalMousePosition()));
+                // La cruz hace lo mismo que «Seguir».
+                if (UiStyle.CloseRectFor(Marco()).HasPoint(GetGlobalMousePosition()))
+                    Toggle(false);
+                else
+                    Apretar(BotonEn(GetGlobalMousePosition()));
+
                 GetViewport().SetInputAsHandled();
                 break;
 
@@ -146,7 +151,20 @@ public partial class EscMenuScreen : Control
     /// congela el reloj igual. Abrirlo poniendo <c>Visible</c> a mano dejaría la
     /// corrida corriendo atrás del velo.
     /// </remarks>
-    public void Open() => Toggle(true);
+    public void Open()
+    {
+        // ⚠ Con la corrida terminada no hay nada que seguir ni que guardar, y este
+        // menú ignora todo input fuera de una corrida en curso: abrirlo dejaba la
+        // pantalla trabada debajo del velo. El botón MENÚ lleva directo al menú
+        // principal, que es lo que hace ESC en ese momento.
+        if (_juego.Run is { State: not RunState.InProgress })
+        {
+            ExitToMenu?.Invoke();
+            return;
+        }
+
+        Toggle(true);
+    }
 
     private void Toggle(bool abierto)
     {
@@ -155,6 +173,17 @@ public partial class EscMenuScreen : Control
         _juego.MenuOpen = abierto;
         _bajoElCursor = -1;
         QueueRedraw();
+    }
+
+    /// <summary>El marco alrededor de los botones. Lo usan el dibujo y la cruz.</summary>
+    private static Rect2 Marco()
+    {
+        var primero = RectBoton(0);
+        var ultimo = RectBoton(_botones.Length - 1);
+
+        return new Rect2(
+            primero.Position.X - 40f, 240f,
+            primero.Size.X + 80f, ultimo.End.Y - 240f + 40f);
     }
 
     private static int BotonEn(Vector2 posicion)
@@ -206,14 +235,10 @@ public partial class EscMenuScreen : Control
 
         // El marco alrededor de los cuatro botones, con el mismo aire que el
         // resto: título arriba, regla, y la lista abajo.
-        var primero = RectBoton(0);
-        var ultimo = RectBoton(_botones.Length - 1);
-
-        var marco = new Rect2(
-            primero.Position.X - 40f, 240f,
-            primero.Size.X + 80f, ultimo.End.Y - 240f + 40f);
+        var marco = Marco();
 
         this.Panel(marco, elevado: true, opacidad: 1f);
+        this.CloseButton(UiStyle.CloseRectFor(marco));
 
         this.Label(marco.Row(24f, 56f), Loc.Get("ui.pausa.titulo"), 48, Palette.TextPrimary,
             HorizontalAlignment.Center);
