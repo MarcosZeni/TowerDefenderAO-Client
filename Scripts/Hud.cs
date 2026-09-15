@@ -114,7 +114,15 @@ public partial class Hud : Control
         // debajo del velo, medio apagado, explicando algo que en ese momento no
         // se puede tocar. Los que no velan nada —la preparación y el panel del
         // defensor— no cuentan: ahí el HUD se sigue usando.
-        if (!_arrastrando && !HayModal())
+        //
+        // ⚠ En el dedo, un arrastre que no salió de la tarjeta TODAVÍA no es un
+        // arrastre: apretar la tarjeta arma el arrastre, y mantenerla apretada es
+        // justamente como se pide su cartel. Sin esta excepción, el cartel de las
+        // tarjetas —el de la captura que abrió este cambio— no salía nunca.
+        bool arrastrando = _arrastrando
+                           && !(Device.IsTouch && FichaEn(GetGlobalMousePosition()) >= 0);
+
+        if (!arrastrando && !HayModal())
         {
             UiTooltip.Draw(this);
         }

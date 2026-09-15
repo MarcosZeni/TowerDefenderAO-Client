@@ -542,7 +542,7 @@
     "ui.hud.perks": "perks",
     "ui.hud.mochila": "mochila",
     "ui.hud.adelantar": "adelantar",
-    "ui.hud.ayuda_tactil": "poner: arrastrá la tarjeta al mapa · mover: arrastrá la ficha entre oleadas · tocá una ficha para su panel · atrás: cerrar o pausa",
+    "ui.hud.ayuda_tactil": "mantené apretado para ver qué es · poner: arrastrá la tarjeta al mapa · mover: arrastrá la ficha entre oleadas · tocá una ficha para su panel · atrás: cerrar o pausa",
 
     // --- Los rótulos de la disposición del diseñador -------------------------
     // Salen del panel de Resources\ui\preview.png. Van en mayúsculas en el
@@ -698,6 +698,8 @@
     "ui.opciones.ayudas": "Ayudas",
     "ui.opciones.explicaciones": "Explicar las reglas en los carteles",
     "ui.opciones.explicaciones_detalle": "apaga la explicación, nunca el dato: los stats y los nombres se siguen viendo",
+    "ui.opciones.tamano_carteles": "Tamaño del cartel",
+    "ui.ayuda.tocar_para_cerrar": "tocá en cualquier lado para cerrar",
 
     // =========================================================================
     //  LAS AYUDAS

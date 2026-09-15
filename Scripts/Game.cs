@@ -1017,6 +1017,11 @@ public partial class Game : Node2D
 
         if (!arrastro)
         {
+            // El dedo se quedó apretado leyendo el cartel de la ficha: eso no es
+            // un click, y abrir su panel taparía la columna con algo no pedido.
+            if (Ui.UiTooltip.ReleaseWasHelp)
+                return;
+
             SelectedDefender = SelectedDefender == id ? -1 : id;
             return;
         }

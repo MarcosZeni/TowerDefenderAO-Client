@@ -80,6 +80,22 @@ public static class Settings
     public static bool ShowHelp { get; set; } = true;
 
     /// <summary>
+    /// El tamaño de los carteles, en porcentaje. Uno de <see cref="HelpScaleOptions"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Es relativo a la base de cada aparato, no absoluto.</b> El 100 %
+    /// del celular ya es unas 2,4 veces el de la PC (ver <c>UiTooltip.Draw</c>),
+    /// así que el que nunca abre Opciones igual lee. Esto es para el que necesita
+    /// más —o menos— que eso.</para>
+    ///
+    /// <para>Son cuatro valores fijos y no una barra: una barra se toca con el
+    /// dedo y cae en 117 %, y el jugador no puede volver al número de antes.</para>
+    /// </remarks>
+    public static int HelpScale { get; set; } = 100;
+
+    public static readonly int[] HelpScaleOptions = [75, 100, 125, 150];
+
+    /// <summary>
     /// Si el token de la sesión se guarda en disco para no volver a entrar.
     /// </summary>
     /// <remarks>
@@ -195,6 +211,13 @@ public static class Settings
         AnimateWeapons = (bool)config.GetValue("animaciones", "armas", true);
         AnimateEffects = (bool)config.GetValue("animaciones", "efectos", true);
         ShowHelp = (bool)config.GetValue("ayudas", "mostrar", true);
+
+        // Un valor que no está en la lista —un archivo tocado a mano, una lista
+        // que cambió— vuelve al de fábrica en vez de dibujar a un tamaño que
+        // Opciones no puede marcar.
+        int escala = (int)config.GetValue("ayudas", "tamano", 100);
+        HelpScale = System.Array.IndexOf(HelpScaleOptions, escala) >= 0 ? escala : 100;
+
         Language = (string)config.GetValue("idioma", "codigo", Loc.Reference);
         RememberSession = (bool)config.GetValue("cuenta", "recordar", true);
 
@@ -217,6 +240,7 @@ public static class Settings
         config.SetValue("animaciones", "armas", AnimateWeapons);
         config.SetValue("animaciones", "efectos", AnimateEffects);
         config.SetValue("ayudas", "mostrar", ShowHelp);
+        config.SetValue("ayudas", "tamano", HelpScale);
         config.SetValue("idioma", "codigo", Language);
         config.SetValue("cuenta", "recordar", RememberSession);
 

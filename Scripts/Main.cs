@@ -99,6 +99,14 @@ public partial class Main : Node2D
 
         Diagnostico();
 
+        // ⚠ A la raíz y DIFERIDO: la raíz está agregando la escena principal
+        // mientras corre este _Ready y no acepta hijos todavía. Diferido, además,
+        // queda después de Main en el árbol — que es la condición para que su
+        // _Input corra antes que el de todas las pantallas (ver TouchHelpOverlay).
+        var capaCarteles = new CanvasLayer { Name = "CapaCarteles", Layer = Ui.TouchHelpOverlay.Layer };
+        capaCarteles.AddChild(new Ui.TouchHelpOverlay { Name = "CartelTactil" });
+        GetTree().Root.CallDeferred(Node.MethodName.AddChild, capaCarteles);
+
         _capaMenu = new CanvasLayer { Name = "CapaMenu", Layer = 5 };
         AddChild(_capaMenu);
 

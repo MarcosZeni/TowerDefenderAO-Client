@@ -461,7 +461,7 @@
     "ui.hud.perks": "perks",
     "ui.hud.mochila": "backpack",
     "ui.hud.adelantar": "call wave",
-    "ui.hud.ayuda_tactil": "place: drag the card onto the map · move: drag the unit between waves · tap a unit for its panel · back: close or pause",
+    "ui.hud.ayuda_tactil": "hold to see what it is · place: drag the card onto the map · move: drag the unit between waves · tap a unit for its panel · back: close or pause",
 
     // --- Labels for the designer's layout ------------------------------------
     "ui.hud.vida_de_torre": "Tower Health",
@@ -590,6 +590,8 @@
     "ui.opciones.ayudas": "Help",
     "ui.opciones.explicaciones": "Explain the rules in tooltips",
     "ui.opciones.explicaciones_detalle": "turns off the explanation, never the data: stats and names still show",
+    "ui.opciones.tamano_carteles": "Tooltip size",
+    "ui.ayuda.tocar_para_cerrar": "tap anywhere to close",
 
     // =========================================================================
     //  THE HELP TEXTS

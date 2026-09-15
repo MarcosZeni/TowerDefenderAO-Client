@@ -90,6 +90,11 @@ public partial class RunEndScreen : Control
         if (Time.GetTicksMsec() - _aparecioMs < MsAntesDeSalir)
             return;
 
+        // Mantener apretado un número para leer su cartel no es pedir salir: sin
+        // esto, leer el resumen de la corrida devolvía al menú al soltar.
+        if (UiTooltip.ReleaseWasHelp)
+            return;
+
         GetViewport().SetInputAsHandled();
         Dismissed?.Invoke();
     }

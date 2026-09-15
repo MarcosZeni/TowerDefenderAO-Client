@@ -98,6 +98,117 @@ public static class UiTooltip
     /// </remarks>
     private static ulong _ultimoCuadroConTexto = ulong.MaxValue;
 
+    // -------------------------------------------------------------------------
+    //  El dedo
+    // -------------------------------------------------------------------------
+
+    /// <summary>Cuánto hay que mantener apretado para que salga el cartel.</summary>
+    /// <remarks>
+    /// Un poco más que la demora del mouse: acá el gesto que molesta no es barrer
+    /// la pantalla sino el toque normal, y un toque decidido dura menos de 200 ms.
+    /// Con 450 nadie lo dispara sin querer y nadie se cansa esperándolo.
+    /// </remarks>
+    private const long HoldMs = 450;
+
+    /// <summary>Cuánto se puede mover el dedo sin que deje de ser «mantener».</summary>
+    /// <remarks>
+    /// En píxeles del lienzo. Tres veces el umbral de arrastre del tablero
+    /// (<c>Game.UmbralArrastre</c>): el dedo tiembla más que el mouse, y un cartel
+    /// que se cancela por el pulso obliga a volver a apoyar.
+    /// </remarks>
+    private const float TemblorMax = 24f;
+
+    /// <summary>Desde cuándo está apoyado el dedo. −1 = no está apoyado.</summary>
+    private static long _dedoDesdeMs = -1;
+
+    private static Vector2 _dedoOrigen;
+
+    /// <summary>Si el cartel quedó abierto después de soltar.</summary>
+    private static bool _fijado;
+
+    /// <summary>Si hay que tragarse el próximo soltar: el del toque que cerró el cartel.</summary>
+    private static bool _tragarSoltar;
+
+    /// <summary>
+    /// Si el último dedo que se soltó estaba <b>leyendo</b> un cartel, no tocando.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Existe porque ese soltar NO se puede tragar.</b> El HUD arma el
+    /// arrastre de la tarjeta al apretar y lo desarma al soltar; si el soltar no
+    /// le llega, queda arrastrando un fantasma que pone un defensor en el próximo
+    /// toque. Así que el soltar viaja, y las pantallas que actúan al soltar
+    /// —elegir una ficha puesta, salir del fin de corrida— preguntan esto antes.</para>
+    ///
+    /// <para>Las que actúan al <b>apretar</b> no lo necesitan: todo lo que ahí
+    /// cuesta algo —comprar, vender, elegir el Oro, sacar un perk— ya pide un
+    /// segundo toque para confirmar.</para>
+    /// </remarks>
+    public static bool ReleaseWasHelp { get; private set; }
+
+    /// <summary>
+    /// Mira el dedo antes que ninguna pantalla. Devuelve <c>true</c> si el evento
+    /// era para cerrar el cartel y no tiene que llegarle a nadie más.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>En el dedo no hay hover.</b> Godot convierte el toque en un
+    /// mouse que queda quieto donde se tocó, así que el cartel de escritorio
+    /// salía igual —a los 350 ms de cualquier toque, debajo del dedo, en letra de
+    /// escritorio y sin forma de cerrarlo salvo tocando otra cosa, que además
+    /// hacía lo suyo—. Con esto el cartel sale solo si se <b>pide</b>: mantener
+    /// apretado.</para>
+    ///
+    /// <para>Mira los eventos de <b>mouse emulado</b> y no los de toque, que es lo
+    /// que ya escuchan todas las pantallas. Así funciona igual con
+    /// <c>--celular</c> en la PC.</para>
+    /// </remarks>
+    public static bool HandleTouch(InputEvent evento, Vector2 posicion)
+    {
+        if (!Device.IsTouch)
+            return false;
+
+        switch (evento)
+        {
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }:
+                ReleaseWasHelp = false;
+
+                // Con el cartel abierto, el toque es para cerrarlo y nada más. Si
+                // pasara, el que toca afuera para cerrar compraría lo de abajo.
+                if (_fijado)
+                {
+                    _fijado = false;
+                    _dedoDesdeMs = -1;
+                    _tragarSoltar = true;
+                    return true;
+                }
+
+                _dedoDesdeMs = FineClock.Ms;
+                _dedoOrigen = posicion;
+                return false;
+
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+                _dedoDesdeMs = -1;
+
+                if (_tragarSoltar)
+                {
+                    _tragarSoltar = false;
+                    return true;
+                }
+
+                return false;
+
+            // Se movió de verdad: es un arrastre. Si el cartel ya había salido se
+            // cierra — es el gesto de leer la tarjeta y después llevarla al mapa.
+            case InputEventMouseMotion when _dedoDesdeMs >= 0
+                                            && posicion.DistanceTo(_dedoOrigen) > TemblorMax:
+                _dedoDesdeMs = -1;
+                _fijado = false;
+                ReleaseWasHelp = false;
+                return false;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Arranca el cuadro. Se llama al principio del <c>_Draw</c> de la pantalla.
     /// </summary>
@@ -200,13 +311,17 @@ public static class UiTooltip
     /// <c>_Draw</c>.
     /// </summary>
     /// <remarks>
-    /// <para>Va <b>arriba</b> de lo señalado y no abajo: abajo lo tapa el cursor,
-    /// que es una flecha que apunta hacia arriba y a la izquierda. Si no entra
-    /// arriba —el icono está pegado al borde superior— se da vuelta.</para>
+    /// <para>⚠ <b>Tiene dos formas y las decide el aparato.</b> Con mouse es un
+    /// globo pegado a lo señalado (<see cref="CajaGlobo"/>); con el dedo es un
+    /// popup grande en un lugar fijo (<see cref="CajaTactil"/>), que sale al
+    /// mantener apretado y queda abierto hasta el próximo toque. Lo que se
+    /// declara es lo mismo en los dos: ninguna pantalla sabe cuál se dibuja.</para>
     ///
-    /// <para>Y se recorta contra el lienzo a los costados. Un cartel que se sale
-    /// por la derecha es peor que uno corrido, porque la mitad que falta es
-    /// justo el final de la frase.</para>
+    /// <para>⚠ El popup <b>no se dibuja sobre <paramref name="ci"/></b>: acá solo
+    /// se decide si sale y se guarda qué dice. Lo pinta
+    /// <see cref="TouchHelpOverlay"/>, en la capa de arriba de todo.</para>
+    ///
+    /// <para>Los dos crecen con <see cref="Settings.HelpScale"/>.</para>
     /// </remarks>
     public static void Draw(CanvasItem ci)
     {
@@ -218,6 +333,14 @@ public static class UiTooltip
             // de la misma capa puede haber dibujado su cartel hace tres líneas.
             if (_ultimoCuadroConTexto != cuadro)
                 _anclaEstable = default;
+
+            // Y el cartel fijado se cierra si lo que explicaba ya no está: una
+            // pantalla que se fue. Con DOS cuadros de margen y no uno, porque en
+            // un cuadro dibujan varias pantallas y el orden entre capas no está
+            // garantizado — una vacía puede pasar antes que la que tiene texto.
+            // Sin cerrarlo, el próximo toque se lo tragaría un cartel invisible.
+            if (_fijado && cuadro - _ultimoCuadroConTexto > 1)
+                _fijado = false;
 
             return;
         }
@@ -231,27 +354,91 @@ public static class UiTooltip
         }
 
         long ahora = FineClock.Ms;
+        bool tactil = Device.IsTouch;
 
-        // ⚠ La gracia se mide contra el último cartel que se VIO, no contra el
-        // último que se declaró. Marcarla antes de dibujar hacía que barrer la
-        // pantalla —cuatro elementos rozados sin llegar a mostrar ninguno— dejara
-        // la ventana de gracia abierta, y el quinto aparecía de golpe.
-        if (ahora - _desdeMs < DelayMs && ahora - _ultimoVisibleMs > GraceMs)
+        if (tactil)
+        {
+            // En el dedo manda el mantener apretado, no la demora ni la gracia.
+            if (!_fijado)
+            {
+                if (_dedoDesdeMs < 0 || ahora - _dedoDesdeMs < HoldMs)
+                    return;
+
+                _fijado = true;
+                ReleaseWasHelp = true;
+            }
+        }
+        else if (ahora - _desdeMs < DelayMs && ahora - _ultimoVisibleMs > GraceMs)
+        {
+            // ⚠ La gracia se mide contra el último cartel que se VIO, no contra el
+            // último que se declaró. Marcarla antes de dibujar hacía que barrer la
+            // pantalla —cuatro elementos rozados sin llegar a mostrar ninguno—
+            // dejara la ventana de gracia abierta, y el quinto aparecía de golpe.
             return;
+        }
 
         _ultimoVisibleMs = ahora;
 
-        const int TamanoDato = 14;
-        const int TamanoAyuda = 13;
-        const float Pad = 10f;
-        const float Renglon = 19f;
-        const float RenglonAyuda = 17f;
+        // En el dedo no se dibuja acá: se guarda, y lo pinta la capa de arriba de
+        // todo (TouchHelpOverlay). Ver por qué ahí.
+        if (tactil)
+        {
+            _popupTexto = _texto;
+            _popupAyuda = _ayuda;
+            _popupAncla = _ancla;
+            _popupCuadro = cuadro;
+            return;
+        }
+
+        Pintar(ci, _texto, _ayuda, _ancla, tactil: false);
+    }
+
+    private static string _popupTexto = "";
+    private static string _popupAyuda = "";
+    private static Rect2 _popupAncla;
+    private static ulong _popupCuadro;
+
+    /// <summary>
+    /// Dibuja el popup del dedo. Lo llama solo <see cref="TouchHelpOverlay"/>.
+    /// </summary>
+    /// <remarks>
+    /// ⚠ Acepta lo declarado en el cuadro <b>anterior</b>: la capa de arriba
+    /// puede dibujar antes que las pantallas en el mismo cuadro, y exigir el
+    /// actual haría parpadear el cartel un cuadro sí y otro no.
+    /// </remarks>
+    public static void DrawTouchPopup(CanvasItem ci)
+    {
+        if (!_fijado || Engine.GetProcessFrames() - _popupCuadro > 1)
+            return;
+
+        Pintar(ci, _popupTexto, _popupAyuda, _popupAncla, tactil: true);
+    }
+
+    /// <summary>Arma la caja y escribe el cartel. Las dos formas pasan por acá.</summary>
+    private static void Pintar(CanvasItem ci, string texto, string textoAyuda, Rect2 ancla, bool tactil)
+    {
+        // ⚠ LA MEDIDA DEPENDE DEL APARATO, y el tamaño de Opciones va encima.
+        //
+        // El lienzo es 1920x1080 con `keep`: en un teléfono de 1080 de alto un
+        // píxel lógico es uno físico, y a 400 ppp los 14 del escritorio miden
+        // menos de un milímetro. La base del dedo es ~2,4 veces la de la PC, que
+        // es la distancia entre leer un monitor a 60 cm y un teléfono en la mano
+        // medida en densidad, no en pulgadas.
+        float escala = Settings.HelpScale / 100f;
+        float @base = tactil ? 2.4f : 1f;
+
+        int tamanoDato = Mathf.RoundToInt(14f * @base * escala);
+        int tamanoAyuda = Mathf.RoundToInt(13f * @base * escala);
+        float pad = 10f * @base * escala;
+        float renglon = tamanoDato * 1.36f;
+        float renglonAyuda = tamanoAyuda * 1.31f;
 
         // El ancho al que se corta la ayuda. Un cartel de 420 px entra en el
         // lienzo desde cualquier borde y son unas nueve palabras por renglón,
         // que es donde el ojo todavía encuentra el principio de la línea
-        // siguiente sin buscarlo.
-        const float AnchoAyuda = 420f;
+        // siguiente sin buscarlo. Crece con la letra para seguir siendo nueve
+        // palabras, hasta donde entre en el lienzo.
+        float anchoAyuda = Mathf.Min(420f * @base * escala, Canvas.CanvasWidth - 64f - (pad * 2f));
 
         // ⚠ MULTILÍNEA, partiendo por el salto de línea.
         //
@@ -260,47 +447,41 @@ public static class UiTooltip
         // bicho: ahí el cartel es una lista de dos o tres cosas distintas, y en
         // un renglón único quedaba una tira de 600 px que se sale de la ventana
         // y que además hay que leer buscando los separadores.
-        string[] lineas = _texto.Length == 0 ? [] : _texto.Split('\n');
+        string[] lineas = texto.Length == 0 ? [] : texto.Split('\n');
 
         // La ayuda es prosa y no una lista, así que se corta por ancho. El corte
         // se hace ACÁ y no con `Paragraph` porque hace falta saber cuántos
         // renglones son para poder dimensionar la caja antes de dibujarla.
-        var ayuda = _ayuda.Length == 0
+        var ayuda = textoAyuda.Length == 0
             ? []
-            : Envolver(_ayuda, TamanoAyuda, AnchoAyuda);
+            : Envolver(textoAyuda, tamanoAyuda, anchoAyuda);
 
-        float anchoTexto = 0f;
+        // En el dedo, un renglón más al pie que dice cómo se cierra. Sin él, el
+        // primer cartel que el jugador abre por accidente parece trabado.
+        string cierre = tactil ? Loc.Get("ui.ayuda.tocar_para_cerrar") : "";
+        int tamanoCierre = Mathf.RoundToInt(tamanoAyuda * 0.8f);
+        float renglonCierre = cierre.Length > 0 ? tamanoCierre * 1.5f : 0f;
+
+        float anchoTexto = UiStyle.Width(cierre, tamanoCierre);
 
         foreach (string linea in lineas)
-            anchoTexto = Mathf.Max(anchoTexto, UiStyle.Width(linea, TamanoDato));
+            anchoTexto = Mathf.Max(anchoTexto, UiStyle.Width(linea, tamanoDato));
 
         foreach (string linea in ayuda)
-            anchoTexto = Mathf.Max(anchoTexto, UiStyle.Width(linea, TamanoAyuda));
+            anchoTexto = Mathf.Max(anchoTexto, UiStyle.Width(linea, tamanoAyuda));
 
         bool separa = lineas.Length > 0 && ayuda.Count > 0;
+        float hueco = 9f * (tactil ? @base * escala : 1f);
 
-        float ancho = anchoTexto + (Pad * 2f);
-        float alto = (lineas.Length * Renglon) + (ayuda.Count * RenglonAyuda)
-            + (separa ? 9f : 0f) + (Pad * 0.9f);
+        float ancho = anchoTexto + (pad * 2f);
+        float alto = (lineas.Length * renglon) + (ayuda.Count * renglonAyuda)
+            + (separa ? hueco : 0f) + renglonCierre + (pad * 0.9f);
 
-        float x = _ancla.Position.X + (_ancla.Size.X / 2f) - (ancho / 2f);
-        float y = _ancla.Position.Y - alto - 6f;
+        var caja = tactil ? CajaTactil(ancla, ancho, alto) : CajaGlobo(ancla, ancho, alto);
 
-        if (y < 4f)
-            y = _ancla.End.Y + 6f;
-
-        x = Mathf.Clamp(x, 4f, Canvas.CanvasWidth - ancho - 4f);
-
-        // Y también contra el borde de abajo: un cartel de cuatro renglones
-        // colgado de algo que está en la última fila se sale por abajo, que es
-        // donde el jugador no puede ni arrastrar la ventana para verlo.
-        y = Mathf.Clamp(y, 4f, Canvas.CanvasHeight - alto - 4f);
-
-        var caja = new Rect2(x, y, ancho, alto);
-
-        ci.DrawRect(caja, Palette.BackgroundMain.Alpha(0.97f));
-        ci.DrawRect(caja, Palette.BorderLight, filled: false, width: 1.5f);
-        ci.Corners(caja, Palette.BorderLight.Alpha(0.9f), 1.5f);
+        ci.DrawRect(caja, Palette.BackgroundMain.Alpha(tactil ? 0.985f : 0.97f));
+        ci.DrawRect(caja, Palette.BorderLight, filled: false, width: tactil ? 3f : 1.5f);
+        ci.Corners(caja, Palette.BorderLight.Alpha(0.9f), tactil ? 3f : 1.5f);
 
         // Una línea sigue yendo centrada; varias van a la izquierda, porque una
         // lista centrada no tiene margen contra el que alinear la vista. Con
@@ -310,24 +491,24 @@ public static class UiTooltip
             ? HorizontalAlignment.Center
             : HorizontalAlignment.Left;
 
-        float py = caja.Position.Y + (Pad * 0.45f);
+        float py = caja.Position.Y + (pad * 0.45f);
 
         for (int i = 0; i < lineas.Length; i++)
         {
             ci.Label(
-                new Rect2(caja.Position.X + Pad, py, caja.Size.X - (Pad * 2f), Renglon),
-                lineas[i], TamanoDato, Palette.TextPrimary, alineacion);
+                new Rect2(caja.Position.X + pad, py, caja.Size.X - (pad * 2f), renglon),
+                lineas[i], tamanoDato, Palette.TextPrimary, alineacion);
 
-            py += Renglon;
+            py += renglon;
         }
 
         if (separa)
         {
             ci.DrawRect(
-                new Rect2(caja.Position.X + Pad, py + 4f, caja.Size.X - (Pad * 2f), 1f),
+                new Rect2(caja.Position.X + pad, py + (hueco * 0.45f), caja.Size.X - (pad * 2f), 1f),
                 Palette.BorderNormal);
 
-            py += 9f;
+            py += hueco;
         }
 
         // La ayuda va en el gris apagado y un punto más chica: es la mitad que se
@@ -336,11 +517,72 @@ public static class UiTooltip
         foreach (string linea in ayuda)
         {
             ci.Label(
-                new Rect2(caja.Position.X + Pad, py, caja.Size.X - (Pad * 2f), RenglonAyuda),
-                linea, TamanoAyuda, Palette.TextMuted);
+                new Rect2(caja.Position.X + pad, py, caja.Size.X - (pad * 2f), renglonAyuda),
+                linea, tamanoAyuda, Palette.TextMuted);
 
-            py += RenglonAyuda;
+            py += renglonAyuda;
         }
+
+        if (cierre.Length > 0)
+        {
+            ci.Label(
+                new Rect2(caja.Position.X + pad, py, caja.Size.X - (pad * 2f), renglonCierre),
+                cierre, tamanoCierre, Palette.TextDisabled, HorizontalAlignment.Right);
+        }
+    }
+
+    /// <summary>El globo de escritorio: pegado a lo señalado.</summary>
+    /// <remarks>
+    /// <para>Va <b>arriba</b> de lo señalado y no abajo: abajo lo tapa el cursor,
+    /// que es una flecha que apunta hacia arriba y a la izquierda. Si no entra
+    /// arriba —el icono está pegado al borde superior— se da vuelta.</para>
+    ///
+    /// <para>Y se recorta contra el lienzo a los costados. Un cartel que se sale
+    /// por la derecha es peor que uno corrido, porque la mitad que falta es
+    /// justo el final de la frase.</para>
+    /// </remarks>
+    private static Rect2 CajaGlobo(Rect2 ancla, float ancho, float alto)
+    {
+        float x = ancla.Position.X + (ancla.Size.X / 2f) - (ancho / 2f);
+        float y = ancla.Position.Y - alto - 6f;
+
+        if (y < 4f)
+            y = ancla.End.Y + 6f;
+
+        x = Mathf.Clamp(x, 4f, Canvas.CanvasWidth - ancho - 4f);
+
+        // Y también contra el borde de abajo: un cartel de cuatro renglones
+        // colgado de algo que está en la última fila se sale por abajo, que es
+        // donde el jugador no puede ni arrastrar la ventana para verlo.
+        y = Mathf.Clamp(y, 4f, Canvas.CanvasHeight - alto - 4f);
+
+        return new Rect2(x, y, ancho, alto);
+    }
+
+    /// <summary>
+    /// El popup del dedo: centrado, en la mitad de la pantalla <b>opuesta</b> a
+    /// lo señalado.
+    /// </summary>
+    /// <remarks>
+    /// <para>⚠ <b>Nunca pegado a lo señalado.</b> Al tamaño que tiene que tener
+    /// para leerse, un globo colgado del icono tapa media pantalla en un lugar
+    /// distinto cada vez, y lo que tapa suele ser justo lo de al lado — la otra
+    /// tarjeta que el jugador está comparando. Con dos lugares fijos el ojo
+    /// aprende adónde ir, y del lado opuesto el dedo no lo tapa nunca.</para>
+    /// </remarks>
+    private static Rect2 CajaTactil(Rect2 ancla, float ancho, float alto)
+    {
+        const float Margen = 24f;
+
+        bool abajo = ancla.GetCenter().Y < Canvas.CanvasHeight / 2f;
+
+        ancho = Mathf.Min(ancho, Canvas.CanvasWidth - (Margen * 2f));
+        alto = Mathf.Min(alto, Canvas.CanvasHeight - (Margen * 2f));
+
+        float x = (Canvas.CanvasWidth - ancho) / 2f;
+        float y = abajo ? Canvas.CanvasHeight - alto - Margen : Margen;
+
+        return new Rect2(x, y, ancho, alto);
     }
 
     /// <summary>Corta un texto en renglones que entren en un ancho.</summary>

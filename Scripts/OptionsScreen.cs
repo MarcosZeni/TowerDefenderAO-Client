@@ -37,10 +37,11 @@ public partial class OptionsScreen : Control
     /// ⚠ Era 46, y con 22 renglones «Volver» caía en y=1086: debajo del lienzo de
     /// 1080, imposible de clickear. En la PC se salía con ESC y no se notaba; en
     /// el celular no hay ESC y Opciones no se cerraba. Con 42 la lista entera
-    /// entra. En el dedo son 70: ahí la lista es la mitad —no hay ventana ni
-    /// teclas— y un renglón de 42 px es chico para tocar.
+    /// entraba; con el tamaño de los carteles son 23 y el marco se salía por
+    /// abajo, así que bajó a 40. En el dedo son 70: ahí la lista es la mitad
+    /// —no hay ventana ni teclas— y un renglón de 42 px es chico para tocar.
     /// </remarks>
-    private static int AltoFila => Device.IsTouch ? 70 : 42;
+    private static int AltoFila => Device.IsTouch ? 70 : 40;
 
     public bool IsOpen => _abierto;
 
@@ -90,6 +91,7 @@ public partial class OptionsScreen : Control
         // es un adorno, es la mitad explicativa de todos los carteles del juego.
         TituloAyudas,
         ShowHelp,
+        HelpScale,
         TituloTeclas,
         // Los 8 atajos entran acá, uno por fila.
         PrimerAtajo,
@@ -303,6 +305,16 @@ public partial class OptionsScreen : Control
                 Settings.ShowHelp = !Settings.ShowHelp;
                 Settings.Store();
                 break;
+
+            case Fila.HelpScale:
+                for (int e = 0; e < Settings.HelpScaleOptions.Length; e++)
+                {
+                    if (RectValor(i, e, Settings.HelpScaleOptions.Length).HasPoint(donde))
+                        Settings.HelpScale = Settings.HelpScaleOptions[e];
+                }
+
+                Settings.Store();
+                break;
         }
 
         QueueRedraw();
@@ -373,6 +385,8 @@ public partial class OptionsScreen : Control
             new Rect2(X0 + 300f, RectFila(IndiceDe(Fila.ShowHelp)).Position.Y,
                 Width - 480f, AltoFila - 6f),
             Loc.Get("ui.opciones.explicaciones_detalle"), 13, Palette.TextDisabled);
+
+        TamanoCarteles(IndiceDe(Fila.HelpScale));
 
         if (Existe(IndiceDe(Fila.TituloTeclas)))
         {
@@ -456,6 +470,26 @@ public partial class OptionsScreen : Control
         this.Label(RectFila(i), nombre, 18, Palette.TextPrimary, HorizontalAlignment.Left, 20f);
 
         Choice(RectValor(i, 0, 1), Loc.Get(activo ? "ui.opciones.si" : "ui.opciones.no"), activo);
+    }
+
+    /// <summary>Los cuatro tamaños de cartel, uno al lado del otro.</summary>
+    /// <remarks>
+    /// El nombre de la fila va corto a propósito: cuatro cajitas de 150 ocupan
+    /// casi todo el renglón y un rótulo largo se metería debajo de la primera.
+    /// </remarks>
+    private void TamanoCarteles(int i)
+    {
+        Fondo(i, interactiva: true);
+        this.Label(RectFila(i), Loc.Get("ui.opciones.tamano_carteles"), 18, Palette.TextPrimary,
+            HorizontalAlignment.Left, 20f);
+
+        int cuantas = Settings.HelpScaleOptions.Length;
+
+        for (int e = 0; e < cuantas; e++)
+        {
+            int valor = Settings.HelpScaleOptions[e];
+            Choice(RectValor(i, e, cuantas), $"{valor} %", valor == Settings.HelpScale);
+        }
     }
 
     private void Shortcut(int i, Shortcut atajo)
